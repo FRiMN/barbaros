@@ -9,14 +9,15 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "ollama",
-    "PyGObject",
-    "python-xlib",
-    "Xlib",
-    "pystray",
+    # "python-xlib",
+    # "Xlib",
+    # "pystray",
+    "pyside6",
 ]
 
 [project.scripts]
 barbaros = "barbaros.main:main"
+# pyside6-genpyi = "pyside6-genpyi –feature='snake_case'"
 
 [build-system]
 requires = ["setuptools>=61"]

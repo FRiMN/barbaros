@@ -83,3 +83,13 @@ Use `Ctrl+Alt+A` to activate the translation window.
 - System tray integration (when AppIndicator3 is available)
 - Global keyboard shortcut (Ctrl+Alt+A)
 - AI-powered translation using Ollama
+
+## Fix camelCase methods in Qt
+
+Generate new stub files (.pyi) with snake_case methods:
+
+```sh
+uv run pyside6-genpyi --feature='snake_case' QtCore QtGui QtWidgets
+```
+
+See [pyside docs](https://doc.qt.io/qtforpython-6/tools/pyside-genpyi.html) for more details.

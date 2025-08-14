@@ -1,89 +1,55 @@
-import signal
-import sys
-
-import pystray
-from PIL import Image
-
-import gi
-gi.require_version('Gtk', '3.0')
-gi.require_version('Keybinder', '3.0')
-
-from gi.repository import Gtk
-from gi.repository import Keybinder
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PySide6.QtGui import QIcon, QAction
 
 
-class TrayApp:
-    def __init__(self):
-        # Create tray icon
-        image = Image.open("/usr/share/icons/desktop-base/128x128/emblems/emblem-debian-symbolic.png").convert("RGBA")
-        self.icon = pystray.Icon("translation-app", image, "Translation App")
+class TrayIcon:
+    def __init__(self, app: QApplication):
+        self.app = app
+        icon_img = QIcon("/usr/share/icons/desktop-base/128x128/emblems/emblem-debian-symbolic.png")
+        self.icon = QSystemTrayIcon(icon_img)
 
-        # Create menu
-        self.icon.menu = pystray.Menu(
-            pystray.MenuItem("Exit", lambda _: self.exit())
-        )
+        if not self.icon.isSystemTrayAvailable():
+            raise Exception("System tray is not available")
 
-        # Register hotkey
-        import threading
-        self.key_thread = threading.Thread(target=self.register_hotkey, daemon=True)
-        self.key_thread.start()
+        # Create context menu
+        self.menu = QMenu()
+        exit_action = QAction("Exit")
+        exit_action.triggered.connect(self.app.quit)
+        self.menu.addAction(exit_action)
 
-    def exit(self):
-        self.icon.stop()
-        Gtk.main_quit()
+        self.icon.setContextMenu(self.menu)
 
-    def register_hotkey(self):
-        print("started thread keys")
-        from Xlib import display, XK, X
-        from Xlib.protocol import event
+        self.icon.setVisible(True)
 
-        d = display.Display()
-        root = d.screen().root
-        root.change_attributes(event_mask=X.KeyPressMask | X.KeyReleaseMask)
 
-        keycode = d.keysym_to_keycode(XK.string_to_keysym('A'))
-        modifiers = X.ControlMask | X.Mod1Mask  # Ctrl + Alt
+def get_tray():
+    tray = QSystemTrayIcon(parent=app)
+    tray.setIcon(QIcon("/usr/share/icons/desktop-base/128x128/emblems/emblem-debian-symbolic.png"))  
 
-        # Try to grab the key combination
-        try:
-            root.grab_key(
-                keycode, 
-                modifiers, 
-                owner_events=1, 
-                pointer_mode=X.GrabModeAsync, 
-                keyboard_mode=X.GrabModeAsync
-            )
-            print(f"Successfully grabbed key: Ctrl+Alt+A (keycode: {keycode})")
-        except Exception as e:
-            print(f"Failed to grab key: {e}")
+    menu = QMenu()
+    exit_action = QAction("Exit")
+    exit_action.triggered.connect(app.quit)
+    menu.addAction(exit_action)
 
-        print("Starting event loop...")
-        while True:
-            print("Waiting for event...")
-            _event = d.next_event()
-            print(f"Received event: type={_event.type}, detail={_event.detail}, state={_event.state}")
-            
-            # Check if this is a key press event for our hotkey
-            is_key_press = _event.type == X.KeyPress
-            is_key_release = _event.type == X.KeyRelease
-            is_key = _event.detail == keycode
-            is_modifiers = (_event.state & modifiers) == modifiers
-            
-            print(f"Event details: key_press={is_key_press}; key_release={is_key_release}; is_key={is_key}; is_modifiers={is_modifiers}")
-            
-            if is_key_press and is_key and is_modifiers:
-                print("Hotkey pressed, activating window")
-            elif is_key_release and is_key and is_modifiers:
-                print("Hotkey released")
+    tray.setContextMenu(menu)
+
+    tray.setVisible(True)
+    return tray, menu
 
 
 def main():
+    import sys
+    import signal
+
     try:
         # Allow app to be terminated with Ctrl+C
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-        app = TrayApp()
-        app.icon.run()
+        app = QApplication(sys.argv)
+        # tray_icon = TrayIcon(app)
+        tray, menu = get_tray()
+
+        sys.exit(app.exec())
 
     except Exception as e:
         print(f"An error occurred: {e}", file=sys.stderr)
