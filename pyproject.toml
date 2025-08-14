@@ -1,0 +1,23 @@
+[project]
+name = "barbaros"
+version = "0.1.0"
+description = "AI Translation app"
+readme = "README.md"
+authors = [
+    { name = "Nik Volkov", email = "freezemandix@ya.ru" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "ollama",
+    "PyGObject",
+    "python-xlib",
+    "Xlib",
+    "pystray",
+]
+
+[project.scripts]
+barbaros = "barbaros.main:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
