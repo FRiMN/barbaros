@@ -91,9 +91,9 @@ class TranslationWorker(QObject):
     def run(self):
         """Run in thread."""
         print("Starting translation...")
-        translated = translate_text(self.text_to_translate)
+        resp = translate_text(self.text_to_translate)
         print("...done")
-        self.finished.emit(translated)
+        self.finished.emit(resp.message.content)
 
 
 class TrayIcon:
