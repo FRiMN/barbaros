@@ -1,0 +1,2 @@
+include src/barbaros/resources/*
+include README.md
