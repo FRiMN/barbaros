@@ -1,6 +1,6 @@
 from importlib.resources import path
 
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMainWindow, QLabel
 from PySide6.QtGui import QIcon, QAction
 
 
@@ -8,8 +8,21 @@ class App(QApplication):
     def __init__(self, args, name: str):
         super().__init__(args)
         self.setApplicationDisplayName(name)
+        self.setQuitOnLastWindowClosed(False)
 
         self.tray = TrayIcon(self)
+        self.main_window = MainWindow()
+
+    def show_window(self):
+        self.main_window.show()
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Main Window")
+        self.setGeometry(100, 100, 400, 300)
+        self.setCentralWidget(QLabel("This is the main window"))
 
 
 class TrayIcon:
@@ -26,7 +39,10 @@ class TrayIcon:
         self.menu = self.build_menu()
         self.icon.setContextMenu(self.menu)
 
+        self.icon.activated.connect(self.on_tray_icon_activated)
+
         self.icon.setVisible(True)
+
 
     def build_menu(self):
         menu = QMenu()
@@ -37,6 +53,16 @@ class TrayIcon:
         menu.addAction(exit_action)
 
         return menu
+
+    def on_tray_icon_activated(self, reason: QSystemTrayIcon.ActivationReason):
+        """
+        Обработка клика по иконке в трее.
+        """
+        ar = QSystemTrayIcon.ActivationReason
+
+        if reason == ar.Trigger:
+            # Левый клик
+            self.app.show_window()
 
 
 def main():
