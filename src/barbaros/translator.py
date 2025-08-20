@@ -8,15 +8,23 @@ Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 def translate_text(text: str) -> ollama.ChatResponse:
     from .resources_loader import Resource
 
+    words_count = len(text.split(" "))
+    if words_count < 3:
+        system_prompt = Resource.dictionary_agent_system_prompt.value
+        model = "gemma3:4b"
+    else:
+        system_prompt = Resource.translation_agent_system_prompt.value
+        model = "gemma3:12b"
+
     text_prompt = f"""
     Target Language: ru
     Text: {text}
     """
     try:
-        response = ollama.chat(model='gemma3:12b', messages=[
+        response = ollama.chat(model=model, messages=[
             {
                 'role': 'system',
-                'content': Resource.translation_agent_system_prompt.value,
+                'content': system_prompt,
             },
             {
                 'role': 'user',
