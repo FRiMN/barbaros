@@ -2,6 +2,11 @@ import ollama
 from importlib.resources import open_text
 
 
+"""
+Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
+"""
+
+
 def translate_text(text: str) -> ollama.ChatResponse:
     system_prompt = open_text('barbaros.resources', 'translation_agent_prompt.md').read()
     text_prompt = f"""
