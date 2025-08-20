@@ -1,4 +1,5 @@
 from PySide6.QtCore import QObject, Signal, Slot
+from ollama import GenerateResponse
 from .translator import translate_text
 
 
@@ -14,6 +15,6 @@ class TranslationWorker(QObject):
     def run(self):
         """Run in thread."""
         print("Starting translation...")
-        resp = translate_text(self.text_to_translate)
+        resp: GenerateResponse = translate_text(self.text_to_translate)
         print("...done")
-        self.finished.emit(resp.message.content)
+        self.finished.emit(resp.response)

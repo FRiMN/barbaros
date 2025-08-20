@@ -5,7 +5,7 @@ Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 """
 
 
-def translate_text(text: str) -> ollama.ChatResponse:
+def translate_text(text: str) -> ollama.GenerateResponse:
     from .resources_loader import Resource
 
     words_count = len(text.split(" "))
@@ -21,16 +21,17 @@ def translate_text(text: str) -> ollama.ChatResponse:
     Text: {text}
     """
     try:
-        response = ollama.chat(model=model, messages=[
-            {
-                'role': 'system',
-                'content': system_prompt,
-            },
-            {
-                'role': 'user',
-                'content': text_prompt,
-            },
-        ])
+        # response = ollama.chat(model=model, messages=[
+        #     {
+        #         'role': 'system',
+        #         'content': system_prompt,
+        #     },
+        #     {
+        #         'role': 'user',
+        #         'content': text_prompt,
+        #     },
+        # ])
+        response = ollama.generate(model=model, system=system_prompt, prompt=text_prompt)
         # print(f"{response=}")
         return response
     except Exception as e:
