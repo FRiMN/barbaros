@@ -1,4 +1,3 @@
-from importlib.resources import path
 from PySide6.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu
 )
@@ -22,11 +21,10 @@ class App(QApplication):
 
 class TrayIcon:
     def __init__(self, app: QApplication):
-        self.app = app
+        from .resources_loader import Resource
 
-        with path('barbaros.resources.icons', 'icon3.png') as icon_path:
-            icon_img = QIcon(str(icon_path.absolute()))
-        self.icon = QSystemTrayIcon(icon_img, toolTip=app.applicationDisplayName())
+        self.app = app
+        self.icon = QSystemTrayIcon(QIcon(Resource.icon_app.value), toolTip=app.applicationDisplayName())
 
         if not self.icon.isSystemTrayAvailable():
             raise Exception("System tray is not available")

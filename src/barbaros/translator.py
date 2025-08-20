@@ -1,6 +1,4 @@
 import ollama
-from importlib.resources import open_text
-
 
 """
 Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
@@ -8,7 +6,8 @@ Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 
 
 def translate_text(text: str) -> ollama.ChatResponse:
-    system_prompt = open_text('barbaros.resources', 'translation_agent_prompt.md').read()
+    from .resources_loader import Resource
+
     text_prompt = f"""
     Target Language: ru
     Text: {text}
@@ -17,7 +16,7 @@ def translate_text(text: str) -> ollama.ChatResponse:
         response = ollama.chat(model='gemma3:12b', messages=[
             {
                 'role': 'system',
-                'content': system_prompt,
+                'content': Resource.translation_agent_system_prompt.value,
             },
             {
                 'role': 'user',
