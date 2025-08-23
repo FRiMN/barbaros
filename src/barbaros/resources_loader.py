@@ -1,5 +1,6 @@
 from importlib.resources import files, open_text
 from enum import Enum
+from typing import List
 
 from PySide6.QtGui import QPixmap
 
@@ -8,11 +9,11 @@ PACKAGE = 'barbaros.resources'
 ICONS_LOC = f"{PACKAGE}.icons"
 
 
-def get_ollama_models():
+def get_ollama_models() -> List[str]:
     import ollama
 
     models_resp: ollama.ListResponse = ollama.list()
-    models = [m.model for m in models_resp.models]
+    models = [m.model for m in models_resp.models if m.model is not None]
     return models
 
 

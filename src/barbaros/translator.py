@@ -5,14 +5,14 @@ Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 """
 
 
-def translate_text(text: str) -> ollama.GenerateResponse:
+def translate_text(text: str, target_language: str, model: str) -> ollama.GenerateResponse:
     from .resources_loader import Resource
 
-    model = "gemma3:12b"
+    # model = "gemma3:12b"
     system_prompt = Resource.translation_agent_system_prompt.value
 
     text_prompt = f"""
-    Target Language: ru
+    Target Language: {target_language}
     Text: {text}
     """
     try:
@@ -26,8 +26,8 @@ def translate_text(text: str) -> ollama.GenerateResponse:
         #         'content': text_prompt,
         #     },
         # ])
-        response = ollama.generate(model=model, system=system_prompt, prompt=text_prompt)
-        # print(f"{response=}")
+        response = ollama.generate(model=model, system=system_prompt, prompt=text_prompt, think=False)
+        print(f"{response=}")
         return response
     except Exception as e:
         return f"Error during translation: {e}"
