@@ -8,13 +8,8 @@ Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 def translate_text(text: str) -> ollama.GenerateResponse:
     from .resources_loader import Resource
 
-    words_count = len(text.split(" "))
-    if words_count < 3:
-        system_prompt = Resource.dictionary_agent_system_prompt.value
-        model = "gemma3:4b"
-    else:
-        system_prompt = Resource.translation_agent_system_prompt.value
-        model = "gemma3:12b"
+    model = "gemma3:12b"
+    system_prompt = Resource.translation_agent_system_prompt.value
 
     text_prompt = f"""
     Target Language: ru
