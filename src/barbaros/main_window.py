@@ -1,9 +1,11 @@
 import re
 
+from ollama import GenerateResponse
 from PySide6.QtWidgets import (
     QMainWindow, QTextEdit, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 )
 from PySide6.QtCore import QThread
+from PySide6.QtGui import QFont
 
 from .workers import TranslationWorker
 from .widgets.filterable_combobox import FilterableComboBox
@@ -43,6 +45,11 @@ class MainWindow(QMainWindow):
         self.model.addItems(Resource.ollama_models.value)
         self.model.on_selection_changed(self.model.items[0])
 
+        self.stats = QLabel("")
+        font = QFont()
+        font.setPointSize(8)
+        self.stats.setFont(font)
+
     def build_layout(self) -> QVBoxLayout:
         self.set_widgets()
 
@@ -57,6 +64,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.orig_text)
         layout.addWidget(self.translate_button)
         layout.addWidget(self.translated_text)
+        layout.addWidget(self.stats)
 
         return layout
 
@@ -92,11 +100,17 @@ class MainWindow(QMainWindow):
             return think_text, text.strip()
         return '', text
 
-    def on_translation_finished(self, translated_text):
+    def on_translation_finished(self, resp: GenerateResponse):
+        translated_text = resp.response
         _, translated_text = self.pop_think(translated_text)
         self.translated_text.setText(translated_text)
         self.translated_text.show()
         self.translate_button.setDisabled(False)
+
+        eval_secs = resp.eval_duration // 1000 / 1000 / 1000
+        load_secs = resp.load_duration // 1000 / 1000 / 1000
+        eval_speed = resp.eval_count / eval_secs
+        self.stats.setText(f"Eval: {eval_secs:.2f}s; Load: {load_secs:.2f}s; {eval_speed:.2f} tokens/s")
 
     def handle_translate_button(self):
         self.translate()

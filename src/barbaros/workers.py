@@ -4,7 +4,7 @@ from .translator import translate_text
 
 
 class TranslationWorker(QObject):
-    finished = Signal(str)  # Worker is finished and starts to close.
+    finished = Signal(GenerateResponse)  # Worker is finished and starts to close.
     error = Signal(str)  # Worker encountered an error.
 
     def __init__(self, text_to_translate: str, target_language: str, model: str):
@@ -19,4 +19,4 @@ class TranslationWorker(QObject):
         print("Starting translation...")
         resp: GenerateResponse = translate_text(self.text_to_translate, self.target_language, self.model)
         print("...done")
-        self.finished.emit(resp.response)
+        self.finished.emit(resp)
