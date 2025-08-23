@@ -8,7 +8,7 @@ Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 def translate_text(text: str, target_language: str, model: str) -> ollama.GenerateResponse:
     from .resources_loader import Resource
 
-    model = "qwen3:8b"
+    # model = "qwen3:8b"
     system_prompt = Resource.translation_agent_system_prompt.value
 
     text_prompt = f"""

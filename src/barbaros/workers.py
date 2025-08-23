@@ -16,7 +16,5 @@ class TranslationWorker(QObject):
     @Slot()
     def run(self):
         """Run in thread."""
-        print("Starting translation...")
         resp: GenerateResponse = translate_text(self.text_to_translate, self.target_language, self.model)
-        print("...done")
         self.finished.emit(resp)

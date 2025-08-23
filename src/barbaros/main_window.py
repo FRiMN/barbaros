@@ -9,6 +9,7 @@ from PySide6.QtGui import QFont
 
 from .workers import TranslationWorker
 from .widgets.filterable_combobox import FilterableComboBox
+from .widgets.progress_label import GradientRainbowLabel
 
 
 TARGET_LANGUAGES = ["ru", "en", "fr", "de", "es", "it", "pt", "ja", "ko", "zh", "ar", "hi", "ua"]
@@ -50,6 +51,9 @@ class MainWindow(QMainWindow):
         font.setPointSize(8)
         self.stats.setFont(font)
 
+        self.progressbar = GradientRainbowLabel("Translating...")
+        self.progressbar.hide()
+
     def build_layout(self) -> QVBoxLayout:
         self.set_widgets()
 
@@ -63,6 +67,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(select_panel)
         layout.addWidget(self.orig_text)
         layout.addWidget(self.translate_button)
+        layout.addWidget(self.progressbar)
         layout.addWidget(self.translated_text)
         layout.addWidget(self.stats)
 
@@ -70,10 +75,15 @@ class MainWindow(QMainWindow):
 
     def translate(self):
         self.translate_button.setDisabled(True)
+        self.translate_button.hide()
 
         text_to_translate = self.orig_text.toPlainText()
 
         self.translated_text.clear()
+        self.progressbar.show()
+        self.progressbar.start_animation()
+        self.translated_text.hide()
+        self.stats.clear()
 
         # Run translation in a separate thread
         self.translation_thread = QThread(parent=self)
@@ -101,11 +111,13 @@ class MainWindow(QMainWindow):
         return '', text
 
     def on_translation_finished(self, resp: GenerateResponse):
+        self.progressbar.hide()
         translated_text = resp.response
         _, translated_text = self.pop_think(translated_text)
         self.translated_text.setText(translated_text)
         self.translated_text.show()
         self.translate_button.setDisabled(False)
+        self.translate_button.show()
 
         eval_secs = resp.eval_duration // 1000 / 1000 / 1000
         load_secs = resp.load_duration // 1000 / 1000 / 1000
