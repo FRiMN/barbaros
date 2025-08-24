@@ -3,17 +3,9 @@ name = "barbaros"
 version = "0.1.0"
 description = "AI Translation app"
 readme = "README.md"
-authors = [
-    { name = "Nik Volkov", email = "freezemandix@ya.ru" }
-]
+authors = [{ name = "Nik Volkov", email = "freezemandix@ya.ru" }]
 requires-python = ">=3.10"
-dependencies = [
-    "ollama",
-    # "python-xlib",
-    # "Xlib",
-    # "pystray",
-    "pyside6",
-]
+dependencies = ["ollama", "pyside6"]
 
 [project.scripts]
 barbaros = "barbaros.main:main"
