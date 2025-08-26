@@ -5,7 +5,7 @@ description = "AI Translation app"
 readme = "README.md"
 authors = [{ name = "Nik Volkov", email = "freezemandix@ya.ru" }]
 requires-python = ">=3.10"
-dependencies = ["ollama", "pyside6"]
+dependencies = ["ollama", "pyside6", "psutil"]
 
 [project.scripts]
 barbaros = "barbaros.main:main"
