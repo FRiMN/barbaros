@@ -1,11 +1,12 @@
 import sys
 import signal
+import socket
 
 from PySide6.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu
 )
 from PySide6.QtGui import QIcon, QAction, QGuiApplication
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot, QSocketNotifier, QTimer
 
 from .main_window import MainWindow
 
@@ -105,6 +106,8 @@ def open_window():
             except (ProcessLookupError, PermissionError):
                 # Handle exceptions that might occur if the process is already terminated or access is denied.
                 pass
+
+            break
 
 
 def main():
