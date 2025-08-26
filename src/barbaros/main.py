@@ -1,17 +1,17 @@
 import sys
 import signal
-import socket
 
-from PySide6.QtWidgets import (
-    QApplication, QSystemTrayIcon, QMenu
-)
-from PySide6.QtGui import QIcon, QAction, QGuiApplication
-from PySide6.QtCore import QObject, Signal, Slot, QSocketNotifier, QTimer
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PySide6.QtGui import QIcon, QAction
+from PySide6.QtCore import Slot
 
 from .main_window import MainWindow
+from .signal_handling_app import SignalHandlingApp
 
 
-class App(QApplication):
+class App(SignalHandlingApp):
+    signals_for_handle = [signal.SIGUSR1]
+
     def __init__(self, args, name: str):
         super().__init__(args)
         self.setApplicationDisplayName(name)
@@ -19,33 +19,36 @@ class App(QApplication):
 
         self.tray = TrayIcon(self)
         self.main_window = MainWindow()
-        # self.clipboard_listener = ClipboardListener(self)
-        # self.switch_window()
-        # self.switch_window()
 
-        signal.signal(signal.SIGUSR1, self.on_signal_received)
+    @Slot(int)
+    def handle_signal_in_qt(self, signum: int):
+        """Handle signal in Qt event loop context"""
+        if signum == signal.SIGUSR1:
+            self.process_translation_request()
+
+    def process_translation_request(self):
+        """Process the translation request"""
+        text = QApplication.clipboard().text()
+
+        self.main_window.orig_text.setPlainText(text)
+        self.main_window.show()
+        self.main_window.raise_()  # Bring window to front
+        self.main_window.activateWindow()  # Activate window
+        self.main_window.translate_button.click()
 
     def switch_window(self):
         if not self.main_window.isVisible():
             print("show")
             self.main_window.show()
+            self.main_window.raise_()
+            self.main_window.activateWindow()
         else:
             print("hide")
             self.main_window.hide()
 
-    def on_signal_received(self, signum, frame):
-        print(f"Signal received: {signum}")
-        # Read text from clipboard
-        text = QApplication.clipboard().text()
-        print(f"Received signal {signum}")
-
-        self.main_window.orig_text.setPlainText(text)
-        self.main_window.show()
-        self.main_window.translate_button.click()
-
 
 class TrayIcon:
-    def __init__(self, app: QApplication):
+    def __init__(self, app: App):
         from .resources_loader import Resource
 
         self.app = app
@@ -54,11 +57,10 @@ class TrayIcon:
         if not self.icon.isSystemTrayAvailable():
             raise Exception("System tray is not available")
 
-        self.menu = self.build_menu()
-        self.icon.setContextMenu(self.menu)
-
         self.icon.activated.connect(self.on_tray_icon_activated)
 
+        self.menu = self.build_menu()
+        self.icon.setContextMenu(self.menu)
         self.icon.setVisible(True)
         self.icon.show()
 
@@ -85,35 +87,41 @@ class TrayIcon:
 
 def start_app():
     """ Normal start app """
-    # Allow app to be terminated with Ctrl+C
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-
     app = App(sys.argv, "Barbaros")
     sys.exit(app.exec())
 
 
 def open_window():
-    """ Open main window of already running instance or start new instance, then start translation """
+    """ Open main window of already running instance and start translation """
     import psutil
     import os
 
     app_name = "Barbaros"
+    current_pid = os.getpid()
+
     for proc in psutil.process_iter(['pid', 'name']):
+        if proc.info['pid'] == current_pid:
+            continue  # Skip current process
+
         if proc.info['name'].lower() == app_name.lower():
             try:
                 os.kill(proc.pid, signal.SIGUSR1)  # Send SIGUSR1 to open main window and start process of translation.
-                print(f"Send to PID {proc.pid}")
-            except (ProcessLookupError, PermissionError):
+                print(f"Send SIGUSR1 to PID {proc.pid}")
+                return True
+            except (ProcessLookupError, PermissionError) as e:
                 # Handle exceptions that might occur if the process is already terminated or access is denied.
+                print(f"Error sending signal: {e}")
                 pass
 
-            break
+    print("No running instance found")
+    return False
 
 
 def main():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
     try:
         if "--popup" in sys.argv:
-            sys.argv.remove("--popup")
             open_window()
         else:
             start_app()
