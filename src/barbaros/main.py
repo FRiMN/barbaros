@@ -38,12 +38,10 @@ class App(SignalHandlingApp):
 
     def switch_window(self):
         if not self.main_window.isVisible():
-            print("show")
             self.main_window.show()
             self.main_window.raise_()
             self.main_window.activateWindow()
         else:
-            print("hide")
             self.main_window.hide()
 
 
@@ -118,6 +116,7 @@ def open_window():
 
 
 def main():
+    # Позволяет остановить приложение из командной строки.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     try:
