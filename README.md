@@ -13,6 +13,22 @@ Barbaros is a desktop application for quick translations using AI. It runs in th
 
 ## Installation & Usage
 
+### Ollama
+
+This application requires [ollama](https://ollama.ai/) to be installed and running. To install ollama, follow the instructions for your operating system on the [ollama website](https://ollama.ai/).
+
+On Linux, you can install it with the following command:
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+After installation, you need to pull the model that you want to use. For example, to use the `llama3.1` model, run:
+```bash
+ollama pull llama3.1
+```
+
+### Barbaros
+
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/FRiMN/barbaros.git
