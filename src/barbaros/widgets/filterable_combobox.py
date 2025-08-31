@@ -13,6 +13,8 @@ from .link_label import LinkLabel
 class FilterableComboBox(QWidget):
     selectionChanged = Signal(str)
 
+    selected_item = None
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.items = []
@@ -45,6 +47,8 @@ class FilterableComboBox(QWidget):
             self.filterable_popup.hide()
 
     def on_selection_changed(self, item):
+        assert item is not None
+        assert item in self.items
         self.selected_item = item
 
         # Обрезаем текст с многоточием
@@ -54,6 +58,7 @@ class FilterableComboBox(QWidget):
 
         self.display_label.setToolTip(item)
         self.hide_popup()
+        self.selectionChanged.emit(self.selected_item)
 
     def addItems(self, items: List[str]):
         self.items.extend(items)

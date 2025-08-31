@@ -3,22 +3,31 @@ import signal
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QIcon, QAction
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, QSettings
 
 from .main_window import MainWindow
 from .signal_handling_app import SignalHandlingApp
+from .__version__ import version
 
 
 class App(SignalHandlingApp):
     signals_for_handle = [signal.SIGUSR1]
 
-    def __init__(self, args, name: str):
+    def __init__(self, args):
         super().__init__(args)
-        self.setApplicationDisplayName(name)
         self.setQuitOnLastWindowClosed(False)
 
+        self.setApplicationDisplayName("Barbaros")
+        # OrganizationName конфликтует с OrganizationDomain
+        self.setOrganizationDomain("com.github.frimn")
+        self.setApplicationVersion(version)
+        self.setApplicationName("barbaros")
+
+        self.settings = QSettings(QSettings.Scope.UserScope)
+        print(f"Settings filepath: {self.settings.fileName()}")
+
         self.tray = TrayIcon(self)
-        self.main_window = MainWindow()
+        self.main_window = MainWindow(app=self)
 
     @Slot(int)
     def handle_signal_in_qt(self, signum: int):
@@ -33,7 +42,7 @@ class App(SignalHandlingApp):
         self.main_window.orig_text.setPlainText(text)
         self.main_window.show()
         self.main_window.raise_()  # Bring window to front
-        self.main_window.activateWindow()  # Activate window
+        self.main_window.activateWindow()
         self.main_window.translate_button.click()
 
     def switch_window(self):
@@ -85,7 +94,7 @@ class TrayIcon:
 
 def start_app():
     """ Normal start app """
-    app = App(sys.argv, "Barbaros")
+    app = App(sys.argv)
     sys.exit(app.exec())
 
 

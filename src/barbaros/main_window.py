@@ -1,11 +1,12 @@
 import re
+import typing
 
 from ollama import GenerateResponse
 from PySide6.QtWidgets import (
     QMainWindow, QTextEdit, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 )
-from PySide6.QtCore import QThread
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QThread, QSettings
+from PySide6.QtGui import QFont, QCloseEvent
 
 from .workers import TranslationWorker
 from .widgets.filterable_combobox import FilterableComboBox
@@ -15,10 +16,62 @@ from .widgets.progress_label import GradientRainbowLabel
 TARGET_LANGUAGES = ["ru", "en", "fr", "de", "es", "it", "pt", "ja", "ko", "zh", "ar", "hi", "ua"]
 
 
+class SettingsProxy:
+    """Proxy for QSettings with a prefix"""
+    def __init__(self, settings: QSettings, prefix: str):
+        self.settings = settings
+        self.prefix = prefix
+
+    def _prefixed_key(self, key: str) -> str:
+        return f"{self.prefix}/{key}"
+
+    def value(self, key: str, default=None) -> typing.Any:
+        return self.settings.value(self._prefixed_key(key), default)
+
+    def setValue(self, key: str, value):
+        self.settings.setValue(self._prefixed_key(key), value)
+
+    def contains(self, key: str) -> bool:
+        return self.settings.contains(self._prefixed_key(key))
+
+    def remove(self, key: str):
+        self.settings.remove(self._prefixed_key(key))
+
+    def allKeys(self) -> list[str]:
+        self.settings.beginGroup(self.prefix)
+        keys = self.settings.allKeys()
+        self.settings.endGroup()
+        return keys
+
+    def childKeys(self) -> list[str]:
+        self.settings.beginGroup(self.prefix)
+        keys = self.settings.childKeys()
+        self.settings.endGroup()
+        return keys
+
+    def childGroups(self) -> list[str]:
+        self.settings.beginGroup(self.prefix)
+        groups = self.settings.childGroups()
+        self.settings.endGroup()
+        return groups
+
+    def __getattr__(self, name):
+        # Delegate any other methods directly to the underlying QSettings object
+        return getattr(self.settings, name)
+
+
 class MainWindow(QMainWindow):
-    def __init__(self, *args, **kwargs):
+    settings_key_prefix = "main_window"
+
+    def __init__(self, *args, app, **kwargs):
         super().__init__(*args, **kwargs)
-        self.setGeometry(100, 100, 400, 400)
+        self.app = app
+        self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
+
+        if past_geometry := self.settings.value("geometry"):
+            self.restoreGeometry(past_geometry)
+        else:
+            self.setGeometry(100, 100, 400, 400)
 
         self.layout = self.build_layout()
 
@@ -26,6 +79,16 @@ class MainWindow(QMainWindow):
         main_widget.setLayout(self.layout)
 
         self.setCentralWidget(main_widget)
+
+    def closeEvent(self, event: QCloseEvent):
+        self.settings.setValue("geometry", self.saveGeometry())
+        event.accept()
+
+    def save_choosed_model(self, model: str):
+        self.settings.setValue("model", model)
+
+    def save_choosed_target_language(self, lang: str):
+        self.settings.setValue("target_language", lang)
 
     def set_widgets(self):
         from .resources_loader import Resource
@@ -38,13 +101,24 @@ class MainWindow(QMainWindow):
         self.translate_button.setText("Translate")
         self.translate_button.clicked.connect(self.handle_translate_button)
 
-        self.target_language_select = QComboBox()
-        self.target_language_select.addItems(TARGET_LANGUAGES)
-        self.target_language_select.setCurrentIndex(0)
+        self.target_language_select = tls = QComboBox()
+        tls.addItems(TARGET_LANGUAGES)
+        tls.currentTextChanged.connect(self.save_choosed_target_language)
+        if past_language := self.settings.value("target_language"):
+            self.target_language_select.setCurrentIndex(TARGET_LANGUAGES.index(past_language))
+        else:
+            print("set default language")
+            self.target_language_select.setCurrentIndex(0)
 
         self.model = FilterableComboBox(self)
+        self.model.selectionChanged.connect(self.save_choosed_model)
         self.model.addItems(Resource.ollama_models.value)
-        self.model.on_selection_changed(self.model.items[0])
+        if past_model := self.settings.value("model"):
+            print(f"{past_model=}")
+            self.model.on_selection_changed(past_model)
+        else:
+            print("set default model")
+            self.model.on_selection_changed(self.model.items[0])
 
         self.stats = QLabel("")
         font = QFont()
