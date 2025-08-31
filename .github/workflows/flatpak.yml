@@ -68,14 +68,14 @@ jobs:
       - name: Generate .flatpakref
         run: |
           cat > barbaros-${{ env.VERSION }}.flatpakref << EOF
-[Flatpak Ref]
-Title=Barbaros
-Name=com.github.frimn.barbaros
-Branch=stable
-Url=https://github.com/frimn/barbaros/releases/download/${{ github.ref_name }}/barbaros-${{ env.VERSION }}.flatpak
-IsRuntime=False
-Sdk=org.kde.Sdk
-EOF
+          [Flatpak Ref]
+          Title=Barbaros
+          Name=com.github.frimn.barbaros
+          Branch=stable
+          Url=https://github.com/frimn/barbaros/releases/download/${{ github.ref_name }}/barbaros-${{ env.VERSION }}.flatpak
+          IsRuntime=false
+          Sdk=org.kde.Sdk
+          EOF
 
       - name: Upload .flatpakref to release
         uses: svenstaro/upload-release-action@v2
