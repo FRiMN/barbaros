@@ -30,7 +30,7 @@ modules:
       # Укажите источник кода вашего приложения
       # Это может быть архив (tar.gz), git-репозиторий или локальный файл
       - type: file
-        path: ../dist/barbaros-*.whl # Путь к вашему wheel
+        path: ../dist/barbaros-2025.8.4.dev0+g3101c5a3a.d20250831-py3-none-any.whl # Путь к вашему wheel
       # Также нужно включить файлы данных (.desktop, иконки)
       - type: file
         path: com.github.frimn.barbaros.desktop
