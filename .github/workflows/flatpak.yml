@@ -1,4 +1,4 @@
-name: Build Flatpak
+name: Build Flatpak and flatpakref
 
 on:
   release:
