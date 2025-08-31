@@ -9,9 +9,19 @@ requires-python = ">=3.10"
 dynamic = ["version"]
 dependencies = ["ollama", "pyside6", "psutil"]
 
-[project.scripts]
-barbaros = "barbaros.main:main"
+# [project.scripts]
+# barbaros = "barbaros.main:main"
 # pyside6-genpyi = "pyside6-genpyi –feature='snake_case'"
+
+[project.gui-scripts]
+barbaros = "barbaros.main:main"
+
+[project.optional-dependencies]
+dev = ["ruff"]
+
+[project.urls]
+Homepage = "https://github.com/FRiMN/barbaros"
+Issues = "https://github.com/FRiMN/barbaros/issues"
 
 [build-system]
 requires = ["setuptools>=61", "setuptools-scm"]
@@ -20,9 +30,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 write_to = "src/barbaros/__version__.py"
 
-[project.optional-dependencies]
-dev = ["ruff"]
-
-[project.urls]
-Homepage = "https://github.com/FRiMN/barbaros"
-Issues = "https://github.com/FRiMN/barbaros/issues"
+[tool.setuptools.data-files]
+"share/applications" = ["barbaros.desktop"]
+"share/icons/hicolor/256x256/apps" = ["src/barbaros/resources/icons/icon3.png"]
