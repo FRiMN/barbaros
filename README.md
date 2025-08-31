@@ -27,6 +27,8 @@ After installation, you need to pull the model that you want to use. For example
 ollama pull llama3.1
 ```
 
+You can find available models in [official catalog](https://ollama.com/search).
+
 ### Barbaros
 
 1.  **Clone the repository:**
