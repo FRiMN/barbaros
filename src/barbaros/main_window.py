@@ -1,63 +1,19 @@
 import re
-import typing
 
 from ollama import GenerateResponse
 from PySide6.QtWidgets import (
     QMainWindow, QTextEdit, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 )
-from PySide6.QtCore import QThread, QSettings
+from PySide6.QtCore import QThread
 from PySide6.QtGui import QFont, QCloseEvent
 
 from .workers import TranslationWorker
 from .widgets.filterable_combobox import FilterableComboBox
 from .widgets.progress_label import GradientRainbowLabel
+from .common import SettingsProxy
 
 
 TARGET_LANGUAGES = ["ru", "en", "fr", "de", "es", "it", "pt", "ja", "ko", "zh", "ar", "hi", "ua"]
-
-
-class SettingsProxy:
-    """Proxy for QSettings with a prefix"""
-    def __init__(self, settings: QSettings, prefix: str):
-        self.settings = settings
-        self.prefix = prefix
-
-    def _prefixed_key(self, key: str) -> str:
-        return f"{self.prefix}/{key}"
-
-    def value(self, key: str, default=None) -> typing.Any:
-        return self.settings.value(self._prefixed_key(key), default)
-
-    def setValue(self, key: str, value):
-        self.settings.setValue(self._prefixed_key(key), value)
-
-    def contains(self, key: str) -> bool:
-        return self.settings.contains(self._prefixed_key(key))
-
-    def remove(self, key: str):
-        self.settings.remove(self._prefixed_key(key))
-
-    def allKeys(self) -> list[str]:
-        self.settings.beginGroup(self.prefix)
-        keys = self.settings.allKeys()
-        self.settings.endGroup()
-        return keys
-
-    def childKeys(self) -> list[str]:
-        self.settings.beginGroup(self.prefix)
-        keys = self.settings.childKeys()
-        self.settings.endGroup()
-        return keys
-
-    def childGroups(self) -> list[str]:
-        self.settings.beginGroup(self.prefix)
-        groups = self.settings.childGroups()
-        self.settings.endGroup()
-        return groups
-
-    def __getattr__(self, name):
-        # Delegate any other methods directly to the underlying QSettings object
-        return getattr(self.settings, name)
 
 
 class MainWindow(QMainWindow):
@@ -114,7 +70,6 @@ class MainWindow(QMainWindow):
         self.model.selectionChanged.connect(self.save_choosed_model)
         self.model.addItems(Resource.ollama_models.value)
         if past_model := self.settings.value("model"):
-            print(f"{past_model=}")
             self.model.on_selection_changed(past_model)
         else:
             print("set default model")
