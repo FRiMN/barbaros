@@ -1,2 +1,5 @@
 include src/barbaros/resources/*
 include README.md
+include barbaros.desktop
+include LICENSE.txt
+include uv.lock
