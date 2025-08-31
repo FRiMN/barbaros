@@ -2,3 +2,9 @@
 *.egg-info
 __pycache__
 __version__.py
+.flatpak-builder/
+build/
+repo/
+dist/
+.continue/
+.ropeproject/

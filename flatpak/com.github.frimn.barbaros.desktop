@@ -2,7 +2,7 @@
 Name=Barbaros
 Comment=AI Translation app
 Exec=barbaros
-Icon=icon3.png
+Icon=com.github.frimn.barbaros
 Terminal=false
 Type=Application
 Categories=Utility;

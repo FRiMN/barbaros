@@ -1,0 +1,48 @@
+app-id: com.github.frimn.barbaros # Уникальный идентификатор приложения
+runtime: org.kde.Platform
+runtime-version: "6.7" # Версия KDE Runtime, совместимая с PySide6
+sdk: org.kde.Sdk
+command: barbaros # Команда для запуска, должна совпадать с Exec в .desktop и точкой входа
+finish-args:
+  # Разрешения для GUI-приложения
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri # Для аппаратного ускорения
+  # Если приложению нужен доступ к сети:
+  - --share=network
+  # Если приложению нужен доступ к файлам пользователя:
+  # - --filesystem=home
+
+modules:
+  - name: barbaros
+    build-options:
+      build-args:
+        - --share=network
+    buildsystem: simple
+    build-commands:
+      # Установка приложения с помощью pip (или uv)
+      # Рекомендуется использовать pip из SDK для согласованности
+      - pip3 install --verbose --exists-action=i --find-links="file://${PWD}" --prefix=${FLATPAK_DEST} "barbaros"
+      # Копирование .desktop файла
+      - install -Dm644 com.github.frimn.barbaros.desktop /app/share/applications/com.github.frimn.barbaros.desktop
+      # Копирование иконки
+      - install -Dm644 icon3.png /app/share/icons/hicolor/256x256/apps/com.github.frimn.barbaros.png
+      # Если иконка в другом формате или размере, добавьте соответствующие строки
+      # - install -Dm644 my.pyside6.app.svg /app/share/icons/hicolor/scalable/apps/my.pyside6.app.svg
+    sources:
+      # Укажите источник кода вашего приложения
+      # Это может быть архив (tar.gz), git-репозиторий или локальный файл
+      # Пример для локального файла (при сборке из исходников):
+      - type: file
+        path: ../dist/barbaros-2025.8.4.dev0+g3101c5a3a.d20250831-py3-none-any.whl # Путь к вашему wheel
+      # Или, если вы хотите собрать из исходников напрямую:
+      # - type: dir
+      #   path: . # Путь к корню вашего проекта
+      # Также нужно включить файлы данных (.desktop, иконки)
+      - type: file
+        path: com.github.frimn.barbaros.desktop
+      - type: file
+        path: icon3.png
+      # - type: file
+      #   path: flatpak/my.pyside6.app.svg
