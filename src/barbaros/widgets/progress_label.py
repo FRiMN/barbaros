@@ -7,7 +7,7 @@ class GradientRainbowLabel(QLabel):
     def __init__(self, text):
         super().__init__(text)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setStyleSheet("color: black;")
+        # self.setStyleSheet("color: black;")
         self._hue_offset = 0
         self.is_animating = False
 
