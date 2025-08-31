@@ -128,15 +128,15 @@ def main():
     # Позволяет остановить приложение из командной строки.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    try:
-        if "--popup" in sys.argv:
-            open_window()
-        else:
-            start_app()
+    # try:
+    if "--popup" in sys.argv:
+        open_window()
+    else:
+        start_app()
 
-    except Exception as e:
-        print(f"An error occurred: {e}", file=sys.stderr)
-        sys.exit(1)
+    # except Exception as e:
+    #     print(f"An error occurred: {e}", file=sys.stderr)
+    #     sys.exit(1)
 
 
 if __name__ == "__main__":
