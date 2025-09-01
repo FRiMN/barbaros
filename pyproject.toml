@@ -10,7 +10,7 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.10"
 dynamic = ["version"]
-dependencies = ["ollama", "pyside6", "psutil", "toml"]
+dependencies = ["ollama", "pyside6", "psutil"]
 
 # [project.scripts]
 # barbaros = "barbaros.main:main"

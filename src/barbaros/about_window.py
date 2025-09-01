@@ -1,7 +1,6 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
-from toml import load
 
 from .__version__ import version, __version_tuple__
 
@@ -12,7 +11,7 @@ class AboutWindow(QWidget):
 
         self.version = version
         self.year = __version_tuple__[0]
-        self.repository_url = self.get_repo_url()
+        self.repository_url = "https://github.com/FRiMN/barbaros/"
 
         self.initUI()
 
@@ -65,8 +64,3 @@ class AboutWindow(QWidget):
 
         self.setLayout(layout)
         self.adjustSize()
-
-    def get_repo_url(self) -> str:
-        with open("./pyproject.toml", 'r') as f:
-            pyproject_data = load(f)
-        return pyproject_data["project"]["urls"]["Homepage"]
