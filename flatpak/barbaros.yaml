@@ -22,15 +22,16 @@ modules:
     build-commands:
       # Установка приложения с помощью pip (или uv)
       # Рекомендуется использовать pip из SDK для согласованности
-      - pip3 install --verbose --exists-action=i --find-links="file://${PWD}" --prefix=${FLATPAK_DEST} "barbaros"
+      - pip3 install --verbose --exists-action=i --find-links="file://${PWD}/dist" --prefix=${FLATPAK_DEST} "barbaros"
       # Копирование файлов
       - install -Dm644 com.github.frimn.barbaros.desktop /app/share/applications/com.github.frimn.barbaros.desktop
       - install -Dm644 icon3.png /app/share/icons/hicolor/256x256/apps/com.github.frimn.barbaros.png
     sources:
       # Укажите источник кода вашего приложения
-      # Это может быть архив (tar.gz), git-репозиторий или локальный файл
-      - type: file
-        path: ../dist/barbaros-2025.8.4.dev0+g3101c5a3a.d20250831-py3-none-any.whl # Путь к вашему wheel
+      # Копируем .tar.gz и .whl файлы
+      - type: dir
+        path: ../dist
+        dest: dist/
       # Также нужно включить файлы данных (.desktop, иконки)
       - type: file
         path: com.github.frimn.barbaros.desktop
