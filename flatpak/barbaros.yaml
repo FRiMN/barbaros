@@ -20,8 +20,9 @@ modules:
         - --share=network
     buildsystem: simple
     build-commands:
-      # Установка приложения с помощью pip (или uv)
-      # Рекомендуется использовать pip из SDK для согласованности
+      - echo ${FLATPAK_DEST} # /app
+      - echo ${PWD} # /run/build/barbaros
+      # Установка приложения с помощью pip
       - pip3 install --verbose --exists-action=i --find-links="file://${PWD}/dist" --prefix=${FLATPAK_DEST} "barbaros"
       # Копирование файлов
       - install -Dm644 com.github.frimn.barbaros.desktop /app/share/applications/com.github.frimn.barbaros.desktop
@@ -37,3 +38,5 @@ modules:
         path: com.github.frimn.barbaros.desktop
       - type: file
         path: icon3.png
+    cleanup:
+      - "dist/"
