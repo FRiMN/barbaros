@@ -75,7 +75,7 @@ flatpak install barbaros.flatpak
 Title=Barbaros
 Name=com.github.frimn.barbaros
 Branch=stable
-Url=https://github.com/frimn/barbaros/releases/download/v2025.8.4.dev5/barbaros-v2025.8.4.dev5.flatpak
+Url=https://github.com/frimn/barbaros/releases/download/v2025.8.4.dev5/barbaros.flatpak
 IsRuntime=false
 Sdk=org.kde.Sdk
 ```
