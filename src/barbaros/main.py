@@ -6,6 +6,7 @@ from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Slot, QSettings
 
 from .main_window import MainWindow
+from .about_window import AboutWindow
 from .signal_handling_app import SignalHandlingApp
 from .__version__ import version
 
@@ -28,6 +29,7 @@ class App(SignalHandlingApp):
 
         self.tray = TrayIcon(self)
         self.main_window = MainWindow(app=self)
+        self.about_window = AboutWindow()
 
     @Slot(int)
     def handle_signal_in_qt(self, signum: int):
@@ -53,6 +55,11 @@ class App(SignalHandlingApp):
         else:
             self.main_window.hide()
 
+    def show_about_window(self):
+        self.about_window.show()
+        self.about_window.raise_()
+        self.about_window.activateWindow()
+
 
 class TrayIcon:
     def __init__(self, app: App):
@@ -72,25 +79,31 @@ class TrayIcon:
         self.icon.show()
 
     def build_menu(self):
+        # Parent is important in this place
         menu = QMenu()
 
-        # Parent is important in this place
+        about_action = QAction("About", parent=self.icon)
+        about_action.triggered.connect(self.on_about_activated)
+        menu.addAction(about_action)
+
         exit_action = QAction("Exit", parent=self.icon)
         exit_action.triggered.connect(self.app.quit)
         menu.addAction(exit_action)
 
-        return menu
+         return menu
 
     def on_tray_icon_activated(self, reason: QSystemTrayIcon.ActivationReason):
-        """
-        Обработка клика по иконке в трее.
-        """
-        ar = QSystemTrayIcon.ActivationReason
+         """
+         Обработка клика по иконке в трее.
+         """
+         ar = QSystemTrayIcon.ActivationReason
 
-        if reason == ar.Trigger:
-            # Левый клик
-            self.app.switch_window()
+         if reason == ar.Trigger:
+             # Левый клик
+             self.app.switch_window()
 
+    def on_about_activated(self):
+        self.app.show_about_window()
 
 def start_app():
     """ Normal start app """
