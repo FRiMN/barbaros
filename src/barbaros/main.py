@@ -122,11 +122,14 @@ def open_window():
     app_name = "Barbaros"
     current_pid = os.getpid()
 
+    print(f"{app_name.lower()=}")
     for proc in psutil.process_iter(['pid', 'name']):
         if proc.info['pid'] == current_pid:
             continue  # Skip current process
 
-        if proc.info['name'].lower() == app_name.lower():
+        # Мы делаем сравнение по подстроке из-за того, что приложение может быть запущено в flatpak, там будет `/usr/bin/python /app/bin/barbaros`.
+        print(proc.info['name'].lower())
+        if app_name.lower() in proc.info['name'].lower():
             try:
                 os.kill(proc.pid, signal.SIGUSR1)  # Send SIGUSR1 to open main window and start process of translation.
                 print(f"Send SIGUSR1 to PID {proc.pid}")
