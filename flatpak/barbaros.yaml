@@ -1,6 +1,6 @@
 app-id: io.github.frimn.barbaros
 runtime: org.kde.Platform
-runtime-version: "6.7" # Версия KDE Runtime, совместимая с PySide6
+runtime-version: "6.9" # Версия KDE Runtime, совместимая с PySide6
 sdk: org.kde.Sdk
 command: barbaros # Команда для запуска, должна совпадать с Exec в .desktop и точкой входа
 finish-args:
@@ -38,5 +38,7 @@ modules:
         path: io.github.frimn.barbaros.desktop
       - type: file
         path: icon3.png
+      # - type: file
+      #   path: io.github.frimn.barbaros.metainfo.xml
     cleanup:
       - "dist/"
