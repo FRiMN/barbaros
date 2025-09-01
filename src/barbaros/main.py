@@ -39,12 +39,15 @@ class App(SignalHandlingApp):
 
     def process_translation_request(self):
         """Process the translation request"""
+
+        # Now always use clipboard
         text = QApplication.clipboard().text()
 
         self.main_window.orig_text.setPlainText(text)
         self.main_window.show()
         self.main_window.raise_()  # Bring window to front
         self.main_window.activateWindow()
+        # TODO: Refactor to extract translation mechanism to App class.
         self.main_window.translate_button.click()
 
     def switch_window(self):
@@ -90,17 +93,17 @@ class TrayIcon:
         exit_action.triggered.connect(self.app.quit)
         menu.addAction(exit_action)
 
-         return menu
+        return menu
 
     def on_tray_icon_activated(self, reason: QSystemTrayIcon.ActivationReason):
-         """
-         Обработка клика по иконке в трее.
-         """
-         ar = QSystemTrayIcon.ActivationReason
+        """
+        Обработка клика по иконке в трее.
+        """
+        ar = QSystemTrayIcon.ActivationReason
 
-         if reason == ar.Trigger:
-             # Левый клик
-             self.app.switch_window()
+        if reason == ar.Trigger:
+            # Левый клик
+            self.app.switch_window()
 
     def on_about_activated(self):
         self.app.show_about_window()
