@@ -1,10 +1,13 @@
+# Docs: https://packaging.python.org/en/latest/guides/writing-pyproject-toml
+
 [project]
 name = "barbaros"
 description = "AI Translation app"
 keywords = ["AI", "Translation"]
 readme = "README.md"
 authors = [{ name = "Nik Volkov", email = "freezemandix@ya.ru" }]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.10"
 dynamic = ["version"]
 dependencies = ["ollama", "pyside6", "psutil"]
