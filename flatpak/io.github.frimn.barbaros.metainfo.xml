@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Copyright 2025 Barbaros App Developers -->
+<component type="desktop-application">
+  <id>io.github.frimn.barbaros</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Barbaros</name>
+  <summary>AI Translation app</summary>
+
+  <description>
+    <p>
+      Barbaros is a desktop application for quick translations using AI. It runs in the system tray
+      and can be quickly invoked to translate text from your clipboard.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>System Tray Integration: Runs unobtrusively in the system tray</li>
+      <li>Clipboard Translation: Automatically picks up text from the clipboard for translation</li>
+      <li>AI-Powered: Uses AI models for translation</li>
+      <li>Fast Popup: Can be quickly opened with a command or a hotkey</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.frimn.barbaros.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Barbaros main window</caption>
+      <image>https://github.com/FRiMN/barbaros/raw/main/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/FRiMN/barbaros</url>
+  <url type="bugtracker">https://github.com/FRiMN/barbaros/issues</url>
+
+  <provides>
+    <binary>barbaros</binary>
+  </provides>
+
+  <requires>
+    <display_length compare="ge">small</display_length>
+  </requires>
+
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </recommends>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2024-01-01">
+      <description>
+        <p>Initial release of Barbaros</p>
+        <ul>
+          <li>System tray integration</li>
+          <li>Clipboard translation</li>
+          <li>AI-powered translation</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+
+  <categories>
+    <category>Utility</category>
+    <category>Translation</category>
+    <category>AI</category>
+  </categories>
+
+  <developer_name>FRiMN</developer_name>
+</component>

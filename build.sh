@@ -79,7 +79,7 @@ fi
 log_step_time
 
 echo -e "\n\n4/4. Создание одиночного установочного файла (bundle)..."
-if flatpak build-bundle -vv repo dist/barbaros-${version}.flatpak com.github.frimn.barbaros; then
+if flatpak build-bundle -vv repo dist/barbaros-${version}.flatpak io.github.frimn.barbaros; then
   echo "Создание одиночного установочного файла (bundle) выполнено успешно."
 else
   echo "Ошибка: Создание одиночного установочного файла (bundle) не удалось. Выход."
@@ -93,7 +93,7 @@ log_step_time
 # if cat > dist/barbaros.flatpakref <<EOF
 # [Flatpak Ref]
 # Title=Barbaros
-# Name=com.github.frimn.barbaros
+# Name=io.github.frimn.barbaros
 # Branch=stable
 # Url=${flatpak_url}
 # IsRuntime=false

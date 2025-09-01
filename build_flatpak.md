@@ -45,19 +45,19 @@ flatpak --user remote-add --no-gpg-verify local-repo repo
 ### 4.  Локальная установка Flatpak-пакета
 
 ```sh
-flatpak --user install --or-update local-repo com.github.frimn.barbaros
+flatpak --user install --or-update local-repo io.github.frimn.barbaros
 ```
 
 *   `--user`: Устанавливает пакет для текущего пользователя.
 *   `install`:  Устанавливает приложение Flatpak.
 *   `--or-update`: Обновляет приложение, если оно уже установлено. Это удобно при повторной сборке и установке пакета.
 *   `local-repo`: Имя локального репозитория, который вы добавили на предыдущем шаге.
-*   `com.github.frimn.barbaros`:  Идентификатор приложения Flatpak, указанный в файле манифеста (`flatpak/barbaros.yaml`).
+*   `io.github.frimn.barbaros`:  Идентификатор приложения Flatpak, указанный в файле манифеста (`flatpak/barbaros.yaml`).
 
 ### 5.  Создайте одиночный установочный файл (bundle)
 
 ```sh
-flatpak build-bundle repo barbaros.flatpak com.github.frimn.barbaros
+flatpak build-bundle repo barbaros.flatpak io.github.frimn.barbaros
 ```
 
 Этот файл `.flatpak` можно распространять и устанавливать напрямую:
@@ -73,7 +73,7 @@ flatpak install barbaros.flatpak
 ```ini
 [Flatpak Ref]
 Title=Barbaros
-Name=com.github.frimn.barbaros
+Name=io.github.frimn.barbaros
 Branch=stable
 Url=https://github.com/frimn/barbaros/releases/download/v2025.8.4.dev5/barbaros.flatpak
 IsRuntime=false

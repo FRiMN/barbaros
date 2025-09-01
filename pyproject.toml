@@ -34,5 +34,5 @@ build-backend = "setuptools.build_meta"
 write_to = "src/barbaros/__version__.py"
 
 [tool.setuptools.data-files]
-"share/applications" = ["flatpak/com.github.frimn.barbaros.desktop"]
+"share/applications" = ["flatpak/io.github.frimn.barbaros.desktop"]
 "share/icons/hicolor/256x256/apps" = ["src/barbaros/resources/icons/icon3.png"]

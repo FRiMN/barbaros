@@ -1,4 +1,4 @@
-app-id: com.github.frimn.barbaros
+app-id: io.github.frimn.barbaros
 runtime: org.kde.Platform
 runtime-version: "6.7" # Версия KDE Runtime, совместимая с PySide6
 sdk: org.kde.Sdk
@@ -25,8 +25,8 @@ modules:
       # Установка приложения с помощью pip
       - pip3 install --verbose --exists-action=i --find-links="file://${PWD}/dist" --prefix=${FLATPAK_DEST} "barbaros"
       # Копирование файлов
-      - install -Dm644 com.github.frimn.barbaros.desktop /app/share/applications/com.github.frimn.barbaros.desktop
-      - install -Dm644 icon3.png /app/share/icons/hicolor/256x256/apps/com.github.frimn.barbaros.png
+      - install -Dm644 io.github.frimn.barbaros.desktop /app/share/applications/io.github.frimn.barbaros.desktop
+      - install -Dm644 icon3.png /app/share/icons/hicolor/256x256/apps/io.github.frimn.barbaros.png
     sources:
       # Укажите источник кода вашего приложения
       # Копируем .tar.gz и .whl файлы
@@ -35,7 +35,7 @@ modules:
         dest: dist/
       # Также нужно включить файлы данных (.desktop, иконки)
       - type: file
-        path: com.github.frimn.barbaros.desktop
+        path: io.github.frimn.barbaros.desktop
       - type: file
         path: icon3.png
     cleanup:

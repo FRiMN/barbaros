@@ -20,7 +20,7 @@ class App(SignalHandlingApp):
 
         self.setApplicationDisplayName("Barbaros")
         # OrganizationName конфликтует с OrganizationDomain
-        self.setOrganizationDomain("com.github.frimn")
+        self.setOrganizationDomain("io.github.frimn")
         self.setApplicationVersion(version)
         self.setApplicationName("barbaros")
 

@@ -52,9 +52,9 @@ jobs:
             --force-clean \
             --install-deps \
             build-dir \
-            flatpak/com.github.frimn.barbaros.yml
+            flatpak/io.github.frimn.barbaros.yml
           # Создаём .flatpak файл
-          flatpak build-bundle repo barbaros-${{ env.VERSION }}.flatpak com.github.frimn.barbaros
+          flatpak build-bundle repo barbaros-${{ env.VERSION }}.flatpak io.github.frimn.barbaros
 
       - name: Upload .flatpak to release
         uses: svenstaro/upload-release-action@v2
@@ -70,7 +70,7 @@ jobs:
           cat > barbaros-${{ env.VERSION }}.flatpakref << EOF
           [Flatpak Ref]
           Title=Barbaros
-          Name=com.github.frimn.barbaros
+          Name=io.github.frimn.barbaros
           Branch=stable
           Url=https://github.com/frimn/barbaros/releases/download/${{ github.ref_name }}/barbaros-${{ env.VERSION }}.flatpak
           IsRuntime=false
