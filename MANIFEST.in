@@ -3,3 +3,4 @@ include README.md
 include flatpak/*
 include LICENSE.txt
 include uv.lock
+include pyproject.toml
