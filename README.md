@@ -4,6 +4,12 @@ AI Translation App
 
 Barbaros is a desktop application for quick translations using AI. It runs in the system tray and can be quickly invoked to translate text from your clipboard.
 
+## Screenshots
+
+![Screenshot 1](docs/img/window-1.png)
+![Screenshot 2](docs/img/window_translation_process.png)
+![Screenshot 2](docs/img/window-2.png)
+
 ## Features
 
 - **System Tray Integration:** Runs unobtrusively in the system tray.
@@ -13,7 +19,7 @@ Barbaros is a desktop application for quick translations using AI. It runs in th
 
 ## For developers
 
-Information about how build flatpak-package can be found in the [build_flatpak.md](build_flatpak.md) file.
+Information about how build flatpak-package can be found in the [build_flatpak.md](docs/build_flatpak.md) file.
 
 Automated build script: [build.sh](build.sh).
 
@@ -39,17 +45,12 @@ You can find available models in [official catalog](https://ollama.com/search).
 
 **Installation through flatpak**
 
-Install Barbaros using flatpakref:
-```bash
-flatpak install https://github.com/FRiMN/barbaros/releases/download/v0.1.0/barbaros.flatpakref
-```
-
-**Note:** Change version number to the latest release. You can check the latest release on the [GitHub releases page](https://github.com/FRiMN/barbaros/releases).
-
-Or download the latest flatpak file from the [GitHub releases page](https://github.com/FRiMN/barbaros/releases) and install it using flatpak:
+Download the latest flatpak file from the [GitHub releases page](https://github.com/FRiMN/barbaros/releases) and install it using flatpak:
 ```bash
 flatpak install <path_to_flatpak_file>
 ```
+
+This installation without auto-update.
 
 **Installation through repository clone**
 

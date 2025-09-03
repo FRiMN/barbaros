@@ -4,7 +4,6 @@
 # В результате будут созданы файлы для дистрибуции:
 # - Flatpak
 #   - dist/barbaros.flatpak
-#   - dist/barbaros.flatpakref
 # - Python package
 #   - dist/barbaros-*.whl
 #   - dist/barbaros-*.tar.gz
@@ -28,10 +27,6 @@ if [ ${#missing_commands[@]} -ne 0 ]; then
   echo "Пожалуйста, установите недостающие программы и попробуйте снова."
   exit 1
 fi
-
-# Получение версии
-# git_tag=$(git describe --tags --abbrev=0)
-# version=$(echo $git_tag | sed 's/^v//')
 
 # Функция для измерения времени выполнения
 start_time=$(date +%s)
@@ -86,26 +81,6 @@ else
   exit 1
 fi
 log_step_time
-
-# echo -e "\n\n5/5. Создание flatpakref файла..."
-# flatpak_url="https://github.com/frimn/barbaros/releases/download/${git_tag}/barbaros.flatpak"
-
-# if cat > dist/barbaros.flatpakref <<EOF
-# [Flatpak Ref]
-# Title=Barbaros
-# Name=io.github.frimn.barbaros
-# Branch=stable
-# Url=${flatpak_url}
-# IsRuntime=false
-# Sdk=org.kde.Sdk
-# EOF
-# then
-#     echo "Создание flatpakref файла выполнено успешно."
-# else
-#     echo "Ошибка: Создание flatpakref файла не удалось. Выход."
-#     exit 1
-# fi
-# log_step_time
 
 total_time=$(($(date +%s) - start_time))
 echo -e "\nСборка завершена за ${total_time} секунд."

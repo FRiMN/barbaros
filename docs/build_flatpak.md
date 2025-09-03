@@ -65,17 +65,3 @@ flatpak build-bundle repo barbaros.flatpak io.github.frimn.barbaros
 ```sh
 flatpak install barbaros.flatpak
 ```
-
-### 6.  Создание flatpakref файла
-
-Содержимое файла:
-
-```ini
-[Flatpak Ref]
-Title=Barbaros
-Name=io.github.frimn.barbaros
-Branch=stable
-Url=https://github.com/frimn/barbaros/releases/download/v2025.8.4.dev5/barbaros.flatpak
-IsRuntime=false
-Sdk=org.kde.Sdk
-```
