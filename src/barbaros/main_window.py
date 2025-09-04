@@ -2,8 +2,11 @@ import re
 
 from ollama import GenerateResponse
 from PySide6.QtWidgets import (
-    QMainWindow, QTextEdit, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
+    QMainWindow, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 )
+from PySide6.QtGui import QFont, QCloseEvent
+
+from .widgets.custom_text_edit import CustomTextEdit
 from PySide6.QtCore import QThread
 from PySide6.QtGui import QFont, QCloseEvent
 
@@ -49,8 +52,8 @@ class MainWindow(QMainWindow):
     def set_widgets(self):
         from .resources_loader import Resource
 
-        self.orig_text = QTextEdit()
-        self.translated_text = QTextEdit(readOnly=True)
+        self.orig_text = CustomTextEdit()
+        self.translated_text = CustomTextEdit(readOnly=True)
         self.translated_text.hide()
 
         self.translate_button = QPushButton()
