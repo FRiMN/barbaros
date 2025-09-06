@@ -104,18 +104,7 @@ class MainWindow(QMainWindow):
 
         return layout
 
-    def translate(self):
-        self.translate_button.setDisabled(True)
-        self.translate_button.hide()
-
-        text_to_translate = self.orig_text.toPlainText()
-
-        self.translated_text.clear()
-        self.progressbar.show()
-        self.progressbar.start_animation()
-        self.translated_text.hide()
-        self.stats.clear()
-
+    def _threated_translate(self, text_to_translate: str):
         # Run translation in a separate thread
         self.translation_thread = QThread(parent=self)
         self.worker = TranslationWorker(
@@ -132,6 +121,23 @@ class MainWindow(QMainWindow):
         self.translation_thread.started.connect(self.worker.run)
 
         self.translation_thread.start()
+
+    def translate(self):
+        text_to_translate = self.orig_text.toPlainText().strip()
+
+        self.translated_text.clear()
+        self.stats.clear()
+
+        if not text_to_translate:
+            return
+
+        self.translate_button.setDisabled(True)
+        self.translate_button.hide()
+        self.progressbar.show()
+        self.progressbar.start_animation()
+        self.translated_text.hide()
+
+        self._threated_translate(text_to_translate)
 
     def pop_think(self, text: str) -> tuple[str, str]:
         m = re.search(r'<think>.*?<\/think>', text, re.MULTILINE | re.DOTALL)
