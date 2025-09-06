@@ -1,118 +1,143 @@
 # Barbaros
 
-AI Translation App
+**AI-Powered Translation Desktop Application**
 
-Barbaros is a desktop application for quick translations using AI. It runs in the system tray and can be quickly invoked to translate text from your clipboard.
-
-## Screenshots
+Barbaros is a lightweight desktop application that provides instant AI translations through your system tray. Simply copy text to your clipboard and get quick translations with a hotkey.
 
 ![Screenshot 1](docs/img/window-1.png)
 ![Screenshot 2](docs/img/window_translation_process.png)
-![Screenshot 2](docs/img/window-2.png)
+![Screenshot 3](docs/img/window-2.png)
 
 ## Features
 
-- **System Tray Integration:** Runs unobtrusively in the system tray.
-- **Clipboard Translation:** Automatically picks up text from the clipboard for translation.
-- **AI-Powered:** Uses AI models for translation.
-- **Fast Popup:** Can be quickly opened with a command or a hotkey.
+- **🚀 System Tray Integration**: Runs quietly in the background without cluttering your desktop
+- **📋 Clipboard Translation**: Automatically translates text from your clipboard
+- **🤖 AI-Powered**: Leverages advanced AI models through Ollama for accurate translations
+- **🔒 Privacy-First**: All translations are processed locally - your data never leaves your machine
+- **🏠 Offline Capable**: Works completely offline once models are downloaded
+- **⚡ Quick Access**: Instant popup with customizable hotkeys
+- **🔄 Multiple Communication Methods**: Uses DBus and Unix signals for reliable operation
 
-## For developers
+## Prerequisites
 
-Information about how build flatpak-package can be found in the [build_flatpak.md](docs/build_flatpak.md) file.
+### Ollama Installation
 
-Automated build script: [build.sh](build.sh).
+Barbaros requires [Ollama](https://ollama.ai/) to be installed and running on your system.
 
-## Installation & Usage
-
-### Ollama
-
-This application requires [ollama](https://ollama.ai/) to be installed and running. To install ollama, follow the instructions for your operating system on the [ollama website](https://ollama.ai/).
-
-On Linux, you can install it with the following command:
+**Linux Installation:**
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-After installation, you need to pull the model that you want to use. For example, to use the `llama3.1` model, run:
+**Pull a Translation Model:**
+After installing Ollama, download a model for translations:
 ```bash
 ollama pull llama3.1
 ```
 
-You can find available models in [official catalog](https://ollama.com/search).
+Browse available models in the [official Ollama catalog](https://ollama.com/search).
 
-### Barbaros
+## Installation
 
-**Manual Flatpak Installation**
+### Option 1: Flatpak Package (Recommended)
 
-This section explains how to manually install Barbaros using a downloaded Flatpak package. Unlike a repository installation, this method requires you to manually update the application by downloading new versions from GitHub.
+**Download and Install:**
+1. Get the latest `.flatpak` file from [GitHub Releases](https://github.com/FRiMN/barbaros/releases)
+2. Install the package:
+   ```bash
+   cd ~/Downloads
+   flatpak install Barbaros-v1.2.3.flatpak
+   ```
 
-*Note:* This method does not support automatic updates. You will need to manually install new `.flatpak` files from future releases.
+**Launch:**
+- **Terminal**: `flatpak run io.github.frimn.barbaros`
+- **GUI**: Find "Barbaros" in your application menu
 
-Installation Steps:
-
-1. Download the Package:
-Get the latest `.flatpak` file from the Barbaros [releases page on GitHub](https://github.com/FRiMN/barbaros/releases).
-
-2. Run the Installation Command:
-Open a terminal, navigate to the directory where you downloaded the file, and run the following command. Replace Barbaros-v1.2.3.flatpak with the actual filename.
-```bash
-
-cd ~/Downloads
-flatpak install Barbaros-v1.2.3.flatpak
-```
-
-3. Launch the Application:
-Once installed, you can start Barbaros in one of two ways:
-- *Terminal*: Execute `flatpak run io.github.frimn.barbaros`
-- *Graphical Menu*: Look for "Barbaros" in your application launcher or desktop menu.
-
-4.  Translate text via clipboard:
-Copy any text to your clipboard and then run:
+**Quick Translation:**
 ```bash
 flatpak run io.github.frimn.barbaros --popup
 ```
-This will open the main window and start the translation. It is recommended to bind this command to a keyboard shortcut for quick access.
+*Tip: Bind this command to a keyboard shortcut for instant access*
 
-**Installation through repository clone**
+> **Note**: Manual Flatpak installation doesn't support automatic updates. Check GitHub releases for new versions.
 
-1.  Clone the repository:
+### Option 2: Development Installation
+
+**Clone and Setup:**
 ```bash
 git clone https://github.com/FRiMN/barbaros.git
 cd barbaros
-```
-
-2.  Install dependencies using uv:
-```bash
 uv sync
 ```
 
-3.  Run the application:
+**Run Application:**
 ```bash
+# Start system tray application
 uv run barbaros
-```
-The application will start in the system tray.
 
-4.  Translate text via clipboard:
-Copy any text to your clipboard and then run:
-```bash
+# Quick translation popup
 uv run barbaros --popup
 ```
-This will open the main window and start the translation. It is recommended to bind this command to a keyboard shortcut for quick access.
+
+## Usage
+
+1. **Start the Application**: Launch Barbaros to run it in your system tray
+2. **Copy Text**: Copy any text you want to translate to your clipboard
+3. **Translate**: 
+   - Use the `--popup` command, or
+   - Click the system tray icon
+4. **Get Results**: The translation window will appear with your translated text
 
 ## How It Works
 
-When the `--popup` argument is used, the script sends a signal to the already running application instance. Upon receiving the signal, the application brings its main window to the foreground, takes the text from the clipboard, and performs the translation.
+Barbaros uses a dual-communication system for reliable popup functionality:
 
-The application uses two independent communication mechanisms for this popup feature:
-- DBus (primary method).
-- Unix signals (as a fallback method). In this mode, the application listens for a `SIGUSR1` signal.
+- **Primary**: DBus messaging for seamless desktop integration
+- **Fallback**: Unix signals (`SIGUSR1`) for reliable operation
+
+When you use the `--popup` argument, the command communicates with the running application instance, which then:
+1. Brings the main window to the foreground
+2. Retrieves text from your clipboard
+3. Processes the translation through Ollama
+4. Displays the results
 
 ## Dependencies
 
-- [ollama](https://ollama.ai/)
-- [PySide6](https://www.qt.io/qt-for-python)
-- [psutil](https://github.com/giampaolo/psutil)
-- For developing and distribution:
-  - [uv](https://docs.astral.sh/uv/)
-  - [Flatpak](https://flatpak.org/)
+**Runtime Requirements:**
+- [Ollama](https://ollama.ai/) - AI model backend
+- [PySide6](https://www.qt.io/qt-for-python) - GUI framework
+- [psutil](https://github.com/giampaolo/psutil) - Process utilities
+
+**Development Tools:**
+- [uv](https://docs.astral.sh/uv/) - Python package management
+- [Flatpak](https://flatpak.org/) - Application distribution
+
+## Development
+
+### Building Flatpak Package
+
+For detailed information about building the Flatpak package, see [build_flatpak.md](docs/build_flatpak.md).
+
+**Quick Build:**
+```bash
+./build.sh
+```
+
+## Translation Quality Disclaimer
+
+**Important Notice**: The quality of translations depends entirely on the AI model you choose and its capabilities. Barbaros is a tool that facilitates the translation process, but it does not guarantee the accuracy, completeness, or appropriateness of translations.
+
+- Translation accuracy varies between different language pairs
+- Complex technical, legal, or medical texts may require professional human translation
+- Always review and verify translations for important documents
+- The application is not responsible for any consequences resulting from translation errors
+
+For critical translations, we recommend consulting professional translation services.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## License
+
+This project is open source. Please check the repository for license details.
