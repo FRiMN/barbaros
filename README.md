@@ -1,5 +1,7 @@
 # Barbaros
 
+[Русская документация](docs/README_RU.md)
+
 **AI-Powered Translation Desktop Application**
 
 Barbaros is a lightweight desktop application that provides instant AI translations through your system tray. Simply copy text to your clipboard and get quick translations with a hotkey.
@@ -83,7 +85,7 @@ uv run barbaros --popup
 
 1. **Start the Application**: Launch Barbaros to run it in your system tray
 2. **Copy Text**: Copy any text you want to translate to your clipboard
-3. **Translate**: 
+3. **Translate**:
    - Use the `--popup` command, or
    - Click the system tray icon
 4. **Get Results**: The translation window will appear with your translated text
