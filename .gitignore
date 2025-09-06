@@ -8,4 +8,5 @@ repo/
 dist/
 .continue/
 .ropeproject/
+.obsidian/
 AI_AGENT_INFO.md
