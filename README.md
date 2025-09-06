@@ -49,8 +49,14 @@ Download the latest flatpak file from the [GitHub releases page](https://github.
 ```bash
 flatpak install <path_to_flatpak_file>
 ```
-
 This installation without auto-update.
+
+Then run through flatpak:
+```bash
+flatpak run io.github.frimn.barbaros
+```
+
+Or, use desktop shortcut from your desktop environment.
 
 **Installation through repository clone**
 
@@ -78,9 +84,13 @@ This installation without auto-update.
     ```
     This will open the main window and start the translation. It is recommended to bind this command to a keyboard shortcut for quick access.
 
-## How it Works
+## How It Works
 
-The application listens for a `SIGUSR1` signal. When the `--popup` argument is used, the script sends this signal to the running application instance. The application then opens its main window, takes the text from the clipboard, and performs the translation.
+When the --popup argument is used, the script sends a signal to the already running application instance. Upon receiving the signal, the application brings its main window to the foreground, takes the text from the clipboard, and performs the translation.
+
+The application uses two independent communication mechanisms for this popup feature:
+- DBus (primary method).
+- Unix signals (as a fallback method). In this mode, the application listens for a SIGUSR1 signal.
 
 ## Dependencies
 
