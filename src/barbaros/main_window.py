@@ -1,11 +1,10 @@
 import re
 
 from ollama import GenerateResponse
+
 from PySide6.QtWidgets import (
     QMainWindow, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 )
-from PySide6.QtGui import QFont, QCloseEvent
-
 from .widgets.custom_text_edit import CustomTextEdit
 from PySide6.QtCore import QThread
 from PySide6.QtGui import QFont, QCloseEvent
