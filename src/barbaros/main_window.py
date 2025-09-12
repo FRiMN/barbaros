@@ -58,6 +58,7 @@ class MainWindow(QMainWindow):
         self.translate_button = QPushButton()
         self.translate_button.setText("Translate")
         self.translate_button.clicked.connect(self.handle_translate_button)
+        self.translate_button.setShortcut("Ctrl+Return")
 
         self.target_language_select = tls = QComboBox()
         tls.addItems(TARGET_LANGUAGES)

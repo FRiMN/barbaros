@@ -88,6 +88,7 @@ uv run barbaros --popup
 3. **Translate**:
    - Use the `--popup` command, or
    - Click the system tray icon
+   - In the translation window, press "Translate" button or `Ctrl+Return` shortcut to translate the text
 4. **Get Results**: The translation window will appear with your translated text
 
 ## How It Works
