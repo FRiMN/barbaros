@@ -152,6 +152,7 @@ class MainWindow(QMainWindow):
         self.progressbar.hide()
         translated_text = resp.response
         _, translated_text = self.pop_think(translated_text)
+        translated_text = translated_text.strip()
         self.translated_text.setText(translated_text)
         self.translated_text.show()
         self.translate_button.setDisabled(False)
