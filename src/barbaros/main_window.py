@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QThread
 from PySide6.QtGui import QFont, QCloseEvent
+from PySide6.QtWidgets import QStyle
 
 from .workers import TranslationWorker
 from .widgets.filterable_combobox import FilterableComboBox
@@ -55,6 +56,13 @@ class MainWindow(QMainWindow):
         self.translated_text = CustomTextEdit(readOnly=True)
         self.translated_text.hide()
 
+        self.clear_button = QPushButton()
+        self.clear_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+        self.clear_button.setToolTip("Clear textareas")
+        self.clear_button.clicked.connect(self.handle_clear_button)
+        clear_button_height = self.clear_button.sizeHint().height()
+        self.clear_button.setMaximumWidth(clear_button_height)
+
         self.translate_button = QPushButton()
         self.translate_button.setText("Translate")
         self.translate_button.clicked.connect(self.handle_translate_button)
@@ -86,12 +94,17 @@ class MainWindow(QMainWindow):
         self.progressbar = GradientRainbowLabel("Translating...")
         self.progressbar.hide()
 
+    def handle_clear_button(self):
+        self.orig_text.clear()
+        self.translated_text.clear()
+
     def build_layout(self) -> QVBoxLayout:
         self.set_widgets()
 
         select_panel = QHBoxLayout()
         select_panel.addWidget(self.model)
         self.model.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        select_panel.addWidget(self.clear_button)
         select_panel.addWidget(QLabel("Target:"))
         select_panel.addWidget(self.target_language_select)
 
