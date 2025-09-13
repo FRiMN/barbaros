@@ -88,6 +88,11 @@ class FilterablePopup(QWidget):
         self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_widget.setAlternatingRowColors(True)
         self.list_widget.itemActivated.connect(self.on_item_selected)
+        self.list_widget.setStyleSheet("""
+            QListWidget::item {
+                padding: 4px;
+            }
+        """)
         layout.addWidget(self.list_widget)
 
         self.update_items()
