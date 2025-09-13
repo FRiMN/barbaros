@@ -77,13 +77,13 @@ class FilterablePopup(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
 
-        # Создаем QLineEdit для ввода фильтра
+        # Создаем поле ввода для ввода фильтра
         self.filter_edit = QLineEdit(self)
         self.filter_edit.setPlaceholderText("Filter items")
         self.filter_edit.textChanged.connect(self.apply_filter)
         layout.addWidget(self.filter_edit)
 
-        # Создаем QListWidget для отображения списка вариантов
+        # Создаем виджет для отображения списка вариантов
         self.list_widget = QListWidget(self)
         self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list_widget.setAlternatingRowColors(True)
