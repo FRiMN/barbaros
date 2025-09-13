@@ -5,13 +5,13 @@ from ollama import GenerateResponse
 from PySide6.QtWidgets import (
     QMainWindow, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 )
-from .widgets.custom_text_edit import CustomTextEdit
 from PySide6.QtCore import QThread
 from PySide6.QtGui import QFont, QCloseEvent
 
 from .workers import TranslationWorker
 from .widgets.filterable_combobox import FilterableComboBox
 from .widgets.progress_label import GradientRainbowLabel
+from .widgets.custom_text_edit import CustomTextEdit
 from .common import SettingsProxy
 
 
