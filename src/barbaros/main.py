@@ -103,9 +103,13 @@ class TrayIcon:
         self.app.show_about_window()
 
 
-def start_app():
+def start_app(open_main_window=False):
     """ Normal start app """
     app = App(sys.argv)
+    if open_main_window:
+        app.main_window.show()
+        app.main_window.raise_()
+        app.main_window.activateWindow()
     sys.exit(app.exec())
 
 
@@ -121,7 +125,7 @@ def main():
     if "--popup" in sys.argv:
         open_window()
     else:
-        start_app()
+        start_app(open_main_window="--opened" in sys.argv)
 
 
 if __name__ == "__main__":
