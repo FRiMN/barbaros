@@ -3,7 +3,7 @@ import typing
 
 from PySide6.QtWidgets import QTextEdit, QMenu
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QMimeData
 
 class CustomTextEdit(QTextEdit):
     font_size_step = 1  # Define the step for font size adjustment
@@ -90,3 +90,10 @@ class CustomTextEdit(QTextEdit):
         font = self.font()
         font.setPointSize(self.default_font_size)
         self.setFont(font)
+
+    def insertFromMimeData(self, source: QMimeData, src_type: str = ""):
+        """Insert text via drag&drop, Ctrl+V, menu and etc."""
+        if not source.hasText():
+            super().insertFromMimeData(source)
+
+        self.insertPlainText(source.text())
