@@ -1,15 +1,15 @@
 # Barbaros
 
-[English Documentation](README.md)
+[English Documentation](../README.md)
 
 **AI-Powered Translation Desktop Application**
 
 Barbaros является легким настольным приложением, которое предоставляет мгновенный перевод с использованием искусственного интеллекта через системный трей. Просто скопируйте текст в буфер обмена и получите быстрые переводы с помощью горячей клавиши.
 > **Примечание:** Протестировано только на Linux, но может также работать на Windows и macOS.
 
-![Скриншот 1](docs/img/window-1.png)
-![Скриншот 2](docs/img/window_translation_process.png)
-![Скриншот 3](docs/img/window-2.png)
+![Скриншот 1](img/window-1.png)
+![Скриншот 2](img/window_translation_process.png)
+![Скриншот 3](img/window-2.png)
 
 ## Особенности
 
@@ -124,7 +124,7 @@ Barbaros использует систему двойной связи для н
 
 ### Сборка пакета Flatpak
 
-Для получения подробной информации о сборке пакета Flatpak, смотрите [build_flatpak.md](docs/build_flatpak.md).
+Для получения подробной информации о сборке пакета Flatpak, смотрите [build_flatpak.md](build_flatpak.md).
 
 **Быстрая сборка:**
 ```bash
