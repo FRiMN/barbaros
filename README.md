@@ -52,7 +52,7 @@ Browse available models in the [official Ollama catalog](https://ollama.com/sear
    ```
 
 **Launch:**
-- **Terminal**: `flatpak run io.github.frimn.barbaros`
+- **Terminal**: `flatpak run io.github.frimn.barbaros` or `flatpak run io.github.frimn.barbaros --opened` for open main window on startup
 - **GUI**: Find "Barbaros" in your application menu
 
 **Quick Translation:**
@@ -79,6 +79,9 @@ uv run barbaros
 
 # Quick translation popup
 uv run barbaros --popup
+
+# Start app with open main window without translation
+uv run barbaros --opened
 ```
 
 ## Usage
