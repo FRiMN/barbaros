@@ -77,7 +77,7 @@ class FilterablePopup(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
 
-        # Создаем поле ввода для ввода фильтра
+        # Создаем поле ввода для фильтра
         self.filter_edit = QLineEdit(self)
         self.filter_edit.setPlaceholderText("Filter items")
         self.filter_edit.textChanged.connect(self.apply_filter)
