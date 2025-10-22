@@ -5,6 +5,7 @@
 **AI-Powered Translation Desktop Application**
 
 Barbaros is a lightweight desktop application that provides instant AI translations through your system tray. Simply copy text to your clipboard and get quick translations with a hotkey.
+> **Note:** Tested only on Linux, but may also work on Windows and macOS.
 
 ![Screenshot 1](docs/img/window-1.png)
 ![Screenshot 2](docs/img/window_translation_process.png)
@@ -61,7 +62,7 @@ flatpak run io.github.frimn.barbaros --popup
 ```
 *Tip: Bind this command to a keyboard shortcut for instant access*
 
-> **Note**: Manual Flatpak installation doesn't support automatic updates. Check GitHub releases for new versions.
+> **Note:** Manual Flatpak installation doesn't support automatic updates. Check GitHub releases for new versions.
 
 ### Option 2: Development Installation
 
