@@ -113,6 +113,7 @@ When you use the `--popup` argument, the command communicates with the running a
 - [Ollama](https://ollama.ai/) - AI model backend
 - [PySide6](https://www.qt.io/qt-for-python) - GUI framework
 - [psutil](https://github.com/giampaolo/psutil) - Process utilities
+- [Flatpak](https://flatpak.org/) - Application distribution (optional)
 
 **Development Tools:**
 - [uv](https://docs.astral.sh/uv/) - Python package management
