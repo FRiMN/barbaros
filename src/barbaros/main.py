@@ -44,11 +44,14 @@ class App(QApplication):
         # TODO: Refactor to extract translation mechanism to App class.
         self.main_window.translate_button.click()
 
+    def raise_window(self):
+        self.main_window.show()
+        self.main_window.raise_()
+        self.main_window.activateWindow()
+
     def switch_window(self):
         if not self.main_window.isVisible():
-            self.main_window.show()
-            self.main_window.raise_()
-            self.main_window.activateWindow()
+            self.raise_window()
         else:
             self.main_window.hide()
 
@@ -78,6 +81,10 @@ class TrayIcon:
     def build_menu(self):
         # Parent is important in this place
         menu = QMenu()
+
+        open_window = QAction("Open Window", parent=self.icon)
+        open_window.triggered.connect(self.app.raise_window)
+        menu.addAction(open_window)
 
         about_action = QAction("About", parent=self.icon)
         about_action.triggered.connect(self.on_about_activated)
