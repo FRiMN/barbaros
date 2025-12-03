@@ -27,6 +27,7 @@ class App(QApplication):
 
         self.ipc = IPCService(app=self, as_server=True, as_client=False)
 
+        # Windows and tray
         self.tray = TrayIcon(self)
         self.main_window = MainWindow(app=self)
         self.about_window = AboutWindow()
@@ -38,15 +39,13 @@ class App(QApplication):
         text = QApplication.clipboard().text()
 
         self.main_window.orig_text.setPlainText(text)
-        self.main_window.show()
-        self.main_window.raise_()  # Bring window to front
-        self.main_window.activateWindow()
+        self.raise_window()
         # TODO: Refactor to extract translation mechanism to App class.
         self.main_window.translate_button.click()
 
     def raise_window(self):
         self.main_window.show()
-        self.main_window.raise_()
+        self.main_window.raise_()   # Bring window to front
         self.main_window.activateWindow()
 
     def switch_window(self):
