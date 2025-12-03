@@ -113,9 +113,7 @@ def start_app(open_main_window=False):
     """ Normal start app """
     app = App(sys.argv)
     if open_main_window:
-        app.main_window.show()
-        app.main_window.raise_()
-        app.main_window.activateWindow()
+        app.raise_window()
     sys.exit(app.exec())
 
 
