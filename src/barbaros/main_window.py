@@ -1,11 +1,20 @@
 import re
+from gettext import translation
 
 from ollama import GenerateResponse
 
 from PySide6.QtWidgets import (
-    QMainWindow, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
+    QMainWindow,
+    QVBoxLayout,
+    QWidget,
+    QPushButton,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QTabWidget,
 )
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QThread, Qt
 from PySide6.QtGui import QFont, QCloseEvent
 from PySide6.QtWidgets import QStyle
 
@@ -16,7 +25,21 @@ from .widgets.custom_text_edit import CustomTextEdit
 from .common import SettingsProxy
 
 
-TARGET_LANGUAGES = ["ru", "en", "fr", "de", "es", "it", "pt", "ja", "ko", "zh", "ar", "hi", "ua"]
+TARGET_LANGUAGES = [
+    "ru",
+    "en",
+    "fr",
+    "de",
+    "es",
+    "it",
+    "pt",
+    "ja",
+    "ko",
+    "zh",
+    "ar",
+    "hi",
+    "ua",
+]
 
 
 class MainWindow(QMainWindow):
@@ -57,7 +80,9 @@ class MainWindow(QMainWindow):
         self.translated_text.hide()
 
         self.clear_button = QPushButton()
-        self.clear_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+        self.clear_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
+        )
         self.clear_button.setToolTip("Clear textareas")
         self.clear_button.clicked.connect(self.handle_clear_button)
         clear_button_height = self.clear_button.sizeHint().height()
@@ -72,7 +97,9 @@ class MainWindow(QMainWindow):
         tls.addItems(TARGET_LANGUAGES)
         tls.currentTextChanged.connect(self.save_choosed_target_language)
         if past_language := self.settings.value("target_language"):
-            self.target_language_select.setCurrentIndex(TARGET_LANGUAGES.index(past_language))
+            self.target_language_select.setCurrentIndex(
+                TARGET_LANGUAGES.index(past_language)
+            )
         else:
             print("set default language")
             self.target_language_select.setCurrentIndex(0)
@@ -98,25 +125,54 @@ class MainWindow(QMainWindow):
         self.orig_text.clear()
         self.translated_text.clear()
 
-    def build_layout(self) -> QVBoxLayout:
-        self.set_widgets()
+    def _build_text_tab(self) -> QWidget:
+        translation_tab = QWidget()
+        translation_layout = QVBoxLayout()
 
         select_panel = QHBoxLayout()
         select_panel.addWidget(self.model)
-        self.model.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.model.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
         select_panel.addWidget(self.clear_button)
         select_panel.addWidget(QLabel("Target:"))
         select_panel.addWidget(self.target_language_select)
 
-        layout = QVBoxLayout()
-        layout.addLayout(select_panel)
-        layout.addWidget(self.orig_text)
-        layout.addWidget(self.translate_button)
-        layout.addWidget(self.progressbar)
-        layout.addWidget(self.translated_text)
-        layout.addWidget(self.stats)
+        translation_layout.addLayout(select_panel)
+        translation_layout.addWidget(self.orig_text)
+        translation_layout.addWidget(self.translate_button)
+        translation_layout.addWidget(self.progressbar)
+        translation_layout.addWidget(self.translated_text)
+        translation_layout.addWidget(self.stats)
 
-        return layout
+        translation_tab.setLayout(translation_layout)
+        return translation_tab
+
+    def _build_ocr_tab(self) -> QWidget:
+        ocr_tab = QWidget()
+        ocr_layout = QVBoxLayout()
+
+        ocr_label = QLabel("OCR functionality coming soon...")
+        ocr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ocr_layout.addWidget(ocr_label)
+
+        ocr_tab.setLayout(ocr_layout)
+        return ocr_tab
+
+    def build_layout(self) -> QVBoxLayout:
+        self.set_widgets()
+
+        tab_widget = QTabWidget()
+        translation_tab = self._build_text_tab()
+        ocr_tab = self._build_ocr_tab()
+
+        tab_widget.addTab(translation_tab, "Translate")
+        tab_widget.addTab(ocr_tab, "OCR")
+
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(tab_widget)
+
+        return main_layout
 
     def _threated_translate(self, text_to_translate: str):
         # Run translation in a separate thread
@@ -124,7 +180,7 @@ class MainWindow(QMainWindow):
         self.worker = TranslationWorker(
             text_to_translate,
             self.target_language_select.currentText(),
-            self.model.selected_item
+            self.model.selected_item,
         )
         self.worker.moveToThread(self.translation_thread)
 
@@ -154,12 +210,12 @@ class MainWindow(QMainWindow):
         self._threated_translate(text_to_translate)
 
     def pop_think(self, text: str) -> tuple[str, str]:
-        m = re.search(r'<think>.*?<\/think>', text, re.MULTILINE | re.DOTALL)
+        m = re.search(r"<think>.*?<\/think>", text, re.MULTILINE | re.DOTALL)
         if m:
             think_text = m.group(0)
-            text = text[len(think_text):]
+            text = text[len(think_text) :]
             return think_text, text.strip()
-        return '', text
+        return "", text
 
     def on_translation_finished(self, resp: GenerateResponse):
         self.progressbar.hide()
@@ -174,7 +230,9 @@ class MainWindow(QMainWindow):
         eval_secs = resp.eval_duration // 1000 / 1000 / 1000
         load_secs = resp.load_duration // 1000 / 1000 / 1000
         eval_speed = resp.eval_count / eval_secs
-        self.stats.setText(f"Eval: {eval_secs:.2f}s; Load: {load_secs:.2f}s; {eval_speed:.2f} tokens/s")
+        self.stats.setText(
+            f"Eval: {eval_secs:.2f}s; Load: {load_secs:.2f}s; {eval_speed:.2f} tokens/s"
+        )
 
     def handle_translate_button(self):
         self.translate()

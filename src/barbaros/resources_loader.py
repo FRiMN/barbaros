@@ -10,9 +10,10 @@ ICONS_LOC = f"{PACKAGE}.icons"
 
 
 def get_ollama_models() -> List[str]:
-    import ollama
+    from .translator import client
+    from ollama import ListResponse
 
-    models_resp: ollama.ListResponse = ollama.list()
+    models_resp: ListResponse = client.list()
     models = [m.model for m in models_resp.models if m.model is not None]
     return models
 

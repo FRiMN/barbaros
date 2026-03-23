@@ -1,11 +1,14 @@
-import ollama
+from ollama import Client, GenerateResponse
 
 """
 Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 """
 
 
-def translate_text(text: str, target_language: str, model: str) -> ollama.GenerateResponse:
+client = Client("http://192.168.1.10:11434")
+
+
+def translate_text(text: str, target_language: str, model: str) -> GenerateResponse:
     from .resources_loader import Resource
 
     system_prompt = Resource.translation_agent_system_prompt.value
@@ -25,7 +28,7 @@ def translate_text(text: str, target_language: str, model: str) -> ollama.Genera
     #         'content': text_prompt,
     #     },
     # ])
-    response = ollama.generate(model=model, system=system_prompt, prompt=text_prompt, think=False)
+    response = client.generate(model=model, system=system_prompt, prompt=text_prompt, think=False)
     return response
 
 
