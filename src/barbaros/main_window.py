@@ -13,9 +13,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QTabWidget,
+    QFileDialog,
 )
 from PySide6.QtCore import QThread, Qt
-from PySide6.QtGui import QFont, QCloseEvent
+from PySide6.QtGui import QFont, QCloseEvent, QImage
 from PySide6.QtWidgets import QStyle
 
 from .workers import TranslationWorker
@@ -49,6 +50,7 @@ class MainWindow(QMainWindow):
         super().__init__(*args, **kwargs)
         self.app = app
         self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
+        self.ocr_loaded_image: QImage | None = None
 
         if past_geometry := self.settings.value("geometry"):
             self.restoreGeometry(past_geometry)
@@ -151,10 +153,22 @@ class MainWindow(QMainWindow):
     def _build_ocr_tab(self) -> QWidget:
         ocr_tab = QWidget()
         ocr_layout = QVBoxLayout()
+        ocr_layout.setSpacing(10)
 
-        ocr_label = QLabel("OCR functionality coming soon...")
-        ocr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ocr_layout.addWidget(ocr_label)
+        self.load_image_button = QPushButton("Load Image")
+        self.load_image_button.setToolTip("Load an image for OCR processing")
+        self.load_image_button.clicked.connect(self.handle_load_image_button)
+        ocr_layout.addWidget(self.load_image_button)
+
+        # Status label to show loaded image info
+        self.ocr_status_label = QLabel("No image selected")
+        self.ocr_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.ocr_status_label.setStyleSheet(
+            "QLabel { color: #666; font-style: italic; }"
+        )
+        ocr_layout.addWidget(self.ocr_status_label)
+
+        ocr_layout.addStretch()  # Push everything to the top
 
         ocr_tab.setLayout(ocr_layout)
         return ocr_tab
@@ -236,3 +250,40 @@ class MainWindow(QMainWindow):
 
     def handle_translate_button(self):
         self.translate()
+
+    def set_ocr_image(self, image: QImage, file_path: str):
+        self.ocr_loaded_image = image
+        filename = file_path.split("/")[-1]  # Get filename from path
+        self.ocr_status_label.setText(
+            f"Loaded: {filename} ({image.width()}x{image.height()})"
+        )
+        self.ocr_status_label.setStyleSheet(
+            "QLabel { color: #006600; font-weight: bold; }"
+        )
+
+    def handle_load_image_button(self):
+        """Handle load image button click - open file dialog and load selected image"""
+        file_dialog = QFileDialog()
+        file_dialog.setWindowTitle("Select Image for OCR")
+        file_dialog.setNameFilter(
+            "Images (*.png *.xpm *.jpg *.jpeg *.bmp *.gif *.tif *.tiff)"
+        )
+        file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
+
+        if not file_dialog.exec():
+            return
+
+        selected_files = file_dialog.selectedFiles()
+        file_path = selected_files[0]
+
+        # Load the image
+        image = QImage(file_path)
+
+        # Failed to load image
+        if image.isNull():
+            self.ocr_loaded_image = None
+            self.ocr_status_label.setText(f"Failed to load image: {file_path}")
+            self.ocr_status_label.setStyleSheet("QLabel { color: #cc0000; }")
+            return
+
+        self.set_ocr_image(image, file_path)
