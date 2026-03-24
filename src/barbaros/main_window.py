@@ -177,10 +177,10 @@ class MainWindow(QMainWindow):
         self.set_widgets()
 
         tab_widget = QTabWidget()
-        translation_tab = self._build_text_tab()
+        text_tab = self._build_text_tab()
         ocr_tab = self._build_ocr_tab()
 
-        tab_widget.addTab(translation_tab, "Translate")
+        tab_widget.addTab(text_tab, "Text")
         tab_widget.addTab(ocr_tab, "OCR")
 
         main_layout = QVBoxLayout()
