@@ -3,46 +3,21 @@ import re
 from ollama import GenerateResponse
 
 from PySide6.QtWidgets import (
-    QMainWindow,
     QVBoxLayout,
-    QWidget,
     QPushButton,
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QSizePolicy,
-    QTabWidget,
-    QFileDialog,
-    QDialog,
     QBoxLayout,
 )
-from PySide6.QtCore import QThread, Qt, QRect, QPoint, QObject, Slot
-from PySide6.QtGui import QFont, QCloseEvent, QImage, QPainter, QPen, QBrush, QColor
-from PySide6.QtWidgets import QStyle
+from PySide6.QtCore import QThread
+from PySide6.QtGui import QFont
 
-from barbaros.common import TARGET_LANGUAGES
+from barbaros.features.base import AbstractFeature
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.filterable_combobox import FilterableComboBox
 from barbaros.widgets.progress_label import GradientRainbowLabel
 from barbaros.workers import TranslationWorker
-
-
-class AbstractFeature(QObject):
-    tab_name: str
-    parent: QMainWindow
-
-    def __init__(self, parent: QMainWindow):
-        super().__init__()
-        self.parent = parent
-
-    def build_layout(self) -> QBoxLayout:
-        raise NotImplementedError("Do implement in concrete class")
-
-    def set_widgets(self):
-        pass
-
-    def handle_clear_button(self):
-        pass
 
 
 class TextFeature(AbstractFeature):
