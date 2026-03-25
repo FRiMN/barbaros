@@ -28,10 +28,6 @@ class MainWindow(QMainWindow):
             OCRFeature(self)
         ]
 
-        self.ocr_loaded_image: QImage | None = None
-        self.ocr_cropped_image: QImage | None = None
-        self.crop_rect: QRect | None = None
-
         if past_geometry := self.settings.value("geometry"):
             self.restoreGeometry(past_geometry)
         else:

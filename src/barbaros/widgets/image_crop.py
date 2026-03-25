@@ -124,6 +124,11 @@ class CropWidget(QWidget):
         """Get the current crop rectangle in image coordinates"""
         return self.crop_rect
 
+    def set_crop_rect(self, rect: QRect | None):
+        """Set the initial crop rectangle in image coordinates"""
+        self.crop_rect = rect
+        self.update()
+
     def mousePressEvent(self, event):
         """Handle mouse press events for resizing/moving crop rectangle"""
         if self.image.isNull():

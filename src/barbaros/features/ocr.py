@@ -17,6 +17,13 @@ from barbaros.widgets.image_crop import CropWidget
 class OCRFeature(AbstractFeature):
     tab_name = "Image"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.ocr_loaded_image: QImage | None = None
+        self.ocr_cropped_image: QImage | None = None
+        self.crop_rect: QRect | None = None
+
     def build_layout(self) -> QBoxLayout:
         l = QVBoxLayout()
         # l.setSpacing(10)
@@ -94,26 +101,32 @@ class OCRFeature(AbstractFeature):
         if self.ocr_loaded_image is None:
             return
 
-        dialog = CropDialog(self.ocr_loaded_image)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            print("accepted")
-            self.ocr_cropped_image = dialog.get_cropped_image()
-            self.crop_rect = dialog.get_crop_rect()
+        dialog = CropDialog(self.ocr_loaded_image, initial_crop_rect=self.crop_rect)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            # TODO: Really need?
+            return
 
-            if self.ocr_cropped_image:
-                filename = self.ocr_status_label.text().split(" (")[0]
-                self.ocr_status_label.setText(
-                    f"{filename} ({self.ocr_cropped_image.width()}x{self.ocr_cropped_image.height()}) [Cropped]"
-                )
-                self.ocr_status_label.setStyleSheet(
-                    "QLabel { color: #006600; font-weight: bold; }"
-                )
+        self.ocr_cropped_image = dialog.get_cropped_image()
+        self.crop_rect = dialog.get_crop_rect()
+
+        if not self.ocr_cropped_image:
+            return
+
+        filename = self.ocr_status_label.text().split(" (")[0]
+        self.ocr_status_label.setText(
+            f"{filename} ({self.ocr_cropped_image.width()}x{self.ocr_cropped_image.height()}) [Cropped]"
+        )
+        self.ocr_status_label.setStyleSheet(
+            "QLabel { color: #006600; font-weight: bold; }"
+        )
 
 
 class CropDialog(QDialog):
     """Modal dialog for cropping images with GIMP-like interface"""
 
-    def __init__(self, image: QImage, parent=None):
+    def __init__(
+        self, image: QImage, parent=None, initial_crop_rect: QRect | None = None
+    ):
         super().__init__(parent)
         self.setWindowTitle("Crop Image")
         self.setModal(True)
@@ -121,6 +134,8 @@ class CropDialog(QDialog):
 
         self.original_image = image
         self.crop_widget = CropWidget(image)
+        initial_crop_rect = initial_crop_rect or QRect(0, 0, image.width(), image.height())
+        self.crop_widget.set_crop_rect(initial_crop_rect)
 
         layout = QVBoxLayout()
         layout.addWidget(self.crop_widget)
@@ -148,4 +163,4 @@ class CropDialog(QDialog):
     def closeEvent(self, event):
         """Handle dialog close event - treat as accepting the crop"""
         self.final_crop_rect = self.crop_widget.get_crop_rect()
-        super().closeEvent(event)
+        self.accept()
