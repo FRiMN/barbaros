@@ -63,8 +63,6 @@ class MainWindow(QMainWindow):
         self.settings.setValue("target_language", lang)
 
     def set_widgets(self):
-        from .resources_loader import Resource
-
         self.clear_button = QPushButton()
         self.clear_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)

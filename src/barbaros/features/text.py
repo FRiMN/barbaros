@@ -21,7 +21,6 @@ from PySide6.QtGui import QFont, QCloseEvent, QImage, QPainter, QPen, QBrush, QC
 from PySide6.QtWidgets import QStyle
 
 from barbaros.common import TARGET_LANGUAGES
-from barbaros.resources_loader import Resource
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.filterable_combobox import FilterableComboBox
 from barbaros.widgets.progress_label import GradientRainbowLabel
@@ -53,8 +52,8 @@ class TextFeature(AbstractFeature):
         l = QVBoxLayout()
 
         select_panel = QHBoxLayout()
-        select_panel.addWidget(self.parent.model)
-        self.parent.model.setSizePolicy(
+        select_panel.addWidget(self.model)
+        self.model.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         select_panel.addWidget(self.parent.clear_button)
@@ -71,6 +70,8 @@ class TextFeature(AbstractFeature):
         return l
 
     def set_widgets(self):
+        from ..resources_loader import Resource
+
         self.orig_text = CustomTextEdit()
         self.translated_text = CustomTextEdit(readOnly=True)
         self.translated_text.hide()
@@ -88,7 +89,7 @@ class TextFeature(AbstractFeature):
         self.progressbar = GradientRainbowLabel("Translating...")
         self.progressbar.hide()
 
-        self.model = FilterableComboBox(self)
+        self.model = FilterableComboBox()
         self.model.selectionChanged.connect(self.parent.save_choosed_model)
         self.model.addItems(Resource.ollama_models.value)
         if past_model := self.parent.settings.value("model"):
