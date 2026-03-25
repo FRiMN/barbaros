@@ -5,7 +5,7 @@ from typing import List
 from PySide6.QtGui import QPixmap
 
 
-PACKAGE = 'barbaros.resources'
+PACKAGE = "barbaros.resources"
 ICONS_LOC = f"{PACKAGE}.icons"
 
 
@@ -19,6 +19,9 @@ def get_ollama_models() -> List[str]:
 
 
 class Resource(Enum):
-    icon_app = QPixmap(files(ICONS_LOC).joinpath('icon3.png'))
-    translation_agent_system_prompt = open_text(PACKAGE, 'translation_agent_prompt.md').read()
+    icon_app = QPixmap(files(ICONS_LOC).joinpath("icon3.png"))
+    translation_agent_system_prompt = open_text(
+        PACKAGE, "translation_agent_prompt.md"
+    ).read()
+    ocr_agent_system_prompt = open_text(PACKAGE, "ocr_agent_prompt.md").read()
     ollama_models = get_ollama_models()

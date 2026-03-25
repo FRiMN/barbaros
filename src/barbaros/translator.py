@@ -1,3 +1,5 @@
+import base64
+
 from ollama import Client, GenerateResponse
 
 """
@@ -30,8 +32,26 @@ def translate_text(text: str, target_language: str, model: str) -> GenerateRespo
     #         'content': text_prompt,
     #     },
     # ])
-    response = client.generate(model=model, system=system_prompt, prompt=text_prompt, think=False)
+    response = client.generate(
+        model=model, system=system_prompt, prompt=text_prompt, think=False
+    )
     return response
+
+
+def ocr_image(image_bytes: bytes, model: str) -> str:
+    from .resources_loader import Resource
+
+    system_prompt = Resource.ocr_agent_system_prompt.value
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+    response = client.generate(
+        model=model,
+        images=[base64_image],
+        system=system_prompt,
+        prompt="Extract the text in the image.",
+        think=False,
+    )
+    return response.response
 
 
 if __name__ == "__main__":
