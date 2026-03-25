@@ -45,3 +45,20 @@ class SettingsProxy:
     def __getattr__(self, name):
         # Delegate any other methods directly to the underlying QSettings object
         return getattr(self.settings, name)
+
+
+TARGET_LANGUAGES = [
+    "ru",
+    "en",
+    "fr",
+    "de",
+    "es",
+    "it",
+    "pt",
+    "ja",
+    "ko",
+    "zh",
+    "ar",
+    "hi",
+    "ua",
+]

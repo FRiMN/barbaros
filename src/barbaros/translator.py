@@ -13,6 +13,8 @@ def translate_text(text: str, target_language: str, model: str) -> GenerateRespo
 
     system_prompt = Resource.translation_agent_system_prompt.value
 
+    print(f"{text=}; {target_language=}; {model=}")
+
     text_prompt = f"""
     Target Language: {target_language}
     Text: {text}
