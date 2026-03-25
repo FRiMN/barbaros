@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QDialog,
 )
-from PySide6.QtCore import QThread, Qt, QRect, QPoint
+from PySide6.QtCore import QThread, Qt, QRect, QPoint, Slot
 from PySide6.QtGui import QFont, QCloseEvent, QImage, QPainter, QPen, QBrush, QColor
 from PySide6.QtWidgets import QStyle
 
@@ -85,21 +85,12 @@ class MainWindow(QMainWindow):
             print("set default language")
             self.target_language_select.setCurrentIndex(0)
 
-        self.model = FilterableComboBox(self)
-        self.model.selectionChanged.connect(self.save_choosed_model)
-        self.model.addItems(Resource.ollama_models.value)
-        if past_model := self.settings.value("model"):
-            self.model.on_selection_changed(past_model)
-        else:
-            print("set default model")
-            self.model.on_selection_changed(self.model.items[0])
-
         for f in self.features:
             f.set_widgets()
 
     def handle_clear_button(self):
-        self.orig_text.clear()
-        self.translated_text.clear()
+        for f in self.features:
+            f.handle_clear_button()
 
     # def _build_text_tab(self) -> QWidget:
     #     translation_tab = QWidget()

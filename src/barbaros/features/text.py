@@ -16,32 +16,38 @@ from PySide6.QtWidgets import (
     QDialog,
     QBoxLayout,
 )
-from PySide6.QtCore import QThread, Qt, QRect, QPoint
+from PySide6.QtCore import QThread, Qt, QRect, QPoint, QObject, Slot
 from PySide6.QtGui import QFont, QCloseEvent, QImage, QPainter, QPen, QBrush, QColor
 from PySide6.QtWidgets import QStyle
 
 from barbaros.common import TARGET_LANGUAGES
+from barbaros.resources_loader import Resource
 from barbaros.widgets.custom_text_edit import CustomTextEdit
+from barbaros.widgets.filterable_combobox import FilterableComboBox
 from barbaros.widgets.progress_label import GradientRainbowLabel
 from barbaros.workers import TranslationWorker
 
 
-class AbstractFeature(object):
+class AbstractFeature(QObject):
     tab_name: str
+    parent: QMainWindow
+
+    def __init__(self, parent: QMainWindow):
+        super().__init__()
+        self.parent = parent
 
     def build_layout(self) -> QBoxLayout:
         raise NotImplementedError("Do implement in concrete class")
 
     def set_widgets(self):
-        raise NotImplementedError("Do implement in concrete class")
+        pass
+
+    def handle_clear_button(self):
+        pass
 
 
 class TextFeature(AbstractFeature):
-    parent: QMainWindow
     tab_name = "Text"
-
-    def __init__(self, parent: QMainWindow):
-        self.parent = parent
 
     def build_layout(self) -> QBoxLayout:
         l = QVBoxLayout()
@@ -82,6 +88,15 @@ class TextFeature(AbstractFeature):
         self.progressbar = GradientRainbowLabel("Translating...")
         self.progressbar.hide()
 
+        self.model = FilterableComboBox(self)
+        self.model.selectionChanged.connect(self.parent.save_choosed_model)
+        self.model.addItems(Resource.ollama_models.value)
+        if past_model := self.parent.settings.value("model"):
+            self.model.on_selection_changed(past_model)
+        else:
+            print("set default model")
+            self.model.on_selection_changed(self.model.items[0])
+
     def handle_translate_button(self):
         self.translate()
 
@@ -103,23 +118,26 @@ class TextFeature(AbstractFeature):
         self._threaded_translate(text_to_translate)
 
     def _threaded_translate(self, text_to_translate: str):
-        print(f"{text_to_translate=}")
         # Run translation in a separate thread
-        self.translation_thread = QThread(parent=self.parent)
+        print("thread")
+        translation_thread = QThread(parent=self)
+        translation_thread.finished.connect(translation_thread.deleteLater)
+
         self.worker = TranslationWorker(
             text_to_translate,
             self.parent.target_language_select.currentText(),
-            self.parent.model.selected_item,
+            self.model.selected_item,
         )
-        self.worker.moveToThread(self.translation_thread)
+        print("before move")
+        self.worker.moveToThread(translation_thread)
 
         self.worker.finished.connect(self.on_translation_finished)
-        self.worker.finished.connect(self.translation_thread.quit)
+        self.worker.finished.connect(translation_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
-        self.translation_thread.finished.connect(self.translation_thread.deleteLater)
-        self.translation_thread.started.connect(self.worker.run)
+        translation_thread.started.connect(self.worker.run)
 
-        self.translation_thread.start()
+        print("before start")
+        translation_thread.start()
 
     def pop_think(self, text: str) -> tuple[str, str]:
         m = re.search(r"<think>.*?<\/think>", text, re.MULTILINE | re.DOTALL)
@@ -145,3 +163,7 @@ class TextFeature(AbstractFeature):
         self.stats.setText(
             f"Eval: {eval_secs:.2f}s; Load: {load_secs:.2f}s; {eval_speed:.2f} tokens/s"
         )
+
+    def handle_clear_button(self):
+        self.orig_text.clear()
+        self.translated_text.clear()
