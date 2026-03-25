@@ -96,6 +96,7 @@ class OCRFeature(AbstractFeature):
 
         dialog = CropDialog(self.ocr_loaded_image)
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            print("accepted")
             self.ocr_cropped_image = dialog.get_cropped_image()
             self.crop_rect = dialog.get_crop_rect()
 

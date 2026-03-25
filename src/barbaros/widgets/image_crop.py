@@ -28,61 +28,64 @@ class CropWidget(QWidget):
 
     def paintEvent(self, event):
         """Paint the image and crop rectangle with handles"""
+        cm = QPainter.CompositionMode
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        if not self.image.isNull():
-            widget_rect = self.rect()
-
-            # Calculate scaled size maintaining aspect ratio
-            image_width = self.image.width()
-            image_height = self.image.height()
-            widget_width = widget_rect.width()
-            widget_height = widget_rect.height()
-
-            scale = min(widget_width / image_width, widget_height / image_height)
-            scaled_width = int(image_width * scale)
-            scaled_height = int(image_height * scale)
-
-            x_offset = (widget_width - scaled_width) // 2
-            y_offset = (widget_height - scaled_height) // 2
-
-            scaled_rect = QRect(x_offset, y_offset, scaled_width, scaled_height)
-
-            painter.drawImage(scaled_rect, self.image)
-
-            self.display_rect = scaled_rect
-            self.image_offset = QPoint(x_offset, y_offset)
-            self.scale_factor = scale
-
-            if self.crop_rect is not None:
-                display_crop_rect = QRect(
-                    self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
-                    self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
-                    int(self.crop_rect.width() * self.scale_factor),
-                    int(self.crop_rect.height() * self.scale_factor),
-                )
-
-                overlay_color = QColor(0, 0, 0, 100)
-                painter.fillRect(self.rect(), overlay_color)
-                painter.setCompositionMode(
-                    QPainter.CompositionMode.CompositionMode_Clear
-                )
-                painter.fillRect(display_crop_rect, Qt.GlobalColor.transparent)
-                painter.setCompositionMode(
-                    QPainter.CompositionMode.CompositionMode_SourceOver
-                )
-
-                painter.setPen(QPen(QColor(255, 255, 255), 2))
-                painter.drawRect(display_crop_rect)
-
-                self._draw_handles(painter, display_crop_rect)
-        else:
+        if self.image.isNull():
             painter.fillRect(self.rect(), Qt.GlobalColor.lightGray)
             painter.setPen(QPen(Qt.GlobalColor.darkGray, 1))
             painter.drawText(
                 self.rect(), Qt.AlignmentFlag.AlignCenter, "No image loaded"
             )
+            return
+
+        widget_rect = self.rect()
+
+        # Calculate scaled size maintaining aspect ratio
+        image_width = self.image.width()
+        image_height = self.image.height()
+        widget_width = widget_rect.width()
+        widget_height = widget_rect.height()
+
+        scale = min(widget_width / image_width, widget_height / image_height)
+        scaled_width = int(image_width * scale)
+        scaled_height = int(image_height * scale)
+
+        x_offset = (widget_width - scaled_width) // 2
+        y_offset = (widget_height - scaled_height) // 2
+
+        scaled_rect = QRect(x_offset, y_offset, scaled_width, scaled_height)
+
+        painter.drawImage(scaled_rect, self.image)
+
+        self.display_rect = scaled_rect
+        self.image_offset = QPoint(x_offset, y_offset)
+        self.scale_factor = scale
+
+        if self.crop_rect is None:
+            return
+
+        display_crop_rect = QRect(
+            self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
+            self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
+            int(self.crop_rect.width() * self.scale_factor),
+            int(self.crop_rect.height() * self.scale_factor),
+        )
+
+        overlay_color = QColor(0, 0, 0, 100)
+        painter.fillRect(self.rect(), overlay_color)
+        painter.setCompositionMode(cm.CompositionMode_Clear)
+
+        painter.fillRect(display_crop_rect, Qt.GlobalColor.transparent)
+        painter.setCompositionMode(cm.CompositionMode_Overlay)
+
+        pen_color = QColor(255, 255, 255)
+        painter.setPen(QPen(pen_color, 2))
+        painter.drawRect(display_crop_rect)
+
+        self._draw_handles(painter, display_crop_rect)
 
     def _draw_handles(self, painter: QPainter, rect: QRect):
         """Draw the resize handles on the crop rectangle"""
