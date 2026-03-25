@@ -1,7 +1,6 @@
 from PySide6.QtWidgets import (
     QVBoxLayout,
     QPushButton,
-    QHBoxLayout,
     QLabel,
     QFileDialog,
     QDialog,
@@ -11,7 +10,7 @@ from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QImage
 
 from barbaros.features.base import AbstractFeature
-from barbaros.widgets.image_crop import CropWidget
+from barbaros.widgets.image_crop import CropWidget, CropPreviewWidget
 
 
 class OCRFeature(AbstractFeature):
@@ -26,14 +25,9 @@ class OCRFeature(AbstractFeature):
 
     def build_layout(self) -> QBoxLayout:
         l = QVBoxLayout()
-        # l.setSpacing(10)
 
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.load_image_button)
-        button_layout.addWidget(self.crop_button)
-
-        l.addLayout(button_layout)
-
+        l.addWidget(self.load_image_button)
+        l.addWidget(self.crop_preview)
         l.addWidget(self.ocr_status_label)
         l.addStretch()  # Push everything to the top
 
@@ -44,10 +38,8 @@ class OCRFeature(AbstractFeature):
         self.load_image_button.setToolTip("Load an image for OCR processing")
         self.load_image_button.clicked.connect(self.handle_load_image_button)
 
-        self.crop_button = QPushButton("Crop")
-        self.crop_button.setToolTip("Crop the loaded image")
-        self.crop_button.clicked.connect(self.handle_crop_button)
-        self.crop_button.setEnabled(False)  # Initially disabled until image is loaded
+        self.crop_preview = CropPreviewWidget()
+        self.crop_preview.clicked.connect(self.handle_crop_preview_clicked)
 
         self.ocr_status_label = QLabel("No image selected")
         self.ocr_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -57,7 +49,9 @@ class OCRFeature(AbstractFeature):
 
     def set_ocr_image(self, image: QImage, file_path: str):
         self.ocr_loaded_image = image
-        filename = file_path.split("/")[-1]  # Get filename from path
+        self.crop_preview.set_image(image)
+        self.crop_preview.set_crop_rect(None)
+        filename = file_path.split("/")[-1]
         self.ocr_status_label.setText(
             f"Loaded: {filename} ({image.width()}x{image.height()})"
         )
@@ -90,13 +84,12 @@ class OCRFeature(AbstractFeature):
             self.crop_rect = None
             self.ocr_status_label.setText(f"Failed to load image: {file_path}")
             self.ocr_status_label.setStyleSheet("QLabel { color: #cc0000; }")
-            self.crop_button.setEnabled(False)
+            self.crop_preview.set_image(None)
             return
 
         self.set_ocr_image(image, file_path)
-        self.crop_button.setEnabled(True)
 
-    def handle_crop_button(self):
+    def handle_crop_preview_clicked(self):
         """Handle crop button click - open crop dialog"""
         if self.ocr_loaded_image is None:
             return
@@ -108,6 +101,7 @@ class OCRFeature(AbstractFeature):
 
         self.ocr_cropped_image = dialog.get_cropped_image()
         self.crop_rect = dialog.get_crop_rect()
+        self.crop_preview.set_crop_rect(self.crop_rect)
 
         if not self.ocr_cropped_image:
             return
@@ -134,7 +128,9 @@ class CropDialog(QDialog):
 
         self.original_image = image
         self.crop_widget = CropWidget(image)
-        initial_crop_rect = initial_crop_rect or QRect(0, 0, image.width(), image.height())
+        initial_crop_rect = initial_crop_rect or QRect(
+            0, 0, image.width(), image.height()
+        )
         self.crop_widget.set_crop_rect(initial_crop_rect)
 
         layout = QVBoxLayout()
