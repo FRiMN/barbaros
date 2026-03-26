@@ -75,29 +75,31 @@ class CropWidget(QWidget):
         self.image_offset = QPoint(x_offset, y_offset)
         self.scale_factor = total_scale
 
-        if self.crop_rect is not None:
-            display_crop_rect = QRect(
-                self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
-                self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
-                int(self.crop_rect.width() * self.scale_factor),
-                int(self.crop_rect.height() * self.scale_factor),
-            )
+        if self.crop_rect is None:
+            return
 
-            # Semi-transparent overlay outside crop region
-            overlay_color = QColor(0, 0, 0, 100)
-            painter.fillRect(self.rect(), overlay_color)
+        display_crop_rect = QRect(
+            self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
+            self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
+            int(self.crop_rect.width() * self.scale_factor),
+            int(self.crop_rect.height() * self.scale_factor),
+        )
 
-            # Cut out crop area: redraw image through the crop region
-            painter.setClipRect(display_crop_rect, Qt.ClipOperation.IntersectClip)
-            painter.drawImage(display_crop_rect, self.image.copy(self.crop_rect))
+        # Semi-transparent overlay outside crop region
+        overlay_color = QColor(0, 0, 0, 100)
+        painter.fillRect(self.rect(), overlay_color)
 
-            painter.setClipRect(widget_rect)
+        # Cut out crop area: redraw image through the crop region
+        painter.setClipRect(display_crop_rect, Qt.ClipOperation.IntersectClip)
+        painter.drawImage(display_crop_rect, self.image.copy(self.crop_rect))
 
-            pen_color = QColor(255, 255, 255)
-            painter.setPen(QPen(pen_color, 2))
-            painter.drawRect(display_crop_rect)
+        painter.setClipRect(widget_rect)
 
-            self._draw_handles(painter, display_crop_rect)
+        pen_color = QColor(255, 255, 255)
+        painter.setPen(QPen(pen_color, 2))
+        painter.drawRect(display_crop_rect)
+
+        self._draw_handles(painter, display_crop_rect)
 
     def _draw_handles(self, painter: QPainter, rect: QRect):
         """Draw the resize handles on the crop rectangle"""
@@ -320,7 +322,11 @@ class CropWidget(QWidget):
         hr = self.handle_hit_radius
 
         corners = [
-            (display_rect.left() - hr // 2, display_rect.top() - hr // 2, "nw"),
+            (
+                display_rect.left() - hr // 2,
+                display_rect.top() - hr // 2,
+                "nw"
+            ),
             (
                 display_rect.right() - hs // 2 - hr // 2,
                 display_rect.top() - hr // 2,
