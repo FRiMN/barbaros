@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal, Slot
 from ollama import GenerateResponse
-from .translator import translate_text, ocr_image
+from .translator import translate_text, ocr_image, ocr_openrouter
 
 
 class TranslationWorker(QObject):
@@ -37,7 +37,7 @@ class OCRWorker(QObject):
     @Slot()
     def run(self):
         print("OCR worker started")
-        ocr_text = ocr_image(self.image_bytes, self.model)
+        ocr_text = ocr_openrouter(self.image_bytes, self.model)
         print(f"{ocr_text=}")
         translation_resp = translate_text(ocr_text, self.target_language, self.model)
         print(f"{translation_resp=}")
