@@ -6,6 +6,11 @@ from PySide6.QtWidgets import QWidget
 class CropWidget(QWidget):
     """Widget for displaying image and allowing crop rectangle adjustment"""
 
+    zoomChanged = Signal(float)
+
+    ZOOM_MIN = 0.1
+    ZOOM_MAX = 8.0
+
     def __init__(self, image: QImage, parent=None):
         super().__init__(parent)
         self.image = image
@@ -25,11 +30,14 @@ class CropWidget(QWidget):
         self.display_rect: QRect | None = None
         self.image_offset: QPoint | None = None
         self.scale_factor: float = 1.0
+        self.fit_scale: float = 1.0
+
+        self.zoom_level: float = 1.0
+        self.pan_x: int = 0
+        self.pan_y: int = 0
 
     def paintEvent(self, event):
         """Paint the image and crop rectangle with handles"""
-        cm = QPainter.CompositionMode
-
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -42,19 +50,22 @@ class CropWidget(QWidget):
             return
 
         widget_rect = self.rect()
-
-        # Calculate scaled size maintaining aspect ratio
-        image_width = self.image.width()
-        image_height = self.image.height()
         widget_width = widget_rect.width()
         widget_height = widget_rect.height()
 
-        scale = min(widget_width / image_width, widget_height / image_height)
-        scaled_width = int(image_width * scale)
-        scaled_height = int(image_height * scale)
+        image_width = self.image.width()
+        image_height = self.image.height()
 
-        x_offset = (widget_width - scaled_width) // 2
-        y_offset = (widget_height - scaled_height) // 2
+        # Fit scale: makes image fit within widget
+        self.fit_scale = min(widget_width / image_width, widget_height / image_height)
+        total_scale = self.fit_scale * self.zoom_level
+
+        scaled_width = int(image_width * total_scale)
+        scaled_height = int(image_height * total_scale)
+
+        # Center the image, apply pan offset
+        x_offset = (widget_width - scaled_width) // 2 + self.pan_x
+        y_offset = (widget_height - scaled_height) // 2 + self.pan_y
 
         scaled_rect = QRect(x_offset, y_offset, scaled_width, scaled_height)
 
@@ -62,35 +73,31 @@ class CropWidget(QWidget):
 
         self.display_rect = scaled_rect
         self.image_offset = QPoint(x_offset, y_offset)
-        self.scale_factor = scale
+        self.scale_factor = total_scale
 
-        if self.crop_rect is None:
-            return
+        if self.crop_rect is not None:
+            display_crop_rect = QRect(
+                self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
+                self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
+                int(self.crop_rect.width() * self.scale_factor),
+                int(self.crop_rect.height() * self.scale_factor),
+            )
 
-        display_crop_rect = QRect(
-            self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
-            self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
-            int(self.crop_rect.width() * self.scale_factor),
-            int(self.crop_rect.height() * self.scale_factor),
-        )
+            # Semi-transparent overlay outside crop region
+            overlay_color = QColor(0, 0, 0, 100)
+            painter.fillRect(self.rect(), overlay_color)
 
-        painter.save()
+            # Cut out crop area: redraw image through the crop region
+            painter.setClipRect(display_crop_rect, Qt.ClipOperation.IntersectClip)
+            painter.drawImage(display_crop_rect, self.image.copy(self.crop_rect))
 
-        # Draw semi-transparent overlay
-        overlay_color = QColor(0, 0, 0, 100)
-        painter.fillRect(self.rect(), overlay_color)
+            painter.setClipRect(widget_rect)
 
-        # Cut out crop area: redraw image through the crop region
-        painter.setClipRect(display_crop_rect, Qt.ClipOperation.IntersectClip)
-        painter.drawImage(display_crop_rect, self.image.copy(self.crop_rect))
+            pen_color = QColor(255, 255, 255)
+            painter.setPen(QPen(pen_color, 2))
+            painter.drawRect(display_crop_rect)
 
-        painter.restore()
-
-        pen_color = QColor(255, 255, 255)
-        painter.setPen(QPen(pen_color, 2))
-        painter.drawRect(display_crop_rect)
-
-        self._draw_handles(painter, display_crop_rect)
+            self._draw_handles(painter, display_crop_rect)
 
     def _draw_handles(self, painter: QPainter, rect: QRect):
         """Draw the resize handles on the crop rectangle"""
@@ -240,6 +247,62 @@ class CropWidget(QWidget):
         self.drag_start_pos = None
         self.drag_start_rect = None
         self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def wheelEvent(self, event):
+        """Handle mouse wheel for zoom (Ctrl+wheel) and pan (wheel / Shift+wheel)"""
+        delta = event.angleDelta().y()
+
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Zoom in/out
+            factor = 1.1 if delta > 0 else 1 / 1.1
+            new_zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, self.zoom_level * factor))
+            if new_zoom != self.zoom_level:
+                self.zoom_level = new_zoom
+                self._clamp_pan()
+                self.zoomChanged.emit(self.zoom_level)
+                self.update()
+        elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            # Horizontal pan
+            self.pan_x += delta // 2
+            self._clamp_pan()
+            self.update()
+        else:
+            # Vertical pan
+            self.pan_y += delta // 2
+            self._clamp_pan()
+            self.update()
+
+    def set_zoom(self, zoom: float):
+        """Set zoom level (1.0 = fit to widget)"""
+        zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
+        if zoom != self.zoom_level:
+            self.zoom_level = zoom
+            self._clamp_pan()
+            self.zoomChanged.emit(self.zoom_level)
+            self.update()
+
+    def _clamp_pan(self):
+        """Clamp pan offset so image doesn't drift too far from widget center"""
+        if self.image.isNull() or self.fit_scale <= 0:
+            return
+
+        total_scale = self.fit_scale * self.zoom_level
+        scaled_w = int(self.image.width() * total_scale)
+        scaled_h = int(self.image.height() * total_scale)
+        ww = self.width()
+        wh = self.height()
+
+        if scaled_w > ww:
+            max_pan = (scaled_w - ww) // 2 + 50
+            self.pan_x = max(-max_pan, min(max_pan, self.pan_x))
+        else:
+            self.pan_x = 0
+
+        if scaled_h > wh:
+            max_pan = (scaled_h - wh) // 2 + 50
+            self.pan_y = max(-max_pan, min(max_pan, self.pan_y))
+        else:
+            self.pan_y = 0
 
     def _get_handle_at_position(self, pos: QPoint) -> str | None:
         """Get handle type at the given position, or None if not on a handle"""
