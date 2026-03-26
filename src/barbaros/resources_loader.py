@@ -23,5 +23,4 @@ class Resource(Enum):
     translation_agent_system_prompt = open_text(
         PACKAGE, "translation_agent_prompt.md"
     ).read()
-    ocr_agent_system_prompt = open_text(PACKAGE, "ocr_agent_prompt.md").read()
     ollama_models = get_ollama_models()

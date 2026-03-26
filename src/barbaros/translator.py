@@ -27,15 +27,11 @@ def translate_text(text: str, target_language: str, model: str) -> GenerateRespo
 
 
 def ocr_image(image_bytes: bytes, model: str) -> str:
-    from .resources_loader import Resource
-
-    system_prompt = Resource.ocr_agent_system_prompt.value
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
     response = client.generate(
         model=model,
         images=[base64_image],
-        system=system_prompt,
         prompt="Extract the text in the image.",
         think=False,
     )
