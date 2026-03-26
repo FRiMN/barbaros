@@ -48,7 +48,6 @@ class OCRFeature(AbstractFeature):
         l.addWidget(self.progressbar)
         l.addWidget(self.ocr_text)
         l.addWidget(self.translated_text)
-        l.addWidget(self.ocr_status_label)
         l.addStretch()  # Push everything to the top
 
         return l
@@ -76,12 +75,6 @@ class OCRFeature(AbstractFeature):
         self.translated_text = CustomTextEdit(readOnly=True)
         self.translated_text.hide()
 
-        self.ocr_status_label = QLabel("No image selected")
-        self.ocr_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.ocr_status_label.setStyleSheet(
-            "QLabel { color: #666; font-style: italic; }"
-        )
-
         self.model = FilterableComboBox()
         self.model.selectionChanged.connect(self.parent.save_choosed_model)
         self.model.addItems(Resource.ollama_models.value)
@@ -99,12 +92,6 @@ class OCRFeature(AbstractFeature):
         self.crop_rect = None
         self.ocr_button.setDisabled(True)
         filename = file_path.split("/")[-1]
-        self.ocr_status_label.setText(
-            f"Loaded: {filename} ({image.width()}x{image.height()})"
-        )
-        self.ocr_status_label.setStyleSheet(
-            "QLabel { color: #006600; font-weight: bold; }"
-        )
 
     def handle_load_image_button(self):
         """Handle load image button click - open file dialog and load selected image"""
@@ -128,8 +115,6 @@ class OCRFeature(AbstractFeature):
             self.ocr_cropped_image = None
             self.crop_rect = None
             self.ocr_button.setDisabled(True)
-            self.ocr_status_label.setText(f"Failed to load image: {file_path}")
-            self.ocr_status_label.setStyleSheet("QLabel { color: #cc0000; }")
             self.crop_preview.set_image(None)
             return
 
@@ -153,13 +138,6 @@ class OCRFeature(AbstractFeature):
             return
 
         self.ocr_button.setDisabled(False)
-        filename = self.ocr_status_label.text().split(" (")[0]
-        self.ocr_status_label.setText(
-            f"{filename} ({self.ocr_cropped_image.width()}x{self.ocr_cropped_image.height()}) [Cropped]"
-        )
-        self.ocr_status_label.setStyleSheet(
-            "QLabel { color: #006600; font-weight: bold; }"
-        )
 
     def handle_ocr_button(self):
         if self.ocr_cropped_image is None:
