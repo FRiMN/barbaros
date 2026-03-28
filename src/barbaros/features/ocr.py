@@ -166,7 +166,7 @@ class OCRFeature(AbstractFeature):
     def take_screenshot(self, screen) -> QImage:
         self.parent.hide()
         QApplication.processEvents()
-        time.sleep(0.1)
+        time.sleep(0.3)
 
         geom = screen.geometry()
         image = screen.grabWindow(0, 0, 0, geom.width(), geom.height())
