@@ -1,6 +1,15 @@
 from PySide6.QtCore import QRect, QPoint, Qt, Signal
 from PySide6.QtGui import QImage, QPainter, QColor, QPen, QBrush
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import (
+    QWidget,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QSlider,
+    QMessageBox,
+)
 
 
 class CropWidget(QWidget):
@@ -322,11 +331,7 @@ class CropWidget(QWidget):
         hr = self.handle_hit_radius
 
         corners = [
-            (
-                display_rect.left() - hr // 2,
-                display_rect.top() - hr // 2,
-                "nw"
-            ),
+            (display_rect.left() - hr // 2, display_rect.top() - hr // 2, "nw"),
             (
                 display_rect.right() - hs // 2 - hr // 2,
                 display_rect.top() - hr // 2,
@@ -523,3 +528,133 @@ class CropPreviewWidget(QWidget):
 
     def mousePressEvent(self, event):
         self.clicked.emit()
+
+
+class CropDialog(QDialog):
+    """Modal dialog for cropping images with GIMP-like interface"""
+
+    def __init__(
+        self, image: QImage, parent=None, initial_crop_rect: QRect | None = None
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("Crop Image")
+        self.setModal(True)
+        self.resize(800, 600)
+
+        self.original_image = image
+        self.crop_widget = CropWidget(image)
+        initial_crop_rect = initial_crop_rect or QRect(
+            0, 0, image.width(), image.height()
+        )
+        self.crop_widget.set_crop_rect(initial_crop_rect)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.crop_widget)
+        layout.addLayout(self._build_zoom_bar())
+        self.setLayout(layout)
+
+        self.final_crop_rect: QRect | None = None
+
+    def _build_zoom_bar(self) -> QHBoxLayout:
+        zoom_layout = QHBoxLayout()
+
+        btn_minus = QPushButton("-")
+        btn_minus.setFixedWidth(32)
+        btn_minus.clicked.connect(self._zoom_out)
+
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.zoom_slider.setMinimum(int(CropWidget.ZOOM_MIN * 100))
+        self.zoom_slider.setMaximum(int(CropWidget.ZOOM_MAX * 100))
+        self.zoom_slider.setValue(100)
+        self.zoom_slider.setTickPosition(QSlider.TickPosition.NoTicks)
+        self.zoom_slider.valueChanged.connect(self._on_slider_changed)
+
+        btn_plus = QPushButton("+")
+        btn_plus.setFixedWidth(32)
+        btn_plus.clicked.connect(self._zoom_in)
+
+        self.zoom_label = QLabel("100%")
+        self.zoom_label.setFixedWidth(50)
+        self.zoom_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        btn_reset = QPushButton("Reset")
+        btn_reset.setFixedWidth(50)
+        btn_reset.clicked.connect(self._zoom_reset)
+
+        self.crop_widget.zoomChanged.connect(self._on_zoom_changed)
+
+        btn_help = QPushButton("?")
+        btn_help.setFixedWidth(32)
+        btn_help.clicked.connect(self._show_help)
+
+        zoom_layout.addWidget(btn_minus)
+        zoom_layout.addWidget(self.zoom_slider)
+        zoom_layout.addWidget(btn_plus)
+        zoom_layout.addWidget(self.zoom_label)
+        zoom_layout.addWidget(btn_reset)
+        zoom_layout.addWidget(btn_help)
+
+        return zoom_layout
+
+    def _on_slider_changed(self, value: int):
+        self.crop_widget.set_zoom(value / 100.0)
+
+    def _on_zoom_changed(self, zoom: float):
+        pct = int(zoom * 100)
+        self.zoom_label.setText(f"{pct}%")
+        self.zoom_slider.blockSignals(True)
+        self.zoom_slider.setValue(pct)
+        self.zoom_slider.blockSignals(False)
+
+    def _zoom_in(self):
+        new_zoom = self.crop_widget.zoom_level * 1.25
+        self.crop_widget.set_zoom(new_zoom)
+
+    def _zoom_out(self):
+        new_zoom = self.crop_widget.zoom_level / 1.25
+        self.crop_widget.set_zoom(new_zoom)
+
+    def _zoom_reset(self):
+        self.crop_widget.set_zoom(1.0)
+
+    def _show_help(self):
+        QMessageBox.information(
+            self,
+            "Crop Controls",
+            "<table>"
+            "<tr><td><b>Action</b></td><td><b>Control</b></td></tr>"
+            "<tr><td>Zoom in/out</td><td>Ctrl + Scroll Wheel</td></tr>"
+            "<tr><td>Pan vertically</td><td>Scroll Wheel</td></tr>"
+            "<tr><td>Pan horizontally</td><td>Shift + Scroll Wheel</td></tr>"
+            "<tr><td>Resize crop area</td><td>Drag crop handles</td></tr>"
+            "<tr><td>Move crop area</td><td>Drag inside crop</td></tr>"
+            "<tr><td>Create new crop</td><td>Click outside crop</td></tr>"
+            "<tr><td>Zoom in/out</td><td>- / + buttons</td></tr>"
+            "<tr><td>Set zoom level</td><td>Slider</td></tr>"
+            "<tr><td>Fit image to window</td><td>Reset</td></tr>"
+            "</table>",
+        )
+
+    def get_cropped_image(self) -> QImage | None:
+        """Return the cropped image based on the final crop rectangle"""
+        if self.final_crop_rect is None or self.original_image.isNull():
+            return None
+
+        rect = self.final_crop_rect.intersected(
+            QRect(0, 0, self.original_image.width(), self.original_image.height())
+        )
+        if rect.isEmpty():
+            return None
+
+        return self.original_image.copy(rect)
+
+    def get_crop_rect(self) -> QRect | None:
+        """Return the final crop rectangle"""
+        return self.final_crop_rect
+
+    def closeEvent(self, event):
+        """Handle dialog close event - treat as accepting the crop"""
+        self.final_crop_rect = self.crop_widget.get_crop_rect()
+        self.accept()
