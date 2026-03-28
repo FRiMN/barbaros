@@ -1,4 +1,7 @@
+import time
+
 from PySide6.QtWidgets import (
+    QApplication,
     QVBoxLayout,
     QPushButton,
     QLabel,
@@ -11,13 +14,14 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtCore import Qt, QRect, QThread, QBuffer, QIODevice
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QScreen
 
 from barbaros.features.base import AbstractFeature
 from barbaros.widgets.image_crop import CropWidget, CropPreviewWidget
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.progress_label import GradientRainbowLabel
 from barbaros.widgets.filterable_combobox import FilterableComboBox
+from barbaros.widgets.screen_capture import MonitorSelectDialog, ScreenHintWidget
 from barbaros.workers import OCRWorker
 
 
@@ -42,7 +46,12 @@ class OCRFeature(AbstractFeature):
         select_panel.addWidget(self.parent.clear_button)
 
         l.addLayout(select_panel)
-        l.addWidget(self.load_image_button)
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.load_image_button)
+        buttons_layout.addWidget(self.screenshot_button)
+        l.addLayout(buttons_layout)
+
         l.addWidget(self.crop_preview)
         l.addWidget(self.ocr_button)
         l.addWidget(self.progressbar)
@@ -58,6 +67,10 @@ class OCRFeature(AbstractFeature):
         self.load_image_button = QPushButton("Load Image")
         self.load_image_button.setToolTip("Load an image for OCR processing")
         self.load_image_button.clicked.connect(self.handle_load_image_button)
+
+        self.screenshot_button = QPushButton("Screenshot")
+        self.screenshot_button.setToolTip("Capture a screenshot for OCR processing")
+        self.screenshot_button.clicked.connect(self.handle_screenshot_button)
 
         self.crop_preview = CropPreviewWidget()
         self.crop_preview.clicked.connect(self.handle_crop_preview_clicked)
@@ -119,6 +132,55 @@ class OCRFeature(AbstractFeature):
             return
 
         self.set_ocr_image(image, file_path)
+
+    def get_screen_for_screenshot(self) -> QScreen | None:
+        app = QApplication.instance()
+        screens = app.screens()
+
+        if len(screens) == 1:
+            return screens[0]
+
+        dialog = MonitorSelectDialog(screens, self.parent)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+
+        hints = []
+        for i, screen in enumerate(screens):
+            hint = ScreenHintWidget(i + 1, screen)
+            hints.append(hint)
+            hint.show()
+
+        res = dialog.exec()
+
+        for hint in hints:
+            hint.close()
+            hint.deleteLater()
+
+        if (
+                res == QDialog.DialogCode.Accepted
+                and dialog.selected_screen is not None
+        ):
+            return dialog.selected_screen
+
+        return
+
+    def take_screenshot(self, screen) -> QImage:
+        self.parent.hide()
+        QApplication.processEvents()
+        time.sleep(0.1)
+
+        geom = screen.geometry()
+        image = screen.grabWindow(0, 0, 0, geom.width(), geom.height())
+
+        self.parent.show()
+
+        return image.toImage()
+
+    def handle_screenshot_button(self):
+        screen = self.get_screen_for_screenshot()
+
+        if screen:
+            image = self.take_screenshot(screen)
+            self.set_ocr_image(image, "screenshot.png")
 
     def handle_crop_preview_clicked(self):
         """Handle crop button click - open crop dialog"""
