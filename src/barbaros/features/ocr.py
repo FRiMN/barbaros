@@ -194,3 +194,4 @@ class OCRFeature(AbstractFeature):
         self.ocr_text.clear()
         self.translated_text.clear()
         self.translate_button.hide()
+        self.image_manager.clear()

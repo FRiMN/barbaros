@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
         self.clear_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
         )
-        self.clear_button.setToolTip("Clear textareas")
+        self.clear_button.setToolTip("Clear widgets")
         self.clear_button.clicked.connect(self.handle_clear_button)
         clear_button_height = self.clear_button.sizeHint().height()
         self.clear_button.setMaximumWidth(clear_button_height)
