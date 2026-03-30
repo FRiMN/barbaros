@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QBoxLayout,
     QHBoxLayout,
     QSizePolicy,
+    QMessageBox,
 )
 from PySide6.QtCore import QThread, QBuffer, QIODevice
 
@@ -117,6 +118,7 @@ class OCRFeature(AbstractFeature):
         self.worker.finished.connect(self.on_ocr_finished)
         self.worker.finished.connect(ocr_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.error.connect(self.on_ocr_error)
         ocr_thread.started.connect(self.worker.run)
 
         ocr_thread.start()
@@ -127,6 +129,12 @@ class OCRFeature(AbstractFeature):
         self.ocr_text.show()
         self.translated_text.setText(translated_text)
         self.translated_text.show()
+        self.ocr_button.setDisabled(False)
+        self.ocr_button.show()
+
+    def on_ocr_error(self, error_msg: str):
+        self.progressbar.hide()
+        QMessageBox.critical(self.parent, "OCR Error", error_msg)
         self.ocr_button.setDisabled(False)
         self.ocr_button.show()
 

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QBoxLayout,
+    QMessageBox,
 )
 from PySide6.QtCore import QThread
 from PySide6.QtGui import QFont
@@ -110,6 +111,7 @@ class TextFeature(AbstractFeature):
         self.worker.finished.connect(self.on_translation_finished)
         self.worker.finished.connect(translation_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.error.connect(self.on_translation_error)
         translation_thread.started.connect(self.worker.run)
 
         print("before start")
@@ -139,6 +141,12 @@ class TextFeature(AbstractFeature):
         self.stats.setText(
             f"Eval: {eval_secs:.2f}s; Load: {load_secs:.2f}s; {eval_speed:.2f} tokens/s"
         )
+
+    def on_translation_error(self, error_msg: str):
+        self.progressbar.hide()
+        QMessageBox.critical(self.parent, "Translation Error", error_msg)
+        self.translate_button.setDisabled(False)
+        self.translate_button.show()
 
     def handle_clear_button(self):
         self.orig_text.clear()

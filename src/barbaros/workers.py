@@ -17,11 +17,14 @@ class TranslationWorker(QObject):
     def run(self):
         """Run in thread."""
         print("in thread")
-        resp: GenerateResponse = translate_text(
-            self.text_to_translate, self.target_language, self.model
-        )
-        print(f"{resp=}")
-        self.finished.emit(resp)
+        try:
+            resp: GenerateResponse = translate_text(
+                self.text_to_translate, self.target_language, self.model
+            )
+            print(f"{resp=}")
+            self.finished.emit(resp)
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class OCRWorker(QObject):
@@ -37,8 +40,13 @@ class OCRWorker(QObject):
     @Slot()
     def run(self):
         print("OCR worker started")
-        ocr_text = ocr_openrouter(self.image_bytes, self.model)
-        print(f"{ocr_text=}")
-        translation_resp = translate_text(ocr_text, self.target_language, self.model)
-        print(f"{translation_resp=}")
-        self.finished.emit(ocr_text, translation_resp.response)
+        try:
+            ocr_text = ocr_openrouter(self.image_bytes, self.model)
+            print(f"{ocr_text=}")
+            translation_resp = translate_text(
+                ocr_text, self.target_language, self.model
+            )
+            print(f"{translation_resp=}")
+            self.finished.emit(ocr_text, translation_resp.response)
+        except Exception as e:
+            self.error.emit(str(e))
