@@ -56,16 +56,14 @@ class OCRFeature(AbstractFeature):
 
         self.translate_button = QPushButton("Translate")
         self.translate_button.clicked.connect(self.handle_translate_button)
-        self.translate_button.hide()
+        self.translate_button.setDisabled(True)
 
         self.progressbar = GradientRainbowLabel("Processing...")
         self.progressbar.hide()
 
         self.ocr_text = CustomTextEdit(readOnly=True)
-        self.ocr_text.hide()
 
         self.translated_text = CustomTextEdit(readOnly=True)
-        self.translated_text.hide()
 
         self.model = FilterableComboBox()
         self.model.selectionChanged.connect(self.parent.save_choosed_model)
@@ -91,12 +89,9 @@ class OCRFeature(AbstractFeature):
 
         self.ocr_text.clear()
         self.translated_text.clear()
-        self.ocr_text.hide()
-        self.translated_text.hide()
-        self.translate_button.hide()
 
         self.ocr_button.setDisabled(True)
-        self.ocr_button.hide()
+        self.translate_button.setDisabled(True)
         self.progressbar.show()
         self.progressbar.start_animation()
 
@@ -131,17 +126,13 @@ class OCRFeature(AbstractFeature):
     def on_ocr_finished(self, ocr_text: str):
         self.progressbar.hide()
         self.ocr_text.setText(ocr_text)
-        self.ocr_text.show()
         self.translate_button.setDisabled(False)
-        self.translate_button.show()
         self.ocr_button.setDisabled(False)
-        self.ocr_button.show()
 
     def on_ocr_error(self, error_msg: str):
         self.progressbar.hide()
         QMessageBox.critical(self.parent, "OCR Error", error_msg)
         self.ocr_button.setDisabled(False)
-        self.ocr_button.show()
 
     def handle_translate_button(self):
         text = self.ocr_text.toPlainText().strip()
@@ -149,10 +140,8 @@ class OCRFeature(AbstractFeature):
             return
 
         self.translated_text.clear()
-        self.translated_text.hide()
 
         self.translate_button.setDisabled(True)
-        self.translate_button.hide()
         self.progressbar.show()
         self.progressbar.start_animation()
 
@@ -180,18 +169,16 @@ class OCRFeature(AbstractFeature):
     def on_translation_finished(self, resp):
         self.progressbar.hide()
         self.translated_text.setText(resp.response)
-        self.translated_text.show()
         self.translate_button.setDisabled(False)
-        self.translate_button.show()
 
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()
         QMessageBox.critical(self.parent, "Translation Error", error_msg)
         self.translate_button.setDisabled(False)
-        self.translate_button.show()
 
     def handle_clear_button(self):
         self.ocr_text.clear()
         self.translated_text.clear()
-        self.translate_button.hide()
         self.image_manager.clear()
+
+        self.translate_button.setDisabled(True)
