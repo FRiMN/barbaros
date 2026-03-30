@@ -13,7 +13,7 @@ from barbaros.widgets.image_manager import ImageManagerWidget
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.progress_label import GradientRainbowLabel
 from barbaros.widgets.filterable_combobox import FilterableComboBox
-from barbaros.workers import OCRWorker
+from barbaros.workers import OCRWorker, TranslationWorker
 
 
 class OCRFeature(AbstractFeature):
@@ -38,6 +38,7 @@ class OCRFeature(AbstractFeature):
         l.addWidget(self.ocr_button)
         l.addWidget(self.progressbar)
         l.addWidget(self.ocr_text)
+        l.addWidget(self.translate_button)
         l.addWidget(self.translated_text)
         l.addStretch()  # Push everything to the top
 
@@ -52,6 +53,10 @@ class OCRFeature(AbstractFeature):
         self.ocr_button = QPushButton("OCR")
         self.ocr_button.clicked.connect(self.handle_ocr_button)
         self.ocr_button.setDisabled(True)
+
+        self.translate_button = QPushButton("Translate")
+        self.translate_button.clicked.connect(self.handle_translate_button)
+        self.translate_button.hide()
 
         self.progressbar = GradientRainbowLabel("Processing...")
         self.progressbar.hide()
@@ -88,6 +93,7 @@ class OCRFeature(AbstractFeature):
         self.translated_text.clear()
         self.ocr_text.hide()
         self.translated_text.hide()
+        self.translate_button.hide()
 
         self.ocr_button.setDisabled(True)
         self.ocr_button.hide()
@@ -110,7 +116,6 @@ class OCRFeature(AbstractFeature):
 
         self.worker = OCRWorker(
             image_bytes,
-            self.parent.target_language_select.currentText(),
             self.model.selected_item,
         )
         self.worker.moveToThread(ocr_thread)
@@ -123,12 +128,12 @@ class OCRFeature(AbstractFeature):
 
         ocr_thread.start()
 
-    def on_ocr_finished(self, ocr_text: str, translated_text: str):
+    def on_ocr_finished(self, ocr_text: str):
         self.progressbar.hide()
         self.ocr_text.setText(ocr_text)
         self.ocr_text.show()
-        self.translated_text.setText(translated_text)
-        self.translated_text.show()
+        self.translate_button.setDisabled(False)
+        self.translate_button.show()
         self.ocr_button.setDisabled(False)
         self.ocr_button.show()
 
@@ -138,6 +143,54 @@ class OCRFeature(AbstractFeature):
         self.ocr_button.setDisabled(False)
         self.ocr_button.show()
 
+    def handle_translate_button(self):
+        text = self.ocr_text.toPlainText().strip()
+        if not text:
+            return
+
+        self.translated_text.clear()
+        self.translated_text.hide()
+
+        self.translate_button.setDisabled(True)
+        self.translate_button.hide()
+        self.progressbar.show()
+        self.progressbar.start_animation()
+
+        self._threaded_translate(text)
+
+    def _threaded_translate(self, text_to_translate: str):
+        translation_thread = QThread(parent=self)
+        translation_thread.finished.connect(translation_thread.deleteLater)
+
+        self.translation_worker = TranslationWorker(
+            text_to_translate,
+            self.parent.target_language_select.currentText(),
+            self.model.selected_item,
+        )
+        self.translation_worker.moveToThread(translation_thread)
+
+        self.translation_worker.finished.connect(self.on_translation_finished)
+        self.translation_worker.finished.connect(translation_thread.quit)
+        self.translation_worker.finished.connect(self.translation_worker.deleteLater)
+        self.translation_worker.error.connect(self.on_translation_error)
+        translation_thread.started.connect(self.translation_worker.run)
+
+        translation_thread.start()
+
+    def on_translation_finished(self, resp):
+        self.progressbar.hide()
+        self.translated_text.setText(resp.response)
+        self.translated_text.show()
+        self.translate_button.setDisabled(False)
+        self.translate_button.show()
+
+    def on_translation_error(self, error_msg: str):
+        self.progressbar.hide()
+        QMessageBox.critical(self.parent, "Translation Error", error_msg)
+        self.translate_button.setDisabled(False)
+        self.translate_button.show()
+
     def handle_clear_button(self):
         self.ocr_text.clear()
         self.translated_text.clear()
+        self.translate_button.hide()

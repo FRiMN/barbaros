@@ -28,13 +28,12 @@ class TranslationWorker(QObject):
 
 
 class OCRWorker(QObject):
-    finished = Signal(str, str)
+    finished = Signal(str)
     error = Signal(str)
 
-    def __init__(self, image_bytes: bytes, target_language: str, model: str):
+    def __init__(self, image_bytes: bytes, model: str):
         super().__init__()
         self.image_bytes = image_bytes
-        self.target_language = target_language
         self.model = model
 
     @Slot()
@@ -42,11 +41,6 @@ class OCRWorker(QObject):
         print("OCR worker started")
         try:
             ocr_text = ocr_openrouter(self.image_bytes, self.model)
-            print(f"{ocr_text=}")
-            translation_resp = translate_text(
-                ocr_text, self.target_language, self.model
-            )
-            print(f"{translation_resp=}")
-            self.finished.emit(ocr_text, translation_resp.response)
+            self.finished.emit(ocr_text)
         except Exception as e:
             self.error.emit(str(e))
