@@ -51,10 +51,12 @@ class OCRFeature(AbstractFeature):
         self.image_manager.imageCropped.connect(self._handle_image_cropped)
 
         self.ocr_button = QPushButton("OCR")
+        self.ocr_button.setToolTip("Get text from image")
         self.ocr_button.clicked.connect(self.handle_ocr_button)
         self.ocr_button.setDisabled(True)
 
         self.translate_button = QPushButton("Translate")
+        self.translate_button.setToolTip("Translate text extracted via OCR")
         self.translate_button.clicked.connect(self.handle_translate_button)
         self.translate_button.setDisabled(True)
 
