@@ -60,12 +60,12 @@ class ImageManagerWidget(QWidget):
         self._crop_preview.clicked.connect(self._handle_crop_preview_clicked)
 
     def set_image(self, image: QImage, file_path: str):
-        """Set an image programmatically"""
+        """Set an image"""
         self._loaded_image = image
-        self._cropped_image = None
-        self._crop_rect = None
+        self._crop_rect = QRect(0, 0, image.width(), image.height())
+        self._cropped_image = image.copy()
         self._crop_preview.set_image(image)
-        self._crop_preview.set_crop_rect(None)
+        self._crop_preview.set_crop_rect(self._crop_rect)
         self.imageCropped.emit()
 
     def get_loaded_image(self) -> QImage | None:
