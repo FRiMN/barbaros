@@ -57,6 +57,7 @@ class ImageManagerWidget(QWidget):
         self._screenshot_button.clicked.connect(self._handle_screenshot)
 
         self._crop_preview = CropPreviewWidget()
+        self._crop_preview.setToolTip("Click to crop the image and set area for OCR")
         self._crop_preview.clicked.connect(self._handle_crop_preview_clicked)
 
     def set_image(self, image: QImage, file_path: str):
