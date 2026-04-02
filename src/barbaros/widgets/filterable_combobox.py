@@ -57,7 +57,9 @@ class FilterableComboBox(QWidget):
 
         # Обрезаем текст с многоточием
         fm = QFontMetrics(self.display_label.font())
-        elided_text = fm.elidedText(item, Qt.TextElideMode.ElideLeft, self.display_label.width())
+        elided_text = fm.elidedText(
+            item, Qt.TextElideMode.ElideLeft, self.display_label.width()
+        )
         self.display_label.setText(elided_text)
 
         self.display_label.setToolTip(item)
