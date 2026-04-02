@@ -1,8 +1,12 @@
 from typing import Optional, List
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QLineEdit, QListWidget,
-    QAbstractItemView
+    QVBoxLayout,
+    QWidget,
+    QLineEdit,
+    QListWidget,
+    QAbstractItemView,
+    QFrame,
 )
 from PySide6.QtCore import Signal, Qt, QPoint
 from PySide6.QtGui import QFontMetrics
@@ -76,16 +80,26 @@ class FilterablePopup(QWidget):
 
     def initUI(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.frame = QFrame(self)
+        self.frame.setFrameShape(QFrame.Shape.WinPanel)
+        self.frame.setLineWidth(1)
+
+        frame_layout = QVBoxLayout(self.frame)
+        frame_layout.setContentsMargins(4, 4, 4, 4)
 
         # Создаем поле ввода для фильтра
-        self.filter_edit = QLineEdit(self)
+        self.filter_edit = QLineEdit(self.frame)
         self.filter_edit.setPlaceholderText("Filter items")
         self.filter_edit.textChanged.connect(self.apply_filter)
-        layout.addWidget(self.filter_edit)
+        frame_layout.addWidget(self.filter_edit)
 
         # Создаем виджет для отображения списка вариантов
-        self.list_widget = QListWidget(self)
-        self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.list_widget = QListWidget(self.frame)
+        self.list_widget.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
         self.list_widget.setAlternatingRowColors(True)
         self.list_widget.itemActivated.connect(self.on_item_selected)
         self.list_widget.setStyleSheet("""
@@ -93,7 +107,10 @@ class FilterablePopup(QWidget):
                 padding: 4px;
             }
         """)
-        layout.addWidget(self.list_widget)
+        frame_layout.addWidget(self.list_widget)
+
+        self.frame.setLayout(frame_layout)
+        layout.addWidget(self.frame)
 
         self.update_items()
 
