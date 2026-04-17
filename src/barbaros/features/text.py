@@ -32,9 +32,6 @@ class TextFeature(AbstractFeature):
         self.model.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
-        select_panel.addWidget(self.parent.clear_button)
-        select_panel.addWidget(QLabel("Target:"))
-        select_panel.addWidget(self.parent.target_language_select)
 
         l.addLayout(select_panel)
         l.addWidget(self.orig_text)

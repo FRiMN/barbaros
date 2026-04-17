@@ -1,10 +1,11 @@
 from PySide6.QtWidgets import (
     QMainWindow,
     QVBoxLayout,
+    QHBoxLayout,
     QWidget,
     QPushButton,
     QComboBox,
-    QTabWidget,
+    QTabWidget, QLabel,
 )
 from PySide6.QtCore import QRect
 from PySide6.QtGui import QCloseEvent, QImage
@@ -90,6 +91,14 @@ class MainWindow(QMainWindow):
             tab_widget.addTab(tab, f.tab_name)
 
         main_layout = QVBoxLayout()
+        
+        top_panel = QHBoxLayout()
+        top_panel.addStretch()
+        top_panel.addWidget(self.clear_button)
+        top_panel.addWidget(QLabel("Target:"))
+        top_panel.addWidget(self.target_language_select)
+
+        main_layout.addLayout(top_panel)
         main_layout.addWidget(tab_widget)
 
         return main_layout
