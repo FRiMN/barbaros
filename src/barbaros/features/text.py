@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
     QLabel,
-    QSizePolicy,
     QBoxLayout,
     QMessageBox,
 )
@@ -16,7 +15,6 @@ from PySide6.QtGui import QFont
 
 from barbaros.features.base import AbstractFeature
 from barbaros.widgets.custom_text_edit import CustomTextEdit
-from barbaros.widgets.filterable_combobox import FilterableComboBox
 from barbaros.widgets.progress_label import GradientRainbowLabel
 from barbaros.workers import TranslationWorker
 
@@ -28,10 +26,6 @@ class TextFeature(AbstractFeature):
         l = QVBoxLayout()
 
         select_panel = QHBoxLayout()
-        select_panel.addWidget(self.model)
-        self.model.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
-        )
 
         l.addLayout(select_panel)
         l.addWidget(self.orig_text)
@@ -62,15 +56,6 @@ class TextFeature(AbstractFeature):
         self.progressbar = GradientRainbowLabel("Translating...")
         self.progressbar.hide()
 
-        self.model = FilterableComboBox()
-        self.model.selectionChanged.connect(self.parent.save_choosed_model)
-        self.model.addItems(Resource.ollama_models.value)
-        if past_model := self.parent.settings.value("model"):
-            self.model.on_selection_changed(past_model)
-        else:
-            print("set default model")
-            self.model.on_selection_changed(self.model.items[0])
-
     def handle_translate_button(self):
         self.translate()
 
@@ -100,7 +85,7 @@ class TextFeature(AbstractFeature):
         self.worker = TranslationWorker(
             text_to_translate,
             self.parent.target_language_select.currentText(),
-            self.model.selected_item,
+            self.parent.model.selected_item,
         )
         print("before move")
         self.worker.moveToThread(translation_thread)

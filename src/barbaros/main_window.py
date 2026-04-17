@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QPushButton,
     QComboBox,
-    QTabWidget, QLabel,
+    QTabWidget, QLabel, QSizePolicy,
 )
 from PySide6.QtCore import QRect
 from PySide6.QtGui import QCloseEvent, QImage
@@ -15,6 +15,7 @@ from .features.ocr import OCRFeature
 from .features.text import TextFeature
 from .features.base import AbstractFeature
 from .common import SettingsProxy, TARGET_LANGUAGES
+from .widgets.filterable_combobox import FilterableComboBox
 
 
 class MainWindow(QMainWindow):
@@ -52,6 +53,8 @@ class MainWindow(QMainWindow):
         self.settings.setValue("target_language", lang)
 
     def set_widgets(self):
+        from .resources_loader import Resource
+
         self.clear_button = QPushButton()
         self.clear_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
@@ -71,6 +74,18 @@ class MainWindow(QMainWindow):
         else:
             print("set default language")
             self.target_language_select.setCurrentIndex(0)
+
+        self.model = FilterableComboBox()
+        self.model.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        self.model.selectionChanged.connect(self.save_choosed_model)
+        self.model.addItems(Resource.ollama_models.value)
+        if past_model := self.settings.value("model"):
+            self.model.on_selection_changed(past_model)
+        else:
+            print("set default model")
+            self.model.on_selection_changed(self.model.items[0])
 
         for f in self.features:
             f.set_widgets()
@@ -93,6 +108,7 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout()
         
         top_panel = QHBoxLayout()
+        top_panel.addWidget(self.model)
         top_panel.addStretch()
         top_panel.addWidget(self.clear_button)
         top_panel.addWidget(QLabel("Target:"))

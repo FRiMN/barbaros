@@ -3,7 +3,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QBoxLayout,
     QHBoxLayout,
-    QSizePolicy,
     QMessageBox,
 )
 from PySide6.QtCore import QThread, QBuffer, QIODevice
@@ -12,7 +11,6 @@ from barbaros.features.base import AbstractFeature
 from barbaros.widgets.image_manager import ImageManagerWidget
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.progress_label import GradientRainbowLabel
-from barbaros.widgets.filterable_combobox import FilterableComboBox
 from barbaros.workers import OCRWorker, TranslationWorker
 
 
@@ -26,11 +24,6 @@ class OCRFeature(AbstractFeature):
         l = QVBoxLayout()
 
         select_panel = QHBoxLayout()
-        select_panel.addWidget(self.model)
-        self.model.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
-        )
-        select_panel.addWidget(self.parent.clear_button)
 
         l.addLayout(select_panel)
 
@@ -66,15 +59,6 @@ class OCRFeature(AbstractFeature):
         self.ocr_text = CustomTextEdit(readOnly=True)
 
         self.translated_text = CustomTextEdit(readOnly=True)
-
-        self.model = FilterableComboBox()
-        self.model.selectionChanged.connect(self.parent.save_choosed_model)
-        self.model.addItems(Resource.ollama_models.value)
-        if past_model := self.parent.settings.value("model"):
-            self.model.on_selection_changed(past_model)
-        else:
-            print("set default model")
-            self.model.on_selection_changed(self.model.items[0])
 
     def _handle_image_cropped(self):
         """Handle imageCropped signal from ImageManagerWidget"""
@@ -113,7 +97,7 @@ class OCRFeature(AbstractFeature):
 
         self.worker = OCRWorker(
             image_bytes,
-            self.model.selected_item,
+            self.parent.model.selected_item,
         )
         self.worker.moveToThread(ocr_thread)
 
@@ -156,7 +140,7 @@ class OCRFeature(AbstractFeature):
         self.translation_worker = TranslationWorker(
             text_to_translate,
             self.parent.target_language_select.currentText(),
-            self.model.selected_item,
+            self.parent.model.selected_item,
         )
         self.translation_worker.moveToThread(translation_thread)
 
