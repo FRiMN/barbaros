@@ -16,6 +16,7 @@ from barbaros.workers import OCRWorker, TranslationWorker
 
 class OCRFeature(AbstractFeature):
     tab_name = "Image"
+    settings_key_prefix = "ocr_feature"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

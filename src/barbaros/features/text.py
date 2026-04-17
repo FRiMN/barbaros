@@ -21,6 +21,7 @@ from barbaros.workers import TranslationWorker
 
 class TextFeature(AbstractFeature):
     tab_name = "Text"
+    settings_key_prefix = "text_feature"
 
     def build_layout(self) -> QBoxLayout:
         l = QVBoxLayout()
