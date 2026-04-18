@@ -53,7 +53,7 @@ class FilterableComboBox(QWidget):
     def on_selection_changed(self, item):
         assert item is not None
         if item not in self.items:
-            # TODO: add print message
+            print(f"Warning: Selected item '{item}' not found in items list. Falling back to first item.")
             item = self.items[0]
 
         self.selected_item = item
