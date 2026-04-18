@@ -44,55 +44,6 @@ def ocr_image(image_bytes: bytes, model: str) -> str:
         raise RuntimeError(f"OCR failed: {e}")
 
 
-def ocr_openrouter(image_bytes: bytes, model: str) -> str:
-    import requests
-
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
-    image_url = f"data:image/png;base64,{base64_image}"
-    model = "nvidia/nemotron-nano-12b-v2-vl:free"
-
-    headers = {
-        "Authorization": "Bearer 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",
-        "Content-Type": "application/json",
-    }
-    data = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Extract the text in the image. "
-                        "Return only the recognized text without adding any other information.",
-                    },
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ],
-            }
-        ],
-        "temperature": 0.1,
-    }
-
-    try:
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data,
-        )
-        json_resp = response.json()
-        print(f"{json_resp=}")
-        if "error" in json_resp:
-            e = json_resp['error']
-            raise RuntimeError(f"OCR failed (code {e['code']}). {e['message']}: {e['metadata']['raw']}")
-        response.raise_for_status()
-        print(f"{response.elapsed=}")
-        return json_resp["choices"][0]["message"]["content"]
-    except RuntimeError:
-        raise
-    except Exception as e:
-        raise RuntimeError(f"OCR failed: {e}")
-
-
 if __name__ == "__main__":
     text_to_translate = input("Enter the text to translate: ")
 

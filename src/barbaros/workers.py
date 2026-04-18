@@ -40,7 +40,7 @@ class OCRWorker(QObject):
     def run(self):
         print("OCR worker started")
         try:
-            ocr_text = ocr_openrouter(self.image_bytes, self.model)
+            ocr_text = ocr_image(self.image_bytes, self.model)
             self.finished.emit(ocr_text)
         except Exception as e:
             self.error.emit(str(e))
