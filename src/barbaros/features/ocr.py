@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QBoxLayout,
     QHBoxLayout,
     QMessageBox,
+    QLabel, QSizePolicy,
 )
 from PySide6.QtCore import QThread, QBuffer, QIODevice
 
@@ -11,6 +12,7 @@ from barbaros.features.base import AbstractFeature
 from barbaros.widgets.image_manager import ImageManagerWidget
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.progress_label import GradientRainbowLabel
+from barbaros.widgets.filterable_combobox import FilterableComboBox
 from barbaros.workers import OCRWorker, TranslationWorker
 
 
@@ -25,7 +27,8 @@ class OCRFeature(AbstractFeature):
         l = QVBoxLayout()
 
         select_panel = QHBoxLayout()
-
+        select_panel.addWidget(QLabel("OCR Model:"))
+        select_panel.addWidget(self.ocr_model_select)
         l.addLayout(select_panel)
 
         l.addWidget(self.image_manager)
@@ -60,6 +63,21 @@ class OCRFeature(AbstractFeature):
         self.ocr_text = CustomTextEdit(readOnly=True)
 
         self.translated_text = CustomTextEdit(readOnly=True)
+
+        self.ocr_model_select = FilterableComboBox()
+        self.ocr_model_select.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        self.ocr_model_select.selectionChanged.connect(self.save_choosed_ocr_model)
+        self.ocr_model_select.addItems(Resource.ollama_models.value)
+        if past_model := self.settings.value("model"):
+            self.ocr_model_select.on_selection_changed(past_model)
+        else:
+            print("set default model")
+            self.ocr_model_select.on_selection_changed(self.ocr_model_select.items[0])
+
+    def save_choosed_ocr_model(self, model: str):
+        self.settings.setValue("model", model)
 
     def _handle_image_cropped(self):
         """Handle imageCropped signal from ImageManagerWidget"""
@@ -98,7 +116,7 @@ class OCRFeature(AbstractFeature):
 
         self.worker = OCRWorker(
             image_bytes,
-            self.parent.model.selected_item,
+            self.ocr_model_select.selected_item,
         )
         self.worker.moveToThread(ocr_thread)
 
