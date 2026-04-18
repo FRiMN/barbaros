@@ -52,7 +52,10 @@ class FilterableComboBox(QWidget):
 
     def on_selection_changed(self, item):
         assert item is not None
-        assert item in self.items
+        if item not in self.items:
+            # TODO: add print message
+            item = self.items[0]
+
         self.selected_item = item
 
         # Обрезаем текст с многоточием
