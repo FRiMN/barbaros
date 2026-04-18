@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal, Slot
 from ollama import GenerateResponse
-from .translator import translate_text, ocr_image, ocr_openrouter
+from .translator import translate_text, ocr_image
 
 
 class TranslationWorker(QObject):
