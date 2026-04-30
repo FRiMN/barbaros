@@ -16,6 +16,7 @@ from .features.text import TextFeature
 from .features.settings import SettingsFeature
 from .features.base import AbstractFeature
 from .common import SettingsProxy, TARGET_LANGUAGES
+from .model_manager import ModelManager, default_providers
 from .widgets.filterable_combobox import FilterableComboBox
 
 
@@ -32,6 +33,11 @@ class MainWindow(QMainWindow):
             OCRFeature(self),
             SettingsFeature(self)
         ]
+
+        self.model_manager = ModelManager()
+        past_providers = self.settings.value("llm_providers", default=default_providers)
+        for provider in past_providers:
+            self.model_manager.add(provider)
 
         if past_geometry := self.settings.value("geometry"):
             self.restoreGeometry(past_geometry)
