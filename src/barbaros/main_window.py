@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QPushButton,
     QComboBox,
-    QTabWidget, QLabel, QSizePolicy,
+    QTabWidget, QLabel, QSizePolicy, QLineEdit,
 )
 from PySide6.QtCore import QRect
 from PySide6.QtGui import QCloseEvent, QImage
@@ -13,9 +13,11 @@ from PySide6.QtWidgets import QStyle
 
 from .features.ocr import OCRFeature
 from .features.text import TextFeature
+from .features.settings import SettingsFeature
 from .features.base import AbstractFeature
 from .common import SettingsProxy, TARGET_LANGUAGES
 from .widgets.filterable_combobox import FilterableComboBox
+
 
 
 class MainWindow(QMainWindow):
@@ -27,7 +29,8 @@ class MainWindow(QMainWindow):
         self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
         self.features: list[AbstractFeature] = [
             TextFeature(self),
-            OCRFeature(self)
+            OCRFeature(self),
+            SettingsFeature(self)
         ]
 
         if past_geometry := self.settings.value("geometry"):
