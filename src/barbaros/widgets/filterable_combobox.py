@@ -74,6 +74,11 @@ class FilterableComboBox(QWidget):
         self.filterable_popup.items = self.items
         self.filterable_popup.update_items()
 
+    def clear(self):
+        self.items = []
+        self.filterable_popup.items = []
+        self.filterable_popup.update_items()
+
 
 class FilterablePopup(QWidget):
     selectionChanged = Signal(str)
