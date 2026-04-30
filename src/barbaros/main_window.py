@@ -118,3 +118,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(tab_widget)
 
         return main_layout
+
+    def handle_clear_button(self):
+        for f in self.features:
+            f.handle_clear_button()
