@@ -64,11 +64,17 @@ class AddProviderDialog(QDialog):
         if not name:
             QMessageBox.warning(self, "Invalid Input", "Name is required")
             return
+
+        if name in self.parent().model_manager.keys():
+            QMessageBox.warning(self, "Invalid Input", "Name is exist")
+            return
+
         self.accept()
 
     def get_provider(self) -> ProviderMeta | None:
         if self.result() != QDialog.DialogCode.Accepted:
             return None
+
         return ProviderMeta(
             name=self.name_edit.text().strip(),
             provider_type=self.type_combo.currentData(),
