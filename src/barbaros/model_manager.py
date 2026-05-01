@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
@@ -26,17 +27,30 @@ default_providers = [
 
 
 class ModelManager(dict):
-    def add(self, provider: ProviderMeta):
+    def add(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
+        error_callback = error_callback or print
         client = AnyLLM.create(provider.provider_type, provider.api_key, provider.api_base)
         try:
-            models = client.list_models()
-        except ConnectionError as e:
-            # TDOD: show error in GUI
-            print(e)
+            with ThreadPoolExecutor() as executor:
+                future = executor.submit(client.list_models)
+                models = future.result(timeout=timeout)
+        except TimeoutError:
+            msg = f"Timeout adding provider {provider.name} ({provider.provider_type}): exceeded {timeout}s"
+            error_callback(msg)
+            models = []
+        except BaseException as e:
+            msg = f"Error for provider {provider.name} ({provider.provider_type}): {e}"
+            error_callback(msg)
             models = []
         v = ProviderClient(meta=provider, client=client, models=models)
         super().__setitem__(provider.name, v)
 
+    def remove(self, name: str):
+        super().pop(name, None)
+
     def __getitem__(self, item: ProviderMeta | str) -> ProviderClient:
         name = item if isinstance(item, str) else item.name
         return super().__getitem__(name)
+
+    def to_list(self) -> list[ProviderMeta]:
+        return [v.meta for v in self.values()]

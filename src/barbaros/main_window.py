@@ -23,6 +23,7 @@ from .widgets.filterable_combobox import FilterableComboBox
 
 class MainWindow(QMainWindow):
     settings_key_prefix = "main_window"
+    settings_llm_providers_key = "llm_providers"
 
     def __init__(self, *args, app, **kwargs):
         super().__init__(*args, **kwargs)
@@ -30,9 +31,9 @@ class MainWindow(QMainWindow):
         self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
 
         self.model_manager = ModelManager()
-        past_providers = self.settings.value("llm_providers", default=default_providers)
+        past_providers = self.settings.value(self.settings_llm_providers_key, default=default_providers)
         for provider in past_providers:
-            self.model_manager.add(provider)
+            self.model_manager.add(provider, error_callback=self._show_provider_error)
 
         self.features: list[AbstractFeature] = [
             TextFeature(self),
@@ -52,6 +53,10 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(main_widget)
 
+    def _show_provider_error(self, msg: str):
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.warning(self, "Provider Error", msg)
+
     def closeEvent(self, event: QCloseEvent):
         self.settings.setValue("geometry", self.saveGeometry())
         event.accept()
@@ -61,6 +66,10 @@ class MainWindow(QMainWindow):
 
     def save_choosed_target_language(self, lang: str):
         self.settings.setValue("target_language", lang)
+
+    def save_providers(self):
+        providers = self.model_manager.to_list()
+        self.settings.setValue(self.settings_llm_providers_key, providers)
 
     def set_widgets(self):
         from .resources_loader import Resource
