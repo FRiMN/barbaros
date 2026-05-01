@@ -16,7 +16,7 @@ dependencies = ["pyside6", "psutil", "any-llm-sdk[all]"]
 barbaros = "barbaros.main:main"
 
 [project.optional-dependencies]
-dev = ["ruff"]
+dev = ["ruff", "pytest"]
 
 [project.urls]
 Homepage = "https://github.com/FRiMN/barbaros"
@@ -32,3 +32,7 @@ write_to = "src/barbaros/__version__.py"
 [tool.setuptools.data-files]
 "share/applications" = ["flatpak/io.github.frimn.barbaros.desktop"]
 "share/icons/hicolor/256x256/apps" = ["src/barbaros/resources/icons/icon3.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

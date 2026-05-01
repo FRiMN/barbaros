@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
+from any_llm.exceptions import AnyLLMError
 
 
 @dataclass
@@ -29,7 +30,14 @@ default_providers = [
 class ModelManager(dict):
     def add(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
         error_callback = error_callback or print
-        client = AnyLLM.create(provider.provider_type, provider.api_key, provider.api_base)
+
+        try:
+            client = AnyLLM.create(provider.provider_type, provider.api_key, provider.api_base)
+        except AnyLLMError as e:
+            msg = f"Error for provider {provider.name} ({provider.provider_type}): {e}"
+            error_callback(msg)
+            return
+
         try:
             with ThreadPoolExecutor() as executor:
                 future = executor.submit(client.list_models)
@@ -38,10 +46,11 @@ class ModelManager(dict):
             msg = f"Timeout adding provider {provider.name} ({provider.provider_type}): exceeded {timeout}s"
             error_callback(msg)
             models = []
-        except BaseException as e:
+        except (BaseException, AnyLLMError) as e:
             msg = f"Error for provider {provider.name} ({provider.provider_type}): {e}"
             error_callback(msg)
             models = []
+
         v = ProviderClient(meta=provider, client=client, models=models)
         super().__setitem__(provider.name, v)
 

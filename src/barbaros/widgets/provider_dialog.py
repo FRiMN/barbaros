@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 )
 
 from any_llm import LLMProvider
+from barbaros.common import is_valid_url
 
 from barbaros.model_manager import ModelManager, ProviderMeta
 
@@ -67,6 +68,11 @@ class AddProviderDialog(QDialog):
 
         if name in self.parent().model_manager.keys():
             QMessageBox.warning(self, "Invalid Input", "Name is exist")
+            return
+
+        url = self.api_url_edit.text().strip()
+        if url and not is_valid_url(url):
+            QMessageBox.warning(self, "Invalid Input", "Invalid API URL format")
             return
 
         self.accept()
