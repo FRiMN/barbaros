@@ -28,16 +28,17 @@ class MainWindow(QMainWindow):
         super().__init__(*args, **kwargs)
         self.app = app
         self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
-        self.features: list[AbstractFeature] = [
-            TextFeature(self),
-            OCRFeature(self),
-            SettingsFeature(self)
-        ]
 
         self.model_manager = ModelManager()
         past_providers = self.settings.value("llm_providers", default=default_providers)
         for provider in past_providers:
             self.model_manager.add(provider)
+
+        self.features: list[AbstractFeature] = [
+            TextFeature(self),
+            OCRFeature(self),
+            SettingsFeature(self)
+        ]
 
         if past_geometry := self.settings.value("geometry"):
             self.restoreGeometry(past_geometry)
