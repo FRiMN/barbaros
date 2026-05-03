@@ -59,7 +59,7 @@ def is_valid_url(url: str) -> bool:
         r'|localhost'                                               # Localhost
         r'|(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)'  # IPv4 address
         r')'
-        r'(?::\d+)?'                                                # Optional port
+        r'(?::\d+)?'                                                # Port
         r'(?:/(?:\S*)?)?$',                                         # Path and query
         re.IGNORECASE
     )
