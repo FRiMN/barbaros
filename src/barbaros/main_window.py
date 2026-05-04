@@ -69,7 +69,13 @@ class MainWindow(QMainWindow):
 
     def save_providers(self):
         providers = self.model_manager.to_list()
-        self.settings.setValue(self.settings_llm_providers_key, providers)
+        if providers:
+            self.settings.setValue(self.settings_llm_providers_key, providers)
+        else:
+            # Case: Raise `TypeError: 'NoneType' object is not iterable`
+            # while load providers after `past_providers = self.settings.value`.
+            # Empty list set like `@Invalid()` in settings.
+            self.settings.remove(self.settings_llm_providers_key)
 
     def set_widgets(self):
         from .resources_loader import Resource
