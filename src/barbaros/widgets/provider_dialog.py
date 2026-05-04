@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
 )
 
 from any_llm import LLMProvider
-from barbaros.common import is_valid_url
+from barbaros.common import is_valid_url, truncate_key
 
 from barbaros.model_manager import ModelManager, ProviderMeta
 
@@ -145,7 +145,7 @@ class ProviderDialog(QDialog):
             self.table.setItem(row, 1, QTableWidgetItem(meta.provider_type.value))
             self.table.setItem(row, 2, QTableWidgetItem(meta.api_base or ""))
             key = meta.api_key or ""
-            self.table.setItem(row, 3, QTableWidgetItem("*" * 8 if key else ""))
+            self.table.setItem(row, 3, QTableWidgetItem(truncate_key(key) if key else ""))
 
     def _add_provider(self):
         dialog = AddProviderDialog(self)

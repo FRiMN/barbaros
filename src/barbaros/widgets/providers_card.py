@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QFrame, QVBoxLayout, QScrollArea, QLabel, QPushBut
 from PySide6.QtCore import Qt
 from barbaros.widgets.provider_dialog import ProviderDialog
 from barbaros.model_manager import ProviderClient
+from barbaros.common import truncate_key
 
 class ProvidersCard(QFrame):
     def __init__(self, model_manager, parent):
@@ -35,13 +36,6 @@ class ProvidersCard(QFrame):
 
         self.layout.addWidget(scroll)
         self.layout.addLayout(btn_layout)
-
-    def _truncate_key(self, key: str) -> str:
-        key_len = len(key)
-        if 4 <= key_len * 0.15:
-            return f"****{key[-4:]}"
-        truncate_len = max(1, int(key_len * 0.15))
-        return f"****{key[-truncate_len:]}"
 
     def _truncate_url(self, url: str) -> str:
         url_len = len(url)
@@ -87,13 +81,11 @@ class ProvidersCard(QFrame):
 
             base = provider_client.meta.api_base
             if base:
-                truncated_base = self._truncate_url(base)
-                info_layout.addWidget(self._create_bordered_label(truncated_base))
+                info_layout.addWidget(self._create_bordered_label(self._truncate_url(base)))
 
             key = provider_client.meta.api_key
             if key:
-                secure_key = self._truncate_key(key)
-                info_layout.addWidget(self._create_bordered_label(secure_key))
+                info_layout.addWidget(self._create_bordered_label(truncate_key(key)))
 
             info_layout.addStretch()
             card_layout.addLayout(info_layout)
