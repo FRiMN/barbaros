@@ -3,6 +3,8 @@ import base64
 from ollama import Client, GenerateResponse
 
 """
+DEPRECATED
+
 Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 """
 

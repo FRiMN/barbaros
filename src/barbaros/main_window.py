@@ -17,7 +17,7 @@ from .features.settings import SettingsFeature
 from .features.base import AbstractFeature
 from .common import SettingsProxy, TARGET_LANGUAGES
 from .model_manager import ModelManager, default_providers
-from .widgets.filterable_combobox import FilterableComboBox
+from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 
 
 
@@ -61,8 +61,8 @@ class MainWindow(QMainWindow):
         self.settings.setValue("geometry", self.saveGeometry())
         event.accept()
 
-    def save_choosed_model(self, model: str):
-        self.settings.setValue("model", model)
+    def save_choosed_model(self, selection: ModelSelection):
+        self.settings.setValue("model", selection)
 
     def save_choosed_target_language(self, lang: str):
         self.settings.setValue("target_language", lang)
@@ -100,17 +100,15 @@ class MainWindow(QMainWindow):
             print("set default language")
             self.target_language_select.setCurrentIndex(0)
 
-        self.model = FilterableComboBox()
+        self.model = ProviderModelComboBox()
         self.model.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
+        self.model.setModelManager(self.model_manager)
         self.model.selectionChanged.connect(self.save_choosed_model)
-        self.model.addItems(Resource.ollama_models.value)
-        if past_model := self.settings.value("model"):
-            self.model.on_selection_changed(past_model)
-        else:
-            print("set default model")
-            self.model.on_selection_changed(self.model.items[0])
+
+        # TODO: Restore past model selection
+        # if past_model := self.settings.value("model"):
 
         for f in self.features:
             f.set_widgets()
