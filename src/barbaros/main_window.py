@@ -62,7 +62,8 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def save_choosed_model(self, selection: ModelSelection):
-        self.settings.setValue("model", selection)
+        # Store just the model name for settings
+        self.settings.setValue("model", selection.model)
 
     def save_choosed_target_language(self, lang: str):
         self.settings.setValue("target_language", lang)
@@ -107,8 +108,17 @@ class MainWindow(QMainWindow):
         self.model.setModelManager(self.model_manager)
         self.model.selectionChanged.connect(self.save_choosed_model)
 
-        # TODO: Restore past model selection
-        # if past_model := self.settings.value("model"):
+        # Restore past model selection
+        if past_model := self.settings.value("model"):
+            for provider_name, provider_client in self.model_manager.items():
+                for model in provider_client.models:
+                    if model.name == past_model:
+                        selection = ModelSelection(provider=provider_name, model=model.name)
+                        self.model.on_selection_changed(selection)
+                        break
+                else:
+                    continue
+                break
 
         for f in self.features:
             f.set_widgets()
