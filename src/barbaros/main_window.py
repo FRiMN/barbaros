@@ -110,18 +110,24 @@ class MainWindow(QMainWindow):
         # Restore past model selection
         if past_selection := self.settings.value("model"):
             if isinstance(past_selection, ModelSelection):
-                self.model.on_selection_changed(past_selection)
+                if self.model.has_item(past_selection):
+                    self.model.on_selection_changed(past_selection)
+                else:
+                    self.model.on_selection_changed(self.model.get_first_item())
             else:
-                # Legacy: stored as string, find provider
+                # Legacy: stored as string, find matching model
                 for provider_name, provider_client in self.model_manager.items():
                     for model in provider_client.models:
-                        if model.name == past_selection:
-                            selection = ModelSelection(provider=provider_name, model=model.name)
+                        if model.id == past_selection or model.name == past_selection:
+                            selection = ModelSelection(provider=provider_name, model=model.id)
                             self.model.on_selection_changed(selection)
                             break
                     else:
                         continue
                     break
+                else:
+                    # Not found, use first
+                    self.model.on_selection_changed(self.model.get_first_item())
 
         for f in self.features:
             f.set_widgets()
@@ -154,7 +160,3 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(tab_widget)
 
         return main_layout
-
-    def handle_clear_button(self):
-        for f in self.features:
-            f.handle_clear_button()

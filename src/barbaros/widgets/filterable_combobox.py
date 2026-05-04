@@ -16,6 +16,7 @@ from PySide6.QtGui import QFontMetrics
 from any_llm.types.model import Model
 
 from .link_label import LinkLabel
+from ..model_manager import ProviderClient
 
 
 class FilterableComboBox(QWidget):
@@ -352,3 +353,37 @@ class ProviderModelComboBox(QWidget):
 
         self.hide_popup()
         self.selectionChanged.emit(self.selected_item)
+
+    def get_first_item(self) -> Optional[ModelSelection]:
+        """Return the first available model as ModelSelection."""
+        if not self.model_manager:
+            return None
+
+        provider_names = list(self.model_manager.keys())
+        if not provider_names:
+            return None
+
+        provider_name = provider_names[0]
+        provider_client: ProviderClient = self.model_manager[provider_name]
+
+        if not provider_client.models:
+            return None
+
+        first_model = provider_client.models[0]
+        return ModelSelection(provider=provider_name, model=first_model.id)
+
+    def has_item(self, item: ModelSelection) -> bool:
+        """Check if the given ModelSelection exists in the model_manager."""
+        if not self.model_manager or not item:
+            return False
+
+        if item.provider not in self.model_manager:
+            return False
+
+        provider_client = self.model_manager[item.provider]
+
+        for model in provider_client.models:
+            if model.id == item.model:
+                return True
+
+        return False
