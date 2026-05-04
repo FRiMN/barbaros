@@ -10,9 +10,11 @@ from barbaros.model_manager import ModelManager, ProviderMeta
 
 
 class AddProviderDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, provider: ProviderMeta = None):
         super().__init__(parent)
-        self.setWindowTitle("Add Provider")
+        self.provider = provider
+        self.is_edit = provider is not None
+        self.setWindowTitle("Edit Provider" if self.is_edit else "Add Provider")
         self.setModal(True)
         self.setMinimumWidth(400)
 
@@ -25,6 +27,18 @@ class AddProviderDialog(QDialog):
         layout.addLayout(btn_layout)
 
         self.setLayout(layout)
+
+        if self.is_edit:
+            self._populate_fields()
+
+    def _populate_fields(self):
+        self.name_edit.setText(self.provider.name)
+        index = self.type_combo.findData(self.provider.provider_type)
+        if index >= 0:
+            self.type_combo.setCurrentIndex(index)
+        self.api_key_edit.setText(self.provider.api_key or "")
+        self.api_url_edit.setText(self.provider.api_base or "")
+        self.name_edit.setEnabled(False)
 
     def _build_form(self):
         form = QFormLayout()
@@ -49,7 +63,7 @@ class AddProviderDialog(QDialog):
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
 
-        ok_btn = QPushButton("Add")
+        ok_btn = QPushButton("Save" if self.is_edit else "Add")
         ok_btn.setDefault(True)
         ok_btn.clicked.connect(self._validate)
 
@@ -66,7 +80,7 @@ class AddProviderDialog(QDialog):
             QMessageBox.warning(self, "Invalid Input", "Name is required")
             return
 
-        if name in self.parent().model_manager.keys():
+        if not self.is_edit and name in self.parent().model_manager.keys():
             QMessageBox.warning(self, "Invalid Input", "Name is exist")
             return
 
@@ -123,6 +137,10 @@ class ProviderDialog(QDialog):
         add_btn.clicked.connect(self._add_provider)
         btn_layout.addWidget(add_btn)
 
+        edit_btn = QPushButton("Edit")
+        edit_btn.clicked.connect(self._edit_provider)
+        btn_layout.addWidget(edit_btn)
+
         del_btn = QPushButton("Delete")
         del_btn.clicked.connect(self._delete_provider)
         btn_layout.addWidget(del_btn)
@@ -149,15 +167,33 @@ class ProviderDialog(QDialog):
 
     def _add_provider(self):
         dialog = AddProviderDialog(self)
+        self._run_provider_dialog(dialog, is_new=True)
+
+    def _edit_provider(self):
+        row = self.table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "No Selection", "Select a provider to edit")
+            return
+        name = self.table.item(row, 0).text()
+        client = self.model_manager[name]
+        provider = client.meta
+
+        dialog = AddProviderDialog(self, provider)
+        self._run_provider_dialog(dialog, is_new=False)
+
+    def _run_provider_dialog(self, dialog: AddProviderDialog, is_new: bool):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             provider = dialog.get_provider()
             if provider:
-                if provider.name in self.model_manager:
+                if is_new and provider.name in self.model_manager:
                     QMessageBox.warning(self, "Duplicate", f"Provider '{provider.name}' already exists")
                     return
 
                 provider.provider_type = LLMProvider.from_string(provider.provider_type)
-                self.model_manager.add(provider, error_callback=self._show_error)
+                if is_new:
+                    self.model_manager.add(provider, error_callback=self._show_error)
+                else:
+                    self.model_manager.update(provider, error_callback=self._show_error)
                 self._populate_table()
                 self._save()
 

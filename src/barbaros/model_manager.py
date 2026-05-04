@@ -57,6 +57,10 @@ class ModelManager(dict):
     def remove(self, name: str):
         super().pop(name, None)
 
+    def update(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
+        self.remove(provider.name)
+        self.add(provider, timeout, error_callback)
+
     def __getitem__(self, item: ProviderMeta | str) -> ProviderClient:
         name = item if isinstance(item, str) else item.name
         return super().__getitem__(name)
