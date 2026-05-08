@@ -10,7 +10,12 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.11"
 dynamic = ["version"]
-dependencies = ["pyside6", "psutil", "any-llm-sdk[all]"]
+dependencies = [
+    "pyside6",
+    "psutil",
+    "any-llm-sdk[all]",
+    "keyring>=25.7.0",
+]
 
 [project.gui-scripts]
 barbaros = "barbaros.main:main"

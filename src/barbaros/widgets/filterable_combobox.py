@@ -357,16 +357,19 @@ class ProviderModelComboBox(QWidget):
     def get_first_item(self) -> Optional[ModelSelection]:
         """Return the first available model as ModelSelection."""
         if not self.model_manager:
+            print("Model manager not set in ProviderModelComboBox")
             return None
 
         provider_names = list(self.model_manager.keys())
         if not provider_names:
+            print("Providers not found in ProviderModelComboBox")
             return None
 
         provider_name = provider_names[0]
         provider_client: ProviderClient = self.model_manager[provider_name]
 
         if not provider_client.models:
+            print("Models not found in ProviderModelComboBox")
             return None
 
         first_model = provider_client.models[0]

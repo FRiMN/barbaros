@@ -6,13 +6,17 @@ from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
 from any_llm.exceptions import AnyLLMError
 
+from barbaros.security import KeySecurityManager
+
 
 @dataclass
 class ProviderMeta:
     name: str
     provider_type: LLMProvider
-    api_key: str | None = None
     api_base: str | None = None
+
+    def __post_init__(self):
+        self.api_key_manager = KeySecurityManager(self.name)
 
 
 @dataclass
@@ -32,7 +36,7 @@ class ModelManager(dict):
         error_callback = error_callback or print
 
         try:
-            client = AnyLLM.create(provider.provider_type, provider.api_key, provider.api_base)
+            client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
         except AnyLLMError as e:
             msg = f"Error for provider {provider.name} ({provider.provider_type}): {e}"
             error_callback(msg)

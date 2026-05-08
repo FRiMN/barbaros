@@ -83,7 +83,7 @@ class ProvidersCard(QFrame):
             if base:
                 info_layout.addWidget(self._create_bordered_label(self._truncate_url(base)))
 
-            key = provider_client.meta.api_key
+            key = provider_client.meta.api_key_manager.get()
             if key:
                 info_layout.addWidget(self._create_bordered_label(truncate_key(key)))
 

@@ -36,7 +36,7 @@ class AddProviderDialog(QDialog):
         index = self.type_combo.findData(self.provider.provider_type)
         if index >= 0:
             self.type_combo.setCurrentIndex(index)
-        self.api_key_edit.setText(self.provider.api_key or "")
+        self.api_key_edit.setText(self.provider.api_key_manager.get() or "")
         self.api_url_edit.setText(self.provider.api_base or "")
         self.name_edit.setEnabled(False)
 
@@ -95,12 +95,16 @@ class AddProviderDialog(QDialog):
         if self.result() != QDialog.DialogCode.Accepted:
             return None
 
-        return ProviderMeta(
+        provider = ProviderMeta(
             name=self.name_edit.text().strip(),
             provider_type=self.type_combo.currentData(),
-            api_key=self.api_key_edit.text().strip() or None,
             api_base=self.api_url_edit.text().strip() or None
         )
+        api_key = self.api_key_edit.text().strip() or None
+        if api_key:
+            provider.api_key_manager.set(api_key)
+
+        return provider
 
 
 class ProviderDialog(QDialog):
@@ -159,10 +163,11 @@ class ProviderDialog(QDialog):
             self.table.insertRow(row)
 
             meta = client.meta
+            meta: ProviderMeta
             self.table.setItem(row, 0, QTableWidgetItem(meta.name))
             self.table.setItem(row, 1, QTableWidgetItem(meta.provider_type.value))
             self.table.setItem(row, 2, QTableWidgetItem(meta.api_base or ""))
-            key = meta.api_key or ""
+            key = meta.api_key_manager.get()
             self.table.setItem(row, 3, QTableWidgetItem(truncate_key(key) if key else ""))
 
     def _add_provider(self):
