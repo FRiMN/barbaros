@@ -5,10 +5,9 @@ from PySide6.QtWidgets import (
     QWidget,
     QPushButton,
     QComboBox,
-    QTabWidget, QLabel, QSizePolicy, QLineEdit,
+    QTabWidget, QLabel, QSizePolicy,
 )
-from PySide6.QtCore import QRect
-from PySide6.QtGui import QCloseEvent, QImage
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QStyle
 
 from .features.ocr import OCRFeature
@@ -78,8 +77,6 @@ class MainWindow(QMainWindow):
             self.settings.remove(self.settings_llm_providers_key)
 
     def set_widgets(self):
-        from .resources_loader import Resource
-
         self.clear_button = QPushButton()
         self.clear_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
