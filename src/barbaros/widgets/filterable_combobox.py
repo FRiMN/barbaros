@@ -308,10 +308,11 @@ class ProviderModelComboBox(QWidget):
         layout = QVBoxLayout(self)
 
         # Display label
-        self.display_label = LinkLabel("Select a model", self)
+        self.display_label = LinkLabel("", self)
         self.display_label.setMouseTracking(True)
         self.display_label.mousePressEvent = self.show_filterable_popup
         layout.addWidget(self.display_label)
+        self._update_label_like_none()
 
         self.filterable_popup = ProviderModelTreePopup(parent=self)
         self.filterable_popup.selectionChanged.connect(self.on_selection_changed)
@@ -335,22 +336,33 @@ class ProviderModelComboBox(QWidget):
         self.model_manager = model_manager
         self.filterable_popup.setModelManager(model_manager)
 
-    def on_selection_changed(self, selection: ModelSelection):
-        """Handle selection from popup."""
-        assert selection is not None
-        self.selected_item = selection
+    def _update_label_like_none(self):
+        self.display_label.setText("Select a model")
+        self.display_label.setToolTip("")
 
-        # Display model name, show full info in tooltip
-        display_text = selection.model
+    def _update_label_like_model(self):
+        display_text = self.selected_item.model
         fm = QFontMetrics(self.display_label.font())
         elided_text = fm.elidedText(
             display_text, Qt.TextElideMode.ElideLeft, self.display_label.width()
         )
         self.display_label.setText(elided_text)
 
-        tooltip = f"{selection.provider}: {selection.model}"
+        tooltip = f"{self.selected_item.provider}: {self.selected_item.model}"
         self.display_label.setToolTip(tooltip)
 
+    def update_label(self):
+        if self.selected_item is None:
+            self._update_label_like_none()
+            return None
+
+        self._update_label_like_model()
+
+    def on_selection_changed(self, selection: ModelSelection | None):
+        """Handle selection."""
+        self.selected_item = selection
+
+        self.update_label()
         self.hide_popup()
         self.selectionChanged.emit(self.selected_item)
 
