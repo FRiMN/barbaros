@@ -45,13 +45,14 @@ class ModelManager(dict):
         try:
             with ThreadPoolExecutor() as executor:
                 future = executor.submit(client.list_models)
+                print(f"start fetch models list for {provider.name}")
                 models = future.result(timeout=timeout)
-        except TimeoutError:
-            msg = f"Timeout adding provider {provider.name} ({provider.provider_type}): exceeded {timeout}s"
+        except TimeoutError as e:
+            msg = f"Timeout adding provider '{provider.name}' ({provider.provider_type}): exceeded {timeout}s \n{e}"
             error_callback(msg)
             models = []
         except (BaseException, AnyLLMError) as e:
-            msg = f"Error for provider {provider.name} ({provider.provider_type}): {e}"
+            msg = f"Error for provider '{provider.name}' ({provider.provider_type}): {e}"
             error_callback(msg)
             models = []
 
