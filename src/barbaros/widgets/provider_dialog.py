@@ -222,6 +222,9 @@ class ProviderDialog(QDialog):
             self._save()
 
     def _save(self):
+        from barbaros.main_window import MainWindow
+
         if parent := self.parent():
+            parent: MainWindow
             if hasattr(parent, 'save_providers'):
                 parent.save_providers()
