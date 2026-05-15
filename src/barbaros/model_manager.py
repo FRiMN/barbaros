@@ -33,6 +33,7 @@ default_providers = [
 
 class ModelManager(dict):
     def add(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
+        # TODO: timeout for list_models
         error_callback = error_callback or print
 
         try:
@@ -43,14 +44,8 @@ class ModelManager(dict):
             return
 
         try:
-            with ThreadPoolExecutor() as executor:
-                future = executor.submit(client.list_models)
-                print(f"start fetch models list for {provider.name}")
-                models = future.result(timeout=timeout)
-        except TimeoutError as e:
-            msg = f"Timeout adding provider '{provider.name}' ({provider.provider_type}): exceeded {timeout}s \n{e}"
-            error_callback(msg)
-            models = []
+            print(f"start fetch models list for {provider.name}")
+            models = client.list_models()
         except (BaseException, AnyLLMError) as e:
             msg = f"Error for provider '{provider.name}' ({provider.provider_type}): {e}"
             error_callback(msg)
