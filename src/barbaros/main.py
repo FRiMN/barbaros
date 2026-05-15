@@ -28,8 +28,8 @@ class App(QApplication):
         self.ipc = IPCService(app=self, as_server=True, as_client=False)
 
         # Windows and tray
-        self.tray = TrayIcon(self)
         self.main_window = MainWindow(app=self)
+        self.tray = TrayIcon(self)
         self.about_window = AboutWindow()
 
     def process_translation_request(self):
