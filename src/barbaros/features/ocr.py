@@ -12,7 +12,7 @@ from barbaros.features.base import AbstractFeature
 from barbaros.widgets.image_manager import ImageManagerWidget
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.progress_label import GradientRainbowLabel
-from barbaros.widgets.filterable_combobox import FilterableComboBox
+from barbaros.widgets.filterable_combobox import FilterableComboBox, ProviderModelComboBox, ModelSelection
 from barbaros.workers import OCRWorker, TranslationWorker
 
 
@@ -42,7 +42,9 @@ class OCRFeature(AbstractFeature):
         return l
 
     def set_widgets(self):
-        from ..resources_loader import Resource
+        from barbaros.main_window import MainWindow
+
+        self.parent: MainWindow
 
         self.image_manager = ImageManagerWidget(self.parent)
         self.image_manager.imageCropped.connect(self._handle_image_cropped)
@@ -64,17 +66,19 @@ class OCRFeature(AbstractFeature):
 
         self.translated_text = CustomTextEdit(readOnly=True)
 
-        self.ocr_model_select = FilterableComboBox()
+        self.ocr_model_select = ProviderModelComboBox()
         self.ocr_model_select.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
+        self.ocr_model_select.setModelManager(self.parent.model_manager)
         self.ocr_model_select.selectionChanged.connect(self.save_choosed_ocr_model)
-        self.ocr_model_select.addItems(Resource.ollama_models.value)
-        if past_model := self.settings.value("model"):
-            self.ocr_model_select.on_selection_changed(past_model)
-        else:
-            print("set default model")
-            self.ocr_model_select.on_selection_changed(self.ocr_model_select.items[0])
+
+        # Restore past model selection
+        if past_selection := self.settings.value("model"):
+            if isinstance(past_selection, ModelSelection) and self.ocr_model_select.has_item(past_selection):
+                self.ocr_model_select.on_selection_changed(past_selection)
+            else:
+                self.ocr_model_select.on_selection_changed(self.ocr_model_select.get_first_item())
 
     def save_choosed_ocr_model(self, model: str):
         self.settings.setValue("model", model)

@@ -15,6 +15,7 @@ dependencies = [
     "psutil",
     "any-llm-sdk[all]",
     "keyring>=25.7.0",
+    "psygnal>=0.15.1",
 ]
 
 [project.gui-scripts]

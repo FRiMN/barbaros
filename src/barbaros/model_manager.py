@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
 from any_llm.exceptions import AnyLLMError
+from psygnal import Signal
 
 from barbaros.security import KeySecurityManager
 
@@ -32,6 +32,9 @@ default_providers = [
 
 
 class ModelManager(dict):
+    added = Signal(ProviderMeta)
+    removed = Signal(str)
+
     def add(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
         # TODO: timeout for list_models
         error_callback = error_callback or print
@@ -54,8 +57,11 @@ class ModelManager(dict):
         v = ProviderClient(meta=provider, client=client, models=models)
         super().__setitem__(provider.name, v)
 
+        self.added.emit(v)
+
     def remove(self, name: str):
         super().pop(name, None)
+        self.removed.emit(name)
 
     def update(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
         self.remove(provider.name)

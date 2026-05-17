@@ -5,7 +5,6 @@ from .base import AbstractFeature
 from barbaros.widgets.providers_card import ProvidersCard
 
 
-
 class SettingsFeature(AbstractFeature):
     tab_name = "Settings"
     settings_key_prefix = "settings"
@@ -17,6 +16,10 @@ class SettingsFeature(AbstractFeature):
         self.setup_ui()
 
     def setup_ui(self):
+        from ..main_window import MainWindow
+
+        self.parent: MainWindow
+
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
 

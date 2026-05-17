@@ -1,6 +1,7 @@
 import re
+import time
 
-from ollama import GenerateResponse
+from any_llm.types.completion import ChatCompletion, Choice
 
 from PySide6.QtWidgets import (
     QVBoxLayout,
@@ -79,14 +80,18 @@ class TextFeature(AbstractFeature):
 
     def _threaded_translate(self, text_to_translate: str):
         # Run translation in a separate thread
+        from barbaros.main_window import MainWindow
+
         print("thread")
+        self.parent: MainWindow
         translation_thread = QThread(parent=self)
         translation_thread.finished.connect(translation_thread.deleteLater)
 
+        selected_item = self.parent.model.selected_item
+        client = self.parent.model_manager[selected_item.provider].client
+        lang = self.parent.target_language_select.currentText(),
         self.worker = TranslationWorker(
-            text_to_translate,
-            self.parent.target_language_select.currentText(),
-            self.parent.model.selected_item,
+            text_to_translate, lang, selected_item, client
         )
         print("before move")
         self.worker.moveToThread(translation_thread)
@@ -108,9 +113,11 @@ class TextFeature(AbstractFeature):
             return think_text, text.strip()
         return "", text
 
-    def on_translation_finished(self, resp: GenerateResponse):
+    def on_translation_finished(self, resp: ChatCompletion):
         self.progressbar.hide()
-        translated_text = resp.response
+        r: Choice = resp.choices[0]
+        translated_text = r.message.content
+        # TODO: We have `reasoning` in ChatCompletionMessage. I think we not need this.
         _, translated_text = self.pop_think(translated_text)
         translated_text = translated_text.strip()
         self.translated_text.setText(translated_text)
@@ -118,11 +125,13 @@ class TextFeature(AbstractFeature):
         self.translate_button.setDisabled(False)
         self.translate_button.show()
 
-        eval_secs = resp.eval_duration // 1000 / 1000 / 1000
-        load_secs = resp.load_duration // 1000 / 1000 / 1000
-        eval_speed = resp.eval_count / eval_secs
+        # eval_secs = resp.eval_duration // 1000 / 1000 / 1000
+        # load_secs = resp.load_duration // 1000 / 1000 / 1000
+        ended = time.time()
+        eval_secs = ended - resp.created
+        eval_speed = resp.usage.total_tokens / eval_secs
         self.stats.setText(
-            f"Eval: {eval_secs:.2f}s; Load: {load_secs:.2f}s; {eval_speed:.2f} tokens/s"
+            f"Eval: {eval_secs:.2f}s; {eval_speed:.2f} tkn/s"
         )
 
     def on_translation_error(self, error_msg: str):

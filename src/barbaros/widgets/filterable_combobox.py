@@ -16,7 +16,7 @@ from PySide6.QtGui import QFontMetrics
 from any_llm.types.model import Model
 
 from .link_label import LinkLabel
-from ..model_manager import ProviderClient
+from ..model_manager import ProviderClient, ModelManager
 
 
 class FilterableComboBox(QWidget):
@@ -173,11 +173,13 @@ class ProviderModelTreePopup(QWidget):
     """Tree popup for provider → model selection."""
     selectionChanged = Signal(object)  # emits ModelSelection
 
+    model_manager: ModelManager | None
+
     def __init__(self, parent=None, model_manager=None):
         super().__init__(parent)
-        self.model_manager = model_manager
-        self.provider_items = {}  # provider_name -> QTreeWidgetItem
         self.initUI()
+        self.setModelManager(model_manager)
+        self.provider_items = {}  # provider_name -> QTreeWidgetItem
 
     def initUI(self):
         layout = QVBoxLayout(self)
@@ -214,12 +216,18 @@ class ProviderModelTreePopup(QWidget):
         self.frame.setLayout(frame_layout)
         layout.addWidget(self.frame)
 
-        self.update_items()
-
-    def setModelManager(self, model_manager):
+    def setModelManager(self, model_manager: ModelManager | None):
         """Set the ModelManager and refresh items."""
+        if hasattr(self, "model_manager") and isinstance(self.model_manager, ModelManager):
+            self.model_manager.added.disconnect(self.update_items)
+            self.model_manager.removed.disconnect(self.update_items)
+
         self.model_manager = model_manager
         self.update_items()
+
+        if isinstance(model_manager, ModelManager):
+            self.model_manager.added.connect(self.update_items)
+            self.model_manager.removed.connect(self.update_items)
 
     def update_items(self):
         """Build tree from model manager."""
