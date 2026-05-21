@@ -70,6 +70,12 @@ class ModelManager(dict):
     def to_list(self) -> list[ProviderMeta]:
         return [v.meta for v in self.values()]
 
+    def shutdown(self):
+        """Shutdown all threads and cleanup."""
+        print("ModelManager shutdown: cleaning up threads...")
+        for name in self._fetching_threads.keys():
+            self._cleanup_fetching(name)
+
     def _start_fetching_models(self, provider: ProviderClient):
         from barbaros.workers import ListModelWorker
 

@@ -32,6 +32,9 @@ class App(QApplication):
         self.tray = TrayIcon(self)
         self.about_window = AboutWindow()
 
+        # Clean up threads on quit
+        self.aboutToQuit.connect(self.cleanup)
+
     def process_translation_request(self):
         """Process the translation request"""
 
@@ -53,6 +56,12 @@ class App(QApplication):
             self.raise_window()
         else:
             self.main_window.hide()
+
+    def cleanup(self):
+        """Clean up resources before quit."""
+        print("App cleanup: shutting down threads...")
+        if hasattr(self, 'main_window') and hasattr(self.main_window, 'model_manager'):
+            self.main_window.model_manager.shutdown()
 
     def show_about_window(self):
         self.about_window.show()
