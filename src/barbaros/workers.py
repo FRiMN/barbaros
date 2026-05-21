@@ -1,8 +1,11 @@
+from collections.abc import Sequence
+
 from PySide6.QtCore import QObject, Signal, Slot
-from ollama import GenerateResponse
 from any_llm import AnyLLM
 from any_llm.types.completion import ChatCompletion
+from any_llm.types.model import Model
 
+from .model_manager import ProviderClient, ProviderMeta
 from .translator import translate_text, ocr_image
 from .widgets.filterable_combobox import ModelSelection
 
@@ -58,3 +61,23 @@ class OCRWorker(QObject):
             self.finished.emit(ocr_text)
         except Exception as e:
             self.error.emit(str(e))
+
+
+class ListModelWorker(QObject):
+    """Fetching models for provider"""
+    finished = Signal(ProviderMeta, Sequence[Model])
+    error = Signal(ProviderMeta, str)
+
+    def __init__(self, provider: ProviderClient):
+        print(f"init worker for {provider}")
+        super().__init__()
+        self.provider = provider
+
+    @Slot()
+    def run(self):
+        print(f"Fetching models for '{self.provider.meta.name}' ({self.provider.meta.provider_type})")
+        try:
+            models: Sequence[Model] = self.provider.client.list_models()
+            self.finished.emit(self.provider.meta, models)
+        except Exception as e:
+            self.error.emit(self.provider.meta, str(e))
