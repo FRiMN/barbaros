@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
@@ -9,6 +12,9 @@ from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QMessageBox
 
 from barbaros.security import KeySecurityManager
+
+if TYPE_CHECKING:
+    from barbaros.workers import ListModelWorker
 
 
 @dataclass
@@ -36,6 +42,12 @@ default_providers = [
 class ModelManager(dict):
     added = Signal(ProviderMeta)
     removed = Signal(str)
+
+    _fetching_models_workers: dict[str, tuple[ListModelWorker, QThread]]    # Key: provider name
+
+    def __init__(self):
+        super().__init__()
+        self._fetching_models_workers = {}
 
     def add(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
         error_callback = error_callback or print
@@ -73,24 +85,43 @@ class ModelManager(dict):
     def shutdown(self):
         """Shutdown all threads and cleanup."""
         print("ModelManager shutdown: cleaning up threads...")
-        for name in self._fetching_threads.keys():
-            self._cleanup_fetching(name)
+        for name in self._fetching_models_workers.keys():
+            self.stop_fetching_models(name)
+
+    def stop_fetching_models(self, provider_name: str):
+        if provider_name not in self._fetching_models_workers:
+            return
+
+        worker, thread = self._fetching_models_workers.pop(provider_name)
+        worker: ListModelWorker
+        thread: QThread
+
+        if thread.isRunning():
+            thread.terminate()
+            thread.wait()
+
+        worker.deleteLater()
+        thread.deleteLater()
 
     def _start_fetching_models(self, provider: ProviderClient):
         from barbaros.workers import ListModelWorker
 
+        self.stop_fetching_models(provider.meta.name)
+
         thread = QThread()
         thread.finished.connect(thread.deleteLater)
 
-        self.worker = ListModelWorker(provider)
-        print(f"{self.worker=}")
-        self.worker.moveToThread(thread)
+        worker = ListModelWorker(provider)
+        print(f"{worker=}")
+        worker.moveToThread(thread)
 
-        self.worker.finished.connect(self._on_fetching_finished)
-        self.worker.finished.connect(thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker.error.connect(self._on_fetching_error)
-        thread.started.connect(self.worker.run)
+        worker.finished.connect(self._on_fetching_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(self._on_fetching_error)
+        thread.started.connect(worker.run)
+
+        self._fetching_models_workers[provider.meta.name] = (worker, thread)
 
         thread.start()
 
