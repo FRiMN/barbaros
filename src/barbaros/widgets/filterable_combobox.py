@@ -221,6 +221,7 @@ class ProviderModelTreePopup(QWidget):
         if hasattr(self, "model_manager") and isinstance(self.model_manager, ModelManager):
             self.model_manager.added.disconnect(self.update_items)
             self.model_manager.removed.disconnect(self.update_items)
+            self.model_manager.loaded_list_models.disconnect(self.update_items)
 
         self.model_manager = model_manager
         self.update_items()
@@ -228,6 +229,7 @@ class ProviderModelTreePopup(QWidget):
         if isinstance(model_manager, ModelManager):
             self.model_manager.added.connect(self.update_items)
             self.model_manager.removed.connect(self.update_items)
+            self.model_manager.loaded_list_models.connect(self.update_items)
 
     def update_items(self):
         """Build tree from model manager."""

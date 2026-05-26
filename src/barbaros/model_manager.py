@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING
 
 from any_llm import AnyLLM, LLMProvider
@@ -42,6 +44,8 @@ default_providers = [
 class ModelManager(dict):
     added = Signal(ProviderMeta)
     removed = Signal(str)
+    loaded_list_models = Signal()
+    error = Signal(str)
 
     _fetching_models_workers: dict[str, tuple[ListModelWorker, QThread]]    # Key: provider name
 
@@ -96,12 +100,15 @@ class ModelManager(dict):
         worker: ListModelWorker
         thread: QThread
 
-        if thread.isRunning():
-            thread.terminate()
-            thread.wait()
+        try:
+            if thread.isRunning():
+                thread.terminate()
+                thread.wait(3000)
 
-        worker.deleteLater()
-        thread.deleteLater()
+            worker.deleteLater()
+            thread.deleteLater()
+        except RuntimeError:
+            pass
 
     def _start_fetching_models(self, provider: ProviderClient):
         from barbaros.workers import ListModelWorker
@@ -112,25 +119,40 @@ class ModelManager(dict):
         thread.finished.connect(thread.deleteLater)
 
         worker = ListModelWorker(provider)
-        print(f"{worker=}")
         worker.moveToThread(thread)
+        worker.connect_terminate(thread)
+        thread.started.connect(worker.run)
 
         worker.finished.connect(self._on_fetching_finished)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
         worker.error.connect(self._on_fetching_error)
-        thread.started.connect(worker.run)
+        thread.destroyed.connect(partial(self._remove_worker, provider.meta.name))
 
         self._fetching_models_workers[provider.meta.name] = (worker, thread)
 
         thread.start()
 
-    def _on_fetching_error(self, provider: ProviderMeta, error_msg: str):
-        QMessageBox.critical(None, f"Error on fetching models for `{provider.name}` ({provider.provider_type})", error_msg)
+    def _remove_worker(self, provider_name: str):
+        print(f"remove worker {provider_name}")
+        if provider_name in self._fetching_models_workers:
+            self._fetching_models_workers.pop(provider_name)
 
-    def _on_fetching_finished(self, provider: ProviderMeta, models: Sequence[Model]):
+    def _on_fetching_error(self, provider: ProviderMeta, error_msg: str):
+        print("on fetching error")
+        # QMessageBox.critical(self.parent, f"Error on fetching models for `{provider.name}` ({provider.provider_type})", error_msg)
+        self.error.emit(f"Error on fetching models for `{provider.name}` ({provider.provider_type}): {error_msg}")
+
+    def _on_fetching_finished(self, provider: ProviderMeta, marshaled_models: str):
+        print("on fetching finished")
+        # print(f"{marshaled_models=}")
+        models = json.loads(marshaled_models)
+        # with open(f"./tdata_{provider.name}.json", "t+w") as f:
+        #     print(f"{models=}", file=f)
+        models = [Model.model_validate(m) for m in models]
+        print(f"{models=}")
         self.set_models(provider, models)
 
     def set_models(self, provider: ProviderMeta, models: Sequence[Model]):
+        print("set models")
         client: ProviderClient = self[provider]
         client.models = models
+        self.loaded_list_models.emit()

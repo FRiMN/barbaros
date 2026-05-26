@@ -1,6 +1,7 @@
+import json
 from collections.abc import Sequence
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot, QThread
 from any_llm import AnyLLM
 from any_llm.types.completion import ChatCompletion
 from any_llm.types.model import Model
@@ -65,11 +66,13 @@ class OCRWorker(QObject):
 
 class ListModelWorker(QObject):
     """Fetching models for provider"""
-    finished = Signal(ProviderMeta, Sequence[Model])
+    finished = Signal(ProviderMeta, str)
     error = Signal(ProviderMeta, str)
 
+    marshaling_fields = {"id", "created", "object", "owned_by"}
+
     def __init__(self, provider: ProviderClient):
-        print(f"init worker for {provider}")
+        print(f"init worker for {provider.meta.name}")
         super().__init__()
         self.provider = provider
 
@@ -78,6 +81,24 @@ class ListModelWorker(QObject):
         print(f"Fetching models for '{self.provider.meta.name}' ({self.provider.meta.provider_type})")
         try:
             models: Sequence[Model] = self.provider.client.list_models()
-            self.finished.emit(self.provider.meta, models)
+
+            # See: https://github.com/mozilla-ai/any-llm/issues/1083
+            for model in models:
+                if model.owned_by is None:
+                    model.owned_by = ""
+                model.object = "model"
+
+            marshaled_models = json.dumps([
+                m.model_dump(include=self.marshaling_fields)
+                for m in models
+            ])
+            print(f"emit finished {self.provider.meta.name=} (found {len(models)} models)")
+            self.finished.emit(self.provider.meta, marshaled_models)
         except Exception as e:
+            print(f"emit error {self.provider.meta.name=}")
             self.error.emit(self.provider.meta, str(e))
+
+    def connect_terminate(self, thread: QThread):
+        for signal in (self.finished, self.error):
+            signal.connect(self.deleteLater)
+            signal.connect(thread.quit)
