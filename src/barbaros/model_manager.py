@@ -89,7 +89,8 @@ class ModelManager(dict):
     def shutdown(self):
         """Shutdown all threads and cleanup."""
         print("ModelManager shutdown: cleaning up threads...")
-        for name in self._fetching_models_workers.keys():
+        # List on iterator, because changing dict
+        for name in list(self._fetching_models_workers.keys()):
             self.stop_fetching_models(name)
 
     def stop_fetching_models(self, provider_name: str):
