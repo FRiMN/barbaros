@@ -89,13 +89,7 @@ class MainWindow(QMainWindow):
         self.target_language_select = tls = QComboBox()
         tls.addItems(TARGET_LANGUAGES)
         tls.currentTextChanged.connect(self.save_choosed_target_language)
-        if past_language := self.settings.value("target_language"):
-            self.target_language_select.setCurrentIndex(
-                TARGET_LANGUAGES.index(past_language)
-            )
-        else:
-            print("set default language")
-            self.target_language_select.setCurrentIndex(0)
+        self.restore_target_language()
 
         self.model = ProviderModelComboBox()
         self.model.setSizePolicy(
@@ -103,16 +97,28 @@ class MainWindow(QMainWindow):
         )
         self.model.setModelManager(self.model_manager)
         self.model.selectionChanged.connect(self.save_choosed_model)
+        self.restore_model()
 
-        # Restore past model selection
+        for f in self.features:
+            f.set_widgets()
+
+    def restore_target_language(self):
+        """Restore target language from settings"""
+        tls = self.target_language_select
+
+        if past_language := self.settings.value("target_language"):
+            tls.setCurrentIndex(TARGET_LANGUAGES.index(past_language))
+        else:
+            print("set default language")
+            tls.setCurrentIndex(0)
+
+    def restore_model(self):
+        """Restore model from settings"""
         if past_selection := self.settings.value("model"):
             if isinstance(past_selection, ModelSelection) and self.model.has_item(past_selection):
                 self.model.on_selection_changed(past_selection)
             else:
                 self.model.on_selection_changed(self.model.get_first_item())
-
-        for f in self.features:
-            f.set_widgets()
 
     def handle_clear_button(self):
         for f in self.features:
