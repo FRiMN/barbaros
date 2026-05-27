@@ -11,7 +11,6 @@ from any_llm.types.model import Model
 from any_llm.exceptions import AnyLLMError
 from psygnal import Signal
 from PySide6.QtCore import QThread
-from PySide6.QtWidgets import QMessageBox
 
 from barbaros.security import KeySecurityManager
 
@@ -138,18 +137,11 @@ class ModelManager(dict):
             self._fetching_models_workers.pop(provider_name)
 
     def _on_fetching_error(self, provider: ProviderMeta, error_msg: str):
-        print("on fetching error")
-        # QMessageBox.critical(self.parent, f"Error on fetching models for `{provider.name}` ({provider.provider_type})", error_msg)
         self.error.emit(f"Error on fetching models for `{provider.name}` ({provider.provider_type}): {error_msg}")
 
     def _on_fetching_finished(self, provider: ProviderMeta, marshaled_models: str):
-        print("on fetching finished")
-        # print(f"{marshaled_models=}")
         models = json.loads(marshaled_models)
-        # with open(f"./tdata_{provider.name}.json", "t+w") as f:
-        #     print(f"{models=}", file=f)
         models = [Model.model_validate(m) for m in models]
-        print(f"{models=}")
         self.set_models(provider, models)
 
     def set_models(self, provider: ProviderMeta, models: Sequence[Model]):
