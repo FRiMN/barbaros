@@ -1,31 +1,46 @@
-import re
-
-from ollama import GenerateResponse
-
 from PySide6.QtWidgets import (
-    QMainWindow, QVBoxLayout, QWidget, QPushButton, QComboBox, QHBoxLayout, QLabel, QSizePolicy
+    QMainWindow,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QPushButton,
+    QComboBox,
+    QMessageBox,
+    QTabWidget, QLabel, QSizePolicy,
 )
-from PySide6.QtCore import QThread
-from PySide6.QtGui import QFont, QCloseEvent
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QStyle
 
-from .workers import TranslationWorker
-from .widgets.filterable_combobox import FilterableComboBox
-from .widgets.progress_label import GradientRainbowLabel
-from .widgets.custom_text_edit import CustomTextEdit
-from .common import SettingsProxy
+from .features.ocr import OCRFeature
+from .features.text import TextFeature
+from .features.settings import SettingsFeature
+from .features.base import AbstractFeature
+from .common import SettingsProxy, TARGET_LANGUAGES
+from .model_manager import ModelManager, default_providers
+from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 
-
-TARGET_LANGUAGES = ["ru", "en", "fr", "de", "es", "it", "pt", "ja", "ko", "zh", "ar", "hi", "ua"]
 
 
 class MainWindow(QMainWindow):
     settings_key_prefix = "main_window"
+    settings_llm_providers_key = "llm_providers"
 
     def __init__(self, *args, app, **kwargs):
         super().__init__(*args, **kwargs)
         self.app = app
         self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
+
+        self.model_manager = ModelManager()
+        self.model_manager.error.connect(self._show_provider_error)
+        past_providers = self.settings.value(self.settings_llm_providers_key, default=default_providers)
+        for provider in past_providers:
+            self.model_manager.add(provider, error_callback=self._show_provider_error)
+
+        self.features: list[AbstractFeature] = [
+            TextFeature(self),
+            OCRFeature(self),
+            SettingsFeature(self)
+        ]
 
         if past_geometry := self.settings.value("geometry"):
             self.restoreGeometry(past_geometry)
@@ -39,142 +54,100 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(main_widget)
 
+    def _show_provider_error(self, msg: str):
+        print("qqq")
+        print(msg)
+        QMessageBox.warning(self, "Provider Error", msg)
+
     def closeEvent(self, event: QCloseEvent):
         self.settings.setValue("geometry", self.saveGeometry())
         event.accept()
 
-    def save_choosed_model(self, model: str):
-        self.settings.setValue("model", model)
+    def save_choosed_model(self, selection: ModelSelection):
+        self.settings.setValue("model", selection)
 
     def save_choosed_target_language(self, lang: str):
         self.settings.setValue("target_language", lang)
 
+    def save_providers(self):
+        providers = self.model_manager.to_list()
+        if providers:
+            self.settings.setValue(self.settings_llm_providers_key, providers)
+        else:
+            # Case: Raise `TypeError: 'NoneType' object is not iterable`
+            # while load providers after `past_providers = self.settings.value`.
+            # Empty list set like `@Invalid()` in settings.
+            self.settings.remove(self.settings_llm_providers_key)
+
     def set_widgets(self):
-        from .resources_loader import Resource
-
-        self.orig_text = CustomTextEdit()
-        self.translated_text = CustomTextEdit(readOnly=True)
-        self.translated_text.hide()
-
         self.clear_button = QPushButton()
-        self.clear_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
-        self.clear_button.setToolTip("Clear textareas")
+        self.clear_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
+        )
+        self.clear_button.setToolTip("Clear widgets")
         self.clear_button.clicked.connect(self.handle_clear_button)
         clear_button_height = self.clear_button.sizeHint().height()
         self.clear_button.setMaximumWidth(clear_button_height)
 
-        self.translate_button = QPushButton()
-        self.translate_button.setText("Translate")
-        self.translate_button.clicked.connect(self.handle_translate_button)
-        self.translate_button.setShortcut("Ctrl+Return")
-
         self.target_language_select = tls = QComboBox()
         tls.addItems(TARGET_LANGUAGES)
         tls.currentTextChanged.connect(self.save_choosed_target_language)
+        self.restore_target_language()
+
+        self.model = ProviderModelComboBox()
+        self.model.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        self.model.setModelManager(self.model_manager)
+        self.model.selectionChanged.connect(self.save_choosed_model)
+        self.restore_model()
+
+        for f in self.features:
+            f.set_widgets()
+
+    def restore_target_language(self):
+        """Restore target language from settings"""
+        tls = self.target_language_select
+
         if past_language := self.settings.value("target_language"):
-            self.target_language_select.setCurrentIndex(TARGET_LANGUAGES.index(past_language))
+            tls.setCurrentIndex(TARGET_LANGUAGES.index(past_language))
         else:
             print("set default language")
-            self.target_language_select.setCurrentIndex(0)
+            tls.setCurrentIndex(0)
 
-        self.model = FilterableComboBox(self)
-        self.model.selectionChanged.connect(self.save_choosed_model)
-        self.model.addItems(Resource.ollama_models.value)
-        if past_model := self.settings.value("model"):
-            self.model.on_selection_changed(past_model)
-        else:
-            print("set default model")
-            self.model.on_selection_changed(self.model.items[0])
-
-        self.stats = QLabel("")
-        font = QFont()
-        font.setPointSize(8)
-        self.stats.setFont(font)
-
-        self.progressbar = GradientRainbowLabel("Translating...")
-        self.progressbar.hide()
+    def restore_model(self):
+        """Restore model from settings"""
+        if past_selection := self.settings.value("model"):
+            if isinstance(past_selection, ModelSelection) and self.model.has_item(past_selection):
+                self.model.on_selection_changed(past_selection)
+            else:
+                self.model.on_selection_changed(self.model.get_first_item())
 
     def handle_clear_button(self):
-        self.orig_text.clear()
-        self.translated_text.clear()
+        for f in self.features:
+            f.handle_clear_button()
 
     def build_layout(self) -> QVBoxLayout:
         self.set_widgets()
 
-        select_panel = QHBoxLayout()
-        select_panel.addWidget(self.model)
-        self.model.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        select_panel.addWidget(self.clear_button)
-        select_panel.addWidget(QLabel("Target:"))
-        select_panel.addWidget(self.target_language_select)
+        tab_widget = QTabWidget()
 
-        layout = QVBoxLayout()
-        layout.addLayout(select_panel)
-        layout.addWidget(self.orig_text)
-        layout.addWidget(self.translate_button)
-        layout.addWidget(self.progressbar)
-        layout.addWidget(self.translated_text)
-        layout.addWidget(self.stats)
+        for f in self.features:
+            tab = QWidget()
+            layout = f.build_layout()
+            tab.setLayout(layout)
+            tab_widget.addTab(tab, f.tab_name)
 
-        return layout
+        main_layout = QVBoxLayout()
+        
+        top_panel = QHBoxLayout()
+        top_panel.addWidget(self.model)
+        top_panel.addStretch()
+        top_panel.addWidget(self.clear_button)
+        top_panel.addWidget(QLabel("Target:"))
+        top_panel.addWidget(self.target_language_select)
 
-    def _threated_translate(self, text_to_translate: str):
-        # Run translation in a separate thread
-        self.translation_thread = QThread(parent=self)
-        self.worker = TranslationWorker(
-            text_to_translate,
-            self.target_language_select.currentText(),
-            self.model.selected_item
-        )
-        self.worker.moveToThread(self.translation_thread)
+        main_layout.addLayout(top_panel)
+        main_layout.addWidget(tab_widget)
 
-        self.worker.finished.connect(self.on_translation_finished)
-        self.worker.finished.connect(self.translation_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.translation_thread.finished.connect(self.translation_thread.deleteLater)
-        self.translation_thread.started.connect(self.worker.run)
-
-        self.translation_thread.start()
-
-    def translate(self):
-        text_to_translate = self.orig_text.toPlainText().strip()
-
-        self.translated_text.clear()
-        self.stats.clear()
-
-        if not text_to_translate:
-            return
-
-        self.translate_button.setDisabled(True)
-        self.translate_button.hide()
-        self.progressbar.show()
-        self.progressbar.start_animation()
-        self.translated_text.hide()
-
-        self._threated_translate(text_to_translate)
-
-    def pop_think(self, text: str) -> tuple[str, str]:
-        m = re.search(r'<think>.*?<\/think>', text, re.MULTILINE | re.DOTALL)
-        if m:
-            think_text = m.group(0)
-            text = text[len(think_text):]
-            return think_text, text.strip()
-        return '', text
-
-    def on_translation_finished(self, resp: GenerateResponse):
-        self.progressbar.hide()
-        translated_text = resp.response
-        _, translated_text = self.pop_think(translated_text)
-        translated_text = translated_text.strip()
-        self.translated_text.setText(translated_text)
-        self.translated_text.show()
-        self.translate_button.setDisabled(False)
-        self.translate_button.show()
-
-        eval_secs = resp.eval_duration // 1000 / 1000 / 1000
-        load_secs = resp.load_duration // 1000 / 1000 / 1000
-        eval_speed = resp.eval_count / eval_secs
-        self.stats.setText(f"Eval: {eval_secs:.2f}s; Load: {load_secs:.2f}s; {eval_speed:.2f} tokens/s")
-
-    def handle_translate_button(self):
-        self.translate()
+        return main_layout
