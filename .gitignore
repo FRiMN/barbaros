@@ -9,4 +9,6 @@ dist/
 .continue/
 .ropeproject/
 .obsidian/
+.idea
+.pi
 AI_AGENT_INFO.md

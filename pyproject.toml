@@ -8,19 +8,21 @@ readme = "README.md"
 authors = [{ name = "Nik Volkov", email = "freezemandix@ya.ru" }]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic = ["version"]
-dependencies = ["ollama", "pyside6", "psutil"]
-
-# [project.scripts]
-# barbaros = "barbaros.main:main"
-# pyside6-genpyi = "pyside6-genpyi –feature='snake_case'"
+dependencies = [
+    "pyside6",
+    "psutil",
+    "any-llm-sdk[all]",
+    "keyring>=25.7.0",
+    "psygnal>=0.15.1",
+]
 
 [project.gui-scripts]
 barbaros = "barbaros.main:main"
 
 [project.optional-dependencies]
-dev = ["ruff"]
+dev = ["ruff", "pytest"]
 
 [project.urls]
 Homepage = "https://github.com/FRiMN/barbaros"
@@ -36,3 +38,7 @@ write_to = "src/barbaros/__version__.py"
 [tool.setuptools.data-files]
 "share/applications" = ["flatpak/io.github.frimn.barbaros.desktop"]
 "share/icons/hicolor/256x256/apps" = ["src/barbaros/resources/icons/icon3.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

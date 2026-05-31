@@ -1,11 +1,18 @@
-import ollama
+import base64
+
+from ollama import Client, GenerateResponse
 
 """
+DEPRECATED
+
 Interrupt inference: <https://github.com/ollama/ollama/issues/9813>.
 """
 
 
-def translate_text(text: str, target_language: str, model: str) -> ollama.GenerateResponse:
+client = Client("http://192.168.1.10:11434")
+
+
+def translate_text(text: str, target_language: str, model: str) -> GenerateResponse:
     from .resources_loader import Resource
 
     system_prompt = Resource.translation_agent_system_prompt.value
@@ -15,18 +22,28 @@ def translate_text(text: str, target_language: str, model: str) -> ollama.Genera
     Text: {text}
     """
 
-    # response = ollama.chat(model=model, messages=[
-    #     {
-    #         'role': 'system',
-    #         'content': system_prompt,
-    #     },
-    #     {
-    #         'role': 'user',
-    #         'content': text_prompt,
-    #     },
-    # ])
-    response = ollama.generate(model=model, system=system_prompt, prompt=text_prompt, think=False)
-    return response
+    try:
+        response = client.generate(
+            model=model, system=system_prompt, prompt=text_prompt, think=False
+        )
+        return response
+    except Exception as e:
+        raise RuntimeError(f"Translation failed: {e}")
+
+
+def ocr_image(image_bytes: bytes, model: str) -> str:
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+    try:
+        response = client.generate(
+            model=model,
+            images=[base64_image],
+            prompt="Extract the text in the image.",
+            think=False,
+        )
+        return response.response
+    except Exception as e:
+        raise RuntimeError(f"OCR failed: {e}")
 
 
 if __name__ == "__main__":
