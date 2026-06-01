@@ -49,6 +49,9 @@ class MainWindow(QMainWindow):
 
         self.layout = self.build_layout()
 
+        self.model_manager.worker_started.connect(self._on_update_fetching_workers)
+        self.model_manager.worker_finished.connect(self._on_update_fetching_workers)
+
         main_widget = QWidget()
         main_widget.setLayout(self.layout)
 
@@ -100,8 +103,27 @@ class MainWindow(QMainWindow):
         self.model.selectionChanged.connect(self.save_choosed_model)
         self.restore_model()
 
+        self.fetching_workers_label = QLabel()
+        self.fetching_workers_label.hide()
+
         for f in self.features:
             f.set_widgets()
+        
+    def update_fetching_workers(self, workers: list[str]):
+        """Update the fetching workers label with the current count of workers in self.model_manager"""
+        count = len(workers)
+        l = self.fetching_workers_label
+        if count:
+            l.setText(f"Active {count} fetching models")
+            l.setToolTip(f"Fetching models for providers: {', '.join(workers)}")
+            l.show()
+        else:
+            l.setText("")
+            l.setToolTip("")
+            l.hide()
+
+    def _on_update_fetching_workers(self, *args, **kwargs):
+        self.update_fetching_workers(self.model_manager.fetching_models_active_workers)
 
     def restore_target_language(self):
         """Restore target language from settings"""
@@ -147,5 +169,6 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(top_panel)
         main_layout.addWidget(tab_widget)
+        main_layout.addWidget(self.fetching_workers_label)
 
         return main_layout

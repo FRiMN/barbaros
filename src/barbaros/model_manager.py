@@ -44,6 +44,8 @@ class ModelManager(dict):
     added = Signal(ProviderMeta)
     removed = Signal(str)
     loaded_list_models = Signal()
+    worker_started = Signal()
+    worker_finished = Signal()
     error = Signal(str)
 
     _fetching_models_workers: dict[str, tuple[ListModelWorker, QThread]]    # Key: provider name
@@ -51,6 +53,10 @@ class ModelManager(dict):
     def __init__(self):
         super().__init__()
         self._fetching_models_workers = {}
+
+    @property
+    def fetching_models_active_workers(self) -> list[str]:
+        return [k for k, (w, t) in self._fetching_models_workers.items() if not t.isFinished()]
 
     def add(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
         error_callback = error_callback or print
@@ -126,6 +132,9 @@ class ModelManager(dict):
         worker.finished.connect(self._on_fetching_finished)
         worker.error.connect(self._on_fetching_error)
         thread.destroyed.connect(partial(self._remove_worker, provider.meta.name))
+
+        thread.started.connect(self.worker_started)
+        worker.finished.connect(self.worker_finished)
 
         self._fetching_models_workers[provider.meta.name] = (worker, thread)
 
