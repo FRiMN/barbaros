@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QLabel, QSizePolicy,
 )
 from PySide6.QtCore import QThread, QBuffer, QIODevice
+from any_llm.types.completion import ChatCompletion, Choice
 
 from barbaros.features.base import AbstractFeature
 from barbaros.widgets.image_manager import ImageManagerWidget
@@ -160,10 +161,13 @@ class OCRFeature(AbstractFeature):
         translation_thread = QThread(parent=self)
         translation_thread.finished.connect(translation_thread.deleteLater)
 
+        selected_item = self.parent.model.selected_item
+        client = self.parent.model_manager[selected_item.provider].client
         self.translation_worker = TranslationWorker(
             text_to_translate,
             self.parent.target_language_select.currentText(),
-            self.parent.model.selected_item,
+            selected_item,
+            client
         )
         self.translation_worker.moveToThread(translation_thread)
 
@@ -175,9 +179,12 @@ class OCRFeature(AbstractFeature):
 
         translation_thread.start()
 
-    def on_translation_finished(self, resp):
+    def on_translation_finished(self, resp: ChatCompletion):
         self.progressbar.hide()
-        self.translated_text.setText(resp.response)
+        r: Choice = resp.choices[0]
+        translated_text = r.message.content
+        translated_text = translated_text.strip()
+        self.translated_text.setText(translated_text)
         self.translate_button.setDisabled(False)
 
     def on_translation_error(self, error_msg: str):

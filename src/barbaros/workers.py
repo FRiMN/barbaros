@@ -55,8 +55,9 @@ class OCRWorker(QObject):
     @Slot()
     def run(self):
         print("OCR worker started")
+        # System prompt: "Extract the text in the image."
         try:
-            ocr_text = ocr_image(self.image_bytes, self.model)
+            ocr_text = ocr_image(self.image_bytes, self.model.model)
             self.finished.emit(ocr_text)
         except Exception as e:
             self.error.emit(str(e))
