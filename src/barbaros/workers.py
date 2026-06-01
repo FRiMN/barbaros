@@ -31,8 +31,6 @@ class TranslationWorker(QObject):
         """Run in thread."""
         from .resources_loader import Resource
 
-        print("in thread")
-
         try:
             messages = [
                 {"role": "system", "content": Resource.translation_agent_system_prompt.value},
@@ -72,7 +70,6 @@ class ListModelWorker(QObject):
     marshaling_fields = {"id", "created", "object", "owned_by"}
 
     def __init__(self, provider: ProviderClient):
-        print(f"init worker for {provider.meta.name}")
         super().__init__()
         self.provider = provider
 

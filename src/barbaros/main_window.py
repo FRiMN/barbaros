@@ -55,8 +55,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
 
     def _show_provider_error(self, msg: str):
-        print("qqq")
-        print(msg)
         QMessageBox.warning(self, "Provider Error", msg)
 
     def closeEvent(self, event: QCloseEvent):

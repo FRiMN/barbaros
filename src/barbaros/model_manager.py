@@ -145,7 +145,6 @@ class ModelManager(dict):
         self.set_models(provider, models)
 
     def set_models(self, provider: ProviderMeta, models: Sequence[Model]):
-        print("set models")
         client: ProviderClient = self[provider]
         client.models = models
         self.loaded_list_models.emit()

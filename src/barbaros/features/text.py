@@ -82,7 +82,6 @@ class TextFeature(AbstractFeature):
         # Run translation in a separate thread
         from barbaros.main_window import MainWindow
 
-        print("thread")
         self.parent: MainWindow
         translation_thread = QThread(parent=self)
         translation_thread.finished.connect(translation_thread.deleteLater)
@@ -93,7 +92,6 @@ class TextFeature(AbstractFeature):
         self.worker = TranslationWorker(
             text_to_translate, lang, selected_item, client
         )
-        print("before move")
         self.worker.moveToThread(translation_thread)
 
         self.worker.finished.connect(self.on_translation_finished)
@@ -102,7 +100,6 @@ class TextFeature(AbstractFeature):
         self.worker.error.connect(self.on_translation_error)
         translation_thread.started.connect(self.worker.run)
 
-        print("before start")
         translation_thread.start()
 
     def pop_think(self, text: str) -> tuple[str, str]:
