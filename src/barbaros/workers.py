@@ -1,3 +1,4 @@
+import base64
 import json
 from collections.abc import Sequence
 
@@ -44,21 +45,35 @@ class TranslationWorker(QObject):
 
 
 class OCRWorker(QObject):
-    finished = Signal(str)
+    finished = Signal(ChatCompletion)
     error = Signal(str)
 
-    def __init__(self, image_bytes: bytes, model: ModelSelection):
+    def __init__(self, image_bytes: bytes, model: ModelSelection, client: AnyLLM):
         super().__init__()
         self.image_bytes = image_bytes
         self.model = model
+        self.client = client
 
     @Slot()
     def run(self):
-        print("OCR worker started")
-        # System prompt: "Extract the text in the image."
+        if not self.client.SUPPORTS_COMPLETION_IMAGE:
+            self.error.emit(f"Provider '{self.model.provider}' ({self.client.PROVIDER_NAME}) not supports images")
+
         try:
-            ocr_text = ocr_image(self.image_bytes, self.model.model)
-            self.finished.emit(ocr_text)
+            base64_img = base64.b64encode(self.image_bytes).decode('utf-8')
+            msg = [
+                {"type": "text", "text": "Extract the text in the image."},
+                {"type": "image_url", "image_url": {
+                    "url": f"data:image/png;base64,{base64_img}"
+                }}
+            ]
+
+            messages = [
+                {"role": "user", "content": msg}
+            ]
+            resp: ChatCompletion = self.client.completion(self.model.model, messages)
+
+            self.finished.emit(resp)
         except Exception as e:
             self.error.emit(str(e))
 

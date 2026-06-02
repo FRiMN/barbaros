@@ -119,9 +119,13 @@ class OCRFeature(AbstractFeature):
         ocr_thread = QThread(parent=self)
         ocr_thread.finished.connect(ocr_thread.deleteLater)
 
+        selected_item = self.parent.model.selected_item
+        client = self.parent.model_manager[selected_item.provider].client
+
         self.worker = OCRWorker(
             image_bytes,
             self.ocr_model_select.selected_item,
+            client
         )
         self.worker.moveToThread(ocr_thread)
 
@@ -133,8 +137,10 @@ class OCRFeature(AbstractFeature):
 
         ocr_thread.start()
 
-    def on_ocr_finished(self, ocr_text: str):
+    def on_ocr_finished(self, resp: ChatCompletion):
         self.progressbar.hide()
+        r: Choice = resp.choices[0]
+        ocr_text = r.message.content
         self.ocr_text.setText(ocr_text)
         self.translate_button.setDisabled(False)
         self.ocr_button.setDisabled(False)
