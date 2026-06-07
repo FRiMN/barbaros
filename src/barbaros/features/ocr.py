@@ -13,7 +13,7 @@ from barbaros.features.base import AbstractFeature
 from barbaros.widgets.image_manager import ImageManagerWidget
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.progress_label import GradientRainbowLabel
-from barbaros.widgets.filterable_combobox import FilterableComboBox, ProviderModelComboBox, ModelSelection
+from barbaros.widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 from barbaros.workers import OCRWorker, TranslationWorker
 
 

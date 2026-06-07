@@ -8,7 +8,6 @@ from any_llm.types.completion import ChatCompletion
 from any_llm.types.model import Model
 
 from .model_manager import ProviderClient, ProviderMeta
-from .translator import translate_text, ocr_image
 from .widgets.filterable_combobox import ModelSelection
 
 

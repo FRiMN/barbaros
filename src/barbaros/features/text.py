@@ -39,8 +39,6 @@ class TextFeature(AbstractFeature):
         return l
 
     def set_widgets(self):
-        from ..resources_loader import Resource
-
         self.orig_text = CustomTextEdit()
         self.translated_text = CustomTextEdit(readOnly=True)
         self.translated_text.hide()
@@ -122,8 +120,6 @@ class TextFeature(AbstractFeature):
         self.translate_button.setDisabled(False)
         self.translate_button.show()
 
-        # eval_secs = resp.eval_duration // 1000 / 1000 / 1000
-        # load_secs = resp.load_duration // 1000 / 1000 / 1000
         ended = time.time()
         eval_secs = ended - resp.created
         eval_speed = resp.usage.total_tokens / eval_secs
