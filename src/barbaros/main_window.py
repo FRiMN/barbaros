@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
         for provider in past_providers:
             self.model_manager.add(provider, error_callback=self._show_provider_error)
 
+        # Feature Tabs
         self.features: list[AbstractFeature] = [
             TextFeature(self),
             OCRFeature(self),

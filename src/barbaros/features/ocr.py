@@ -74,7 +74,9 @@ class OCRFeature(AbstractFeature):
         self.ocr_model_select.setModelManager(self.parent.model_manager)
         self.ocr_model_select.selectionChanged.connect(self.save_choosed_ocr_model)
 
-        # Restore past model selection
+        self._restore_past_model_selection()
+
+    def _restore_past_model_selection(self):
         if past_selection := self.settings.value("model"):
             if isinstance(past_selection, ModelSelection) and self.ocr_model_select.has_item(past_selection):
                 self.ocr_model_select.on_selection_changed(past_selection)
