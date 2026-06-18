@@ -8,9 +8,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFileDialog,
     QDialog,
-    QSizePolicy,
 )
-from PySide6.QtCore import Qt, QRect, Signal
+from PySide6.QtCore import Qt, QRect, Signal, QBuffer, QIODevice
 from PySide6.QtGui import QImage, QScreen
 
 from barbaros.widgets.image_crop import CropPreviewWidget, CropDialog
@@ -76,6 +75,20 @@ class ImageManagerWidget(QWidget):
     def get_cropped_image(self) -> QImage | None:
         """Get the cropped image"""
         return self._cropped_image
+
+    def get_cropped_image_bytes(self) -> bytes | None:
+        """Get only the cropped image bytes for PNG. Do convert image to PNG."""
+        cropped_image = self.get_cropped_image()
+        if not cropped_image:
+            return None
+
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        cropped_image.save(buffer, "PNG")   # Save image in buffer
+        image_bytes = bytes(buffer.data())
+        buffer.close()
+
+        return image_bytes
 
     def get_crop_rect(self) -> QRect | None:
         """Get the crop rectangle"""

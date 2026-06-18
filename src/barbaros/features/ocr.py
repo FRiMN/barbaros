@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QLabel, QSizePolicy,
 )
-from PySide6.QtCore import QThread, QBuffer, QIODevice
+from PySide6.QtCore import QThread
 from any_llm.types.completion import ChatCompletion, Choice
 
 from barbaros.features.base import AbstractFeature
@@ -110,19 +110,12 @@ class OCRFeature(AbstractFeature):
         self._threaded_ocr()
 
     def _threaded_ocr(self):
-        cropped_image = self.image_manager.get_cropped_image()
-
-        buffer = QBuffer()
-        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        cropped_image.save(buffer, "PNG")
-        image_bytes = bytes(buffer.data())
-        buffer.close()
-
         ocr_thread = QThread(parent=self)
         ocr_thread.finished.connect(ocr_thread.deleteLater)
 
         selected_item = self.parent.model.selected_item
         client = self.parent.model_manager[selected_item.provider].client
+        image_bytes = self.image_manager.get_cropped_image_bytes()
 
         self.worker = OCRWorker(
             image_bytes,
