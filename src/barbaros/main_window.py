@@ -139,10 +139,10 @@ class MainWindow(QMainWindow):
     def restore_model(self):
         """Restore model from settings"""
         if past_selection := self.settings.value("model"):
-            if isinstance(past_selection, ModelSelection) and self.model.has_item(past_selection):
+            if isinstance(past_selection, ModelSelection):
                 self.model.on_selection_changed(past_selection)
             else:
-                self.model.on_selection_changed(self.model.get_first_item())
+                print("Saved model in wrong format: ignore")
 
     def handle_clear_button(self):
         for f in self.features:

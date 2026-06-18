@@ -78,10 +78,10 @@ class OCRFeature(AbstractFeature):
 
     def _restore_past_model_selection(self):
         if past_selection := self.settings.value("model"):
-            if isinstance(past_selection, ModelSelection) and self.ocr_model_select.has_item(past_selection):
+            if isinstance(past_selection, ModelSelection):
                 self.ocr_model_select.on_selection_changed(past_selection)
             else:
-                self.ocr_model_select.on_selection_changed(self.ocr_model_select.get_first_item())
+                print("Saved OCR model in wrong format: ignore")
 
     def save_choosed_ocr_model(self, model: str):
         self.settings.setValue("model", model)
