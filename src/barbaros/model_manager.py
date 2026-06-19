@@ -122,6 +122,9 @@ class ModelManager(dict):
         self.stop_fetching_models(provider.meta.name)
 
         thread = QThread()
+        thread.setPriority(QThread.Priority.LowPriority)
+        thread.setServiceLevel(QThread.QualityOfService.Eco)
+
         thread.finished.connect(thread.deleteLater)
 
         worker = ListModelWorker(provider)
