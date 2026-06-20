@@ -69,16 +69,7 @@ class ModelManager(dict):
     def fetching_models_active_workers(self) -> list[str]:
         return [k for k, (w, t) in self._fetching_models_workers.items() if not t.isFinished()]
 
-    def add(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
-        error_callback = error_callback or print
-
-        try:
-            client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
-        except AnyLLMError as e:
-            msg = f"Error for provider {provider.name} ({provider.provider_type}): {e}"
-            error_callback(msg)
-            return
-
+    def add(self, provider: ProviderMeta):
         v = ProviderClient(meta=provider, models=[])
         super().__setitem__(provider.name, v)
 
@@ -91,9 +82,9 @@ class ModelManager(dict):
         super().pop(name, None)
         self.removed.emit(name)
 
-    def update(self, provider: ProviderMeta, timeout: int = 3, error_callback=None):
+    def update(self, provider: ProviderMeta):
         self.remove(provider.name)
-        self.add(provider, timeout, error_callback)
+        self.add(provider)
 
     def __getitem__(self, item: ProviderMeta | str) -> ProviderClient:
         name = item if isinstance(item, str) else item.name

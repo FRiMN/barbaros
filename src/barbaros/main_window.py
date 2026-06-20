@@ -34,7 +34,7 @@ class MainWindow(QMainWindow):
         self.model_manager.error.connect(self._show_provider_error)
         past_providers = self.settings.value(self.settings_llm_providers_key, default=default_providers)
         for provider in past_providers:
-            self.model_manager.add(provider, error_callback=self._show_provider_error)
+            self.model_manager.add(provider)
 
         # Feature Tabs
         self.features: list[AbstractFeature] = [
