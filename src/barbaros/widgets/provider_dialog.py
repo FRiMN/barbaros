@@ -196,14 +196,11 @@ class ProviderDialog(QDialog):
 
                 provider.provider_type = LLMProvider.from_string(provider.provider_type)
                 if is_new:
-                    self.model_manager.add(provider, error_callback=self._show_error)
+                    self.model_manager.add(provider)
                 else:
-                    self.model_manager.update(provider, error_callback=self._show_error)
+                    self.model_manager.update(provider)
                 self._populate_table()
                 self._save()
-
-    def _show_error(self, msg: str):
-        QMessageBox.critical(self, "Provider Error", msg)
 
     def _delete_provider(self):
         row = self.table.currentRow()
