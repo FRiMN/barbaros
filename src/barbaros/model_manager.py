@@ -31,8 +31,19 @@ class ProviderMeta:
 @dataclass
 class ProviderClient:
     meta: ProviderMeta
-    client: AnyLLM
     models: Sequence[Model]
+
+    def client(self):
+        """
+        AnyLLM client.
+
+        httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
+        между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
+        При попытке использовать клиент повторно из другого экземпляра воркера (треда Qt)
+        происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
+        а не переиспользуем ProviderClient.client.
+        """
+        return AnyLLM.create(self.meta.provider_type, self.meta.api_key_manager.get(), self.meta.api_base)
 
 
 default_providers = [
@@ -68,7 +79,7 @@ class ModelManager(dict):
             error_callback(msg)
             return
 
-        v = ProviderClient(meta=provider, client=client, models=[])
+        v = ProviderClient(meta=provider, models=[])
         super().__setitem__(provider.name, v)
 
         print(f"start fetch models list for {provider.name}")
@@ -127,7 +138,7 @@ class ModelManager(dict):
 
         thread.finished.connect(thread.deleteLater)
 
-        worker = ListModelWorker(provider.meta)
+        worker = ListModelWorker(provider)
         worker.moveToThread(thread)
         worker.connect_terminate(thread)
         thread.started.connect(worker.run)

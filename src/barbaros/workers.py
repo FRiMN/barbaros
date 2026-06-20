@@ -15,7 +15,7 @@ class TranslationWorker(QObject):
     finished = Signal(ChatCompletion)
     error = Signal(str)
 
-    def __init__(self, text_to_translate: str, target_language: str, model: ModelSelection, provider: ProviderMeta):
+    def __init__(self, text_to_translate: str, target_language: str, model: ModelSelection, provider: ProviderClient):
         super().__init__()
         self.text_to_translate = text_to_translate
         self.target_language = target_language
@@ -24,13 +24,7 @@ class TranslationWorker(QObject):
         Target Language: {target_language}
         Text: {text_to_translate}
         """
-
-        # httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
-        # между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
-        # При попытке использовать клиент повторно из другого экземпляра воркера (треда)
-        # происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
-        # а не переиспользуем ProviderClient.client.
-        self.client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
+        self.client = provider.client()
 
     @Slot()
     def run(self):
@@ -53,17 +47,11 @@ class OCRWorker(QObject):
     finished = Signal(ChatCompletion)
     error = Signal(str)
 
-    def __init__(self, image_bytes: bytes, model: ModelSelection, provider: ProviderMeta):
+    def __init__(self, image_bytes: bytes, model: ModelSelection, provider: ProviderClient):
         super().__init__()
         self.image_bytes = image_bytes
         self.model = model
-
-        # httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
-        # между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
-        # При попытке использовать клиент повторно из другого экземпляра воркера (треда)
-        # происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
-        # а не переиспользуем ProviderClient.client.
-        self.client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
+        self.client = provider.client()
 
     @Slot()
     def run(self):
@@ -96,16 +84,10 @@ class ListModelWorker(QObject):
 
     marshaling_fields = {"id", "created", "object", "owned_by"}
 
-    def __init__(self, provider: ProviderMeta):
+    def __init__(self, provider: ProviderClient):
         super().__init__()
-        self.provider = provider
-
-        # httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
-        # между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
-        # При попытке использовать клиент повторно из другого экземпляра воркера (треда)
-        # происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
-        # а не переиспользуем ProviderClient.client.
-        self.client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
+        self.provider = provider.meta
+        self.client = provider.client()
 
     @Slot()
     def run(self):
