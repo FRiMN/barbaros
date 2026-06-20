@@ -127,7 +127,7 @@ class ModelManager(dict):
 
         thread.finished.connect(thread.deleteLater)
 
-        worker = ListModelWorker(provider)
+        worker = ListModelWorker(provider.meta)
         worker.moveToThread(thread)
         worker.connect_terminate(thread)
         thread.started.connect(worker.run)

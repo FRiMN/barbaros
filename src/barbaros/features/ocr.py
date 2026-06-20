@@ -114,13 +114,13 @@ class OCRFeature(AbstractFeature):
         ocr_thread.finished.connect(ocr_thread.deleteLater)
 
         selected_item = self.parent.model.selected_item
-        client = self.parent.model_manager[selected_item.provider].client
+        provider = self.parent.model_manager[selected_item.provider].meta
         image_bytes = self.image_manager.get_cropped_image_bytes()
 
         self.worker = OCRWorker(
             image_bytes,
             self.ocr_model_select.selected_item,
-            client
+            provider
         )
         self.worker.moveToThread(ocr_thread)
 
@@ -163,12 +163,12 @@ class OCRFeature(AbstractFeature):
         translation_thread.finished.connect(translation_thread.deleteLater)
 
         selected_item = self.parent.model.selected_item
-        client = self.parent.model_manager[selected_item.provider].client
+        provider = self.parent.model_manager[selected_item.provider].meta
         self.translation_worker = TranslationWorker(
             text_to_translate,
             self.parent.target_language_select.currentText(),
             selected_item,
-            client
+            provider
         )
         self.translation_worker.moveToThread(translation_thread)
 

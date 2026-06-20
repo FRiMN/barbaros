@@ -85,10 +85,10 @@ class TextFeature(AbstractFeature):
         translation_thread.finished.connect(translation_thread.deleteLater)
 
         selected_item = self.parent.model.selected_item
-        client = self.parent.model_manager[selected_item.provider].client
+        provider = self.parent.model_manager[selected_item.provider].meta
         lang = self.parent.target_language_select.currentText(),
         self.worker = TranslationWorker(
-            text_to_translate, lang, selected_item, client
+            text_to_translate, lang, selected_item, provider
         )
         self.worker.moveToThread(translation_thread)
 

@@ -15,16 +15,22 @@ class TranslationWorker(QObject):
     finished = Signal(ChatCompletion)
     error = Signal(str)
 
-    def __init__(self, text_to_translate: str, target_language: str, model: ModelSelection, client: AnyLLM):
+    def __init__(self, text_to_translate: str, target_language: str, model: ModelSelection, provider: ProviderMeta):
         super().__init__()
         self.text_to_translate = text_to_translate
         self.target_language = target_language
         self.model = model
-        self.client = client
         self.text_prompt = f"""
         Target Language: {target_language}
         Text: {text_to_translate}
         """
+
+        # httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
+        # между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
+        # При попытке использовать клиент повторно из другого экземпляра воркера (треда)
+        # происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
+        # а не переиспользуем ProviderClient.client.
+        self.client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
 
     @Slot()
     def run(self):
@@ -47,11 +53,17 @@ class OCRWorker(QObject):
     finished = Signal(ChatCompletion)
     error = Signal(str)
 
-    def __init__(self, image_bytes: bytes, model: ModelSelection, client: AnyLLM):
+    def __init__(self, image_bytes: bytes, model: ModelSelection, provider: ProviderMeta):
         super().__init__()
         self.image_bytes = image_bytes
         self.model = model
-        self.client = client
+
+        # httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
+        # между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
+        # При попытке использовать клиент повторно из другого экземпляра воркера (треда)
+        # происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
+        # а не переиспользуем ProviderClient.client.
+        self.client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
 
     @Slot()
     def run(self):
@@ -84,15 +96,22 @@ class ListModelWorker(QObject):
 
     marshaling_fields = {"id", "created", "object", "owned_by"}
 
-    def __init__(self, provider: ProviderClient):
+    def __init__(self, provider: ProviderMeta):
         super().__init__()
         self.provider = provider
 
+        # httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
+        # между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
+        # При попытке использовать клиент повторно из другого экземпляра воркера (треда)
+        # происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
+        # а не переиспользуем ProviderClient.client.
+        self.client = AnyLLM.create(provider.provider_type, provider.api_key_manager.get(), provider.api_base)
+
     @Slot()
     def run(self):
-        print(f"Fetching models for '{self.provider.meta.name}' ({self.provider.meta.provider_type})")
+        print(f"Fetching models for '{self.provider.name}' ({self.provider.provider_type})")
         try:
-            models: Sequence[Model] = self.provider.client.list_models()
+            models: Sequence[Model] = self.client.list_models()
 
             # See: https://github.com/mozilla-ai/any-llm/issues/1083
             for model in models:
@@ -104,11 +123,11 @@ class ListModelWorker(QObject):
                 m.model_dump(include=self.marshaling_fields)
                 for m in models
             ])
-            print(f"emit finished {self.provider.meta.name=} (found {len(models)} models)")
-            self.finished.emit(self.provider.meta, marshaled_models)
+            print(f"emit finished {self.provider.name=} (found {len(models)} models)")
+            self.finished.emit(self.provider, marshaled_models)
         except Exception as e:
-            print(f"emit error {self.provider.meta.name=}")
-            self.error.emit(self.provider.meta, str(e))
+            print(f"emit error {self.provider.name=}")
+            self.error.emit(self.provider, str(e))
 
     def connect_terminate(self, thread: QThread):
         for signal in (self.finished, self.error):
