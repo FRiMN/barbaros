@@ -133,7 +133,6 @@ class ModelManager(dict):
         self.stop_fetching_models(provider.meta.name)
 
         thread = QThread()
-        thread.setPriority(QThread.Priority.LowPriority)
         thread.setServiceLevel(QThread.QualityOfService.Eco)
 
         thread.finished.connect(thread.deleteLater)
@@ -153,6 +152,7 @@ class ModelManager(dict):
         self._fetching_models_workers[provider.meta.name] = (worker, thread)
 
         thread.start()
+        thread.setPriority(QThread.Priority.LowPriority)
 
     def _remove_worker(self, provider_name: str):
         print(f"remove worker {provider_name}")
