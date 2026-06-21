@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QScrollArea, QLabel, QPushButton, QHBoxLayout, QMessageBox
+    QFrame, QVBoxLayout, QScrollArea, QLabel, QPushButton, QHBoxLayout
 )
 from PySide6.QtGui import QIcon
 
@@ -76,21 +76,23 @@ class ProvidersCard(QFrame):
                 item.widget().deleteLater()
 
         for name, provider_client in self.model_manager.items():
-            provider_client: ProviderClient
-
-            card = QFrame()
-            card.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
-            card.setLineWidth(1)
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(15, 10, 15, 10)
-
-            header_layout = self._build_header_layout(name)
-            card_layout.addLayout(header_layout)
-
-            info_layout = self._build_info_layout(provider_client)
-            card_layout.addLayout(info_layout)
-
+            card = self._build_card(name, provider_client)
             self.cards_container.insertWidget(self.cards_container.count() - 1, card)
+
+    def _build_card(self, name: str, provider_client: ProviderClient) -> QFrame:
+        card = QFrame()
+        card.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        card.setLineWidth(1)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(15, 10, 15, 10)
+
+        header_layout = self._build_header_layout(name)
+        card_layout.addLayout(header_layout)
+
+        info_layout = self._build_info_layout(provider_client)
+        card_layout.addLayout(info_layout)
+
+        return card
 
     def _build_header_layout(self, name: str) -> QHBoxLayout:
         # Header layout for name and reload button
