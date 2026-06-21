@@ -152,14 +152,12 @@ class ModelManager(dict):
         worker = ListModelWorker(provider)
         worker.moveToThread(thread)
         worker.connect_terminate(thread)
+        thread.started.connect(self._on_started_thread)
         thread.started.connect(worker.run)
 
         worker.finished.connect(self._on_fetching_finished)
         worker.error.connect(self._on_fetching_error)
         thread.destroyed.connect(partial(self._remove_worker, provider.meta.name))
-
-        thread.started.connect(self.worker_started)
-        worker.finished.connect(self.worker_finished)
 
         self._fetching_models_workers[provider.meta.name] = (worker, thread)
 
@@ -170,6 +168,10 @@ class ModelManager(dict):
         print(f"remove worker {provider_name}")
         if provider_name in self._fetching_models_workers:
             self._fetching_models_workers.pop(provider_name)
+        self.worker_finished.emit()
+
+    def _on_started_thread(self, *args, **kwargs):
+        self.worker_started.emit()
 
     def _on_fetching_error(self, provider: ProviderMeta, error_msg: str):
         self.error.emit(f"Error on fetching models for `{provider.name}` ({provider.provider_type}): {error_msg}")
