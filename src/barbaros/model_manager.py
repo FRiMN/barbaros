@@ -82,6 +82,7 @@ class ModelManager(dict):
         self.added.emit(v)
 
     def remove(self, name: str):
+        self.stop_fetching_models(name)
         super().pop(name, None)
         self.removed.emit(name)
 
