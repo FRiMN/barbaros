@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
-from any_llm.exceptions import AnyLLMError
 from psygnal import Signal
 from PySide6.QtCore import QThread
 
@@ -80,9 +79,6 @@ class ModelManager(dict):
         v = ProviderClient(meta=provider, models=[])
         super().__setitem__(provider.name, v)
 
-        print(f"start fetch models list for {provider.name}")
-        self._start_fetching_models(v)
-
         self.added.emit(v)
 
     def remove(self, name: str):
@@ -115,6 +111,7 @@ class ModelManager(dict):
             self.stop_fetching_models(name)
 
     def stop_fetching_models(self, provider_name: str):
+        print(f"Stop fetching models for '{provider_name}'")
         if provider_name not in self._fetching_models_workers:
             return
 
@@ -124,13 +121,23 @@ class ModelManager(dict):
 
         try:
             if thread.isRunning():
+                print("thread is running - terminate")
                 thread.terminate()
-                thread.wait(3000)
-
-            worker.deleteLater()
-            thread.deleteLater()
+                thread.wait()
         except RuntimeError:
             pass
+
+    def start_fetching_models(self, provider: ProviderClient | str | None = None):
+        if isinstance(provider, str):
+            provider = self[provider]
+
+        providers = [provider]
+
+        if provider is None:
+            providers = self.values()
+
+        for p in providers:
+            self._start_fetching_models(p)
 
     def _start_fetching_models(self, provider: ProviderClient):
         from barbaros.workers import ListModelWorker

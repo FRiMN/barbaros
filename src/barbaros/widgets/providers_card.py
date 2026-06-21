@@ -1,11 +1,22 @@
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QScrollArea, QLabel, QPushButton, QHBoxLayout, QLayout
-from PySide6.QtCore import Qt
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from PySide6.QtWidgets import (
+    QFrame, QVBoxLayout, QScrollArea, QLabel, QPushButton, QHBoxLayout, QMessageBox
+)
+from PySide6.QtGui import QIcon
+
 from barbaros.widgets.provider_dialog import ProviderDialog
-from barbaros.model_manager import ProviderClient
+from barbaros.model_manager import ProviderClient, ModelManager
 from barbaros.common import truncate_key
 
+if TYPE_CHECKING:
+    from barbaros.main_window import MainWindow
+
+
 class ProvidersCard(QFrame):
-    def __init__(self, model_manager, parent):
+    def __init__(self, model_manager: ModelManager, parent: MainWindow):
         super().__init__()
         self.model_manager = model_manager
         self.parent = parent
@@ -55,6 +66,9 @@ class ProvidersCard(QFrame):
         layout.addWidget(label)
         return frame
 
+    def _reload_provider_models(self, provider_name: str):
+        self.model_manager.start_fetching_models(provider_name)
+
     def refresh(self):
         while self.cards_container.count() > 1:
             item = self.cards_container.takeAt(0)
@@ -70,27 +84,49 @@ class ProvidersCard(QFrame):
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(15, 10, 15, 10)
 
-            name_label = QLabel(name)
-            name_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
-            card_layout.addWidget(name_label)
+            header_layout = self._build_header_layout(name)
+            card_layout.addLayout(header_layout)
 
-            info_layout = QHBoxLayout()
-            info_layout.setSpacing(10)
-
-            info_layout.addWidget(self._create_bordered_label(str(provider_client.meta.provider_type)))
-
-            base = provider_client.meta.api_base
-            if base:
-                info_layout.addWidget(self._create_bordered_label(self._truncate_url(base)))
-
-            key = provider_client.meta.api_key_manager.get()
-            if key:
-                info_layout.addWidget(self._create_bordered_label(truncate_key(key)))
-
-            info_layout.addStretch()
+            info_layout = self._build_info_layout(provider_client)
             card_layout.addLayout(info_layout)
 
             self.cards_container.insertWidget(self.cards_container.count() - 1, card)
+
+    def _build_header_layout(self, name: str) -> QHBoxLayout:
+        # Header layout for name and reload button
+        header_layout = QHBoxLayout()
+
+        name_label = QLabel(name)
+        name_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        header_layout.addWidget(name_label)
+
+        header_layout.addStretch()
+
+        reload_btn = QPushButton()
+        reload_btn.setIcon(QIcon.fromTheme("view-refresh", QIcon.fromTheme("reload")))
+        reload_btn.setFixedSize(24, 24)
+        reload_btn.setToolTip("Reload models")
+        reload_btn.clicked.connect(lambda checked, n=name: self._reload_provider_models(n))
+        header_layout.addWidget(reload_btn)
+
+        return header_layout
+
+    def _build_info_layout(self, provider_client: ProviderClient) -> QHBoxLayout:
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(10)
+
+        info_layout.addWidget(self._create_bordered_label(str(provider_client.meta.provider_type)))
+
+        base = provider_client.meta.api_base
+        if base:
+            info_layout.addWidget(self._create_bordered_label(self._truncate_url(base)))
+
+        key = provider_client.meta.api_key_manager.get()
+        if key:
+            info_layout.addWidget(self._create_bordered_label(truncate_key(key)))
+
+        info_layout.addStretch()
+        return info_layout
 
     def _open_provider_dialog(self):
         dialog = ProviderDialog(self.model_manager, self.parent)
