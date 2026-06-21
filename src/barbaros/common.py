@@ -1,3 +1,4 @@
+import json
 import typing
 import re
 
@@ -16,8 +17,18 @@ class SettingsProxy:
     def value(self, key: str, default=None) -> typing.Any:
         return self.settings.value(self._prefixed_key(key), default)
 
+    def valueFromJson(self, key: str, default=None):
+        v = self.settings.value(self._prefixed_key(key))
+        if v is None:
+            return default
+        return json.loads(v)
+
     def setValue(self, key: str, value):
         self.settings.setValue(self._prefixed_key(key), value)
+
+    def setValueAsJson(self, key: str, value):
+        v = json.dumps(value)
+        self.setValue(key, v)
 
     def contains(self, key: str) -> bool:
         return self.settings.contains(self._prefixed_key(key))

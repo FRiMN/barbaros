@@ -93,6 +93,13 @@ class ModelManager(dict):
     def to_list(self) -> list[ProviderMeta]:
         return [v.meta for v in self.values()]
 
+    def to_models_dict(self) -> dict[str, list[dict]]:
+        d = {}
+        for name, client in self.items():
+            models = [m.to_dict() for m in client.models]
+            d[name] = models
+        return d
+
     def shutdown(self):
         """Shutdown all threads and cleanup."""
         print("ModelManager shutdown: cleaning up threads...")
@@ -158,7 +165,7 @@ class ModelManager(dict):
         models = [Model.model_validate(m) for m in models]
         self.set_models(provider, models)
 
-    def set_models(self, provider: ProviderMeta, models: Sequence[Model]):
+    def set_models(self, provider: ProviderMeta | str, models: Sequence[Model]):
         client: ProviderClient = self[provider]
         client.models = models
         self.loaded_list_models.emit()

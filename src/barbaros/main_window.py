@@ -24,6 +24,7 @@ from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 class MainWindow(QMainWindow):
     settings_key_prefix = "main_window"
     settings_llm_providers_key = "llm_providers"
+    settings_llm_by_providers_key = "llm_by_providers"
 
     def __init__(self, *args, app, **kwargs):
         super().__init__(*args, **kwargs)
@@ -32,9 +33,12 @@ class MainWindow(QMainWindow):
 
         self.model_manager = ModelManager()
         self.model_manager.error.connect(self._show_provider_error)
+        self.model_manager.loaded_list_models.connect(self.save_models_list)
         past_providers = self.settings.value(self.settings_llm_providers_key, default=default_providers)
         for provider in past_providers:
             self.model_manager.add(provider)
+
+        self._restore_models_lists()
 
         # Feature Tabs
         self.features: list[AbstractFeature] = [
@@ -61,6 +65,14 @@ class MainWindow(QMainWindow):
     def _show_provider_error(self, msg: str):
         QMessageBox.warning(self, "Provider Error", msg)
 
+    def _restore_models_lists(self):
+        from .model_manager import Model
+
+        past_models_lists = self.settings.valueFromJson(self.settings_llm_by_providers_key)
+        for provider, models_list in past_models_lists.items():
+            models = [Model.model_validate(d) for d in models_list]
+            self.model_manager.set_models(provider, models)
+
     def closeEvent(self, event: QCloseEvent):
         self.settings.setValue("geometry", self.saveGeometry())
         event.accept()
@@ -80,6 +92,10 @@ class MainWindow(QMainWindow):
             # while load providers after `past_providers = self.settings.value`.
             # Empty list set like `@Invalid()` in settings.
             self.settings.remove(self.settings_llm_providers_key)
+
+    def save_models_list(self):
+        models = self.model_manager.to_models_dict()
+        self.settings.setValueAsJson(self.settings_llm_by_providers_key, models)
 
     def set_widgets(self):
         self.clear_button = QPushButton()
