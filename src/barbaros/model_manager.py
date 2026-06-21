@@ -52,6 +52,7 @@ default_providers = [
 
 
 class ModelManager(dict):
+    # add docs, AI!
     added = Signal(ProviderMeta)
     removed = Signal(str)
     loaded_list_models = Signal()
