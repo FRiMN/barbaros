@@ -37,11 +37,11 @@ class ProviderClient:
         """
         AnyLLM client.
 
-        httpx.AsyncClient внутри ProviderClient.client (AnyLLM) сохраняет состояние (пул соединений)
-        между вызовами в одном и том же потоке, а цикл событий (event loop) удаляется при выходе из asyncio.run().
-        При попытке использовать клиент повторно из другого экземпляра воркера (треда Qt)
-        происходит обращение к уже закрытому event loop. Потому мы создаем клиент тут повторно,
-        а не переиспользуем ProviderClient.client.
+        httpx.AsyncClient inside ProviderClient.client (AnyLLM) maintains state (connection pool)
+        between calls in the same thread, while the event loop is removed when asyncio.run() exits.
+        When attempting to reuse the client from another worker instance (Qt thread),
+        it accesses an already closed event loop. Therefore, we recreate the client here
+        instead of reusing ProviderClient.client.
         """
         return AnyLLM.create(self.meta.provider_type, self.meta.api_key_manager.get(), self.meta.api_base)
 
@@ -53,10 +53,10 @@ default_providers = [
 
 class ModelManager(dict):
     """
-    Менеджер для управления провайдерами LLM и их моделями.
+    Manager for handling LLM providers and their models.
 
-    Наследуется от dict, где ключами являются имена провайдеров (str),
-    а значениями — экземпляры ProviderClient.
+    Inherits from dict, where keys are provider names (str),
+    and values are ProviderClient instances.
     """
 
     added = Signal(ProviderMeta)
