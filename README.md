@@ -23,7 +23,7 @@ Barbaros is a lightweight desktop application that provides instant AI translati
 
 ## Prerequisites
 
-Barbaros uses the [any_llm](https://github.com/nikudotdot/any_llm) SDK to support 40+ different LLM providers. You can choose to work with local providers like Ollama or cloud providers like OpenAI, Anthropic, and others.
+Barbaros uses the [any_llm](https://github.com/mozilla-ai/any-llm) SDK to support 40+ different LLM providers. You can choose to work with local providers like Ollama or cloud providers like OpenAI, Anthropic, and others.
 
 ### Local Provider: Ollama (Default)
 
@@ -121,7 +121,7 @@ uv run barbaros --opened
 
 ## Providers
 
-Barbaros supports 40+ LLM providers through the [any_llm](https://github.com/nikudotdot/any_llm) SDK, giving you flexibility to choose between local and cloud models:
+Barbaros supports 40+ LLM providers through the [any_llm](https://github.com/mozilla-ai/any-llm) SDK, giving you flexibility to choose between local and cloud models:
 
 ### Default Provider
 - **Ollama**: Pre-configured for local, privacy-focused translations
@@ -129,7 +129,7 @@ Barbaros supports 40+ LLM providers through the [any_llm](https://github.com/nik
 ### Supported Providers
 The application supports providers including:
 - **Local**: Ollama, Llama.cpp, Llamafile, vLLM, LM Studio
-- **Major Cloud**: OpenAI, Anthropic, Google Gemini, Azure OpenAI
+- **Major Cloud**: OpenAI, Anthropic, Google Gemini, Azure
 - **Specialized**: Groq, Together AI, Cerebras, Fireworks, Sambanova
 - **Enterprise**: AWS Bedrock, IBM watsonx, Databricks, Vertex AI
 - **And 30+ more**: See [any_llm documentation](https://github.com/nikudotdot/any_llm) for complete list
@@ -140,7 +140,7 @@ The application supports providers including:
 2. **Manage Providers**: Click the "Manage Providers" button
 3. **Add Provider**: 
    - Click "Add Provider"
-   - Enter a name (e.g., "OpenAI")
+   - Enter a name (e.g., "My Ollama")
    - Select provider type from dropdown (OpenAI, Anthropic, etc.)
    - Enter API key (required for cloud providers)
    - Enter API URL if using a custom endpoint (optional)
@@ -197,7 +197,7 @@ When you use the `--popup` argument, the command communicates with the running a
 ## Dependencies
 
 **Runtime Requirements:**
-- [any_llm](https://github.com/nikudotdot/any_llm) - Unified LLM provider SDK (supports 40+ providers)
+- [any_llm](https://github.com/mozilla-ai/any-llm) - Unified LLM provider SDK (supports 40+ providers)
 - [PySide6](https://www.qt.io/qt-for-python) - GUI framework
 - [psutil](https://github.com/giampaolo/psutil) - Process utilities
 - [Flatpak](https://flatpak.org/) - Application distribution (optional)
