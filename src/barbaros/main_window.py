@@ -16,7 +16,7 @@ from .features.ocr import OCRFeature
 from .features.text import TextFeature
 from .features.settings import SettingsFeature
 from .features.base import AbstractFeature
-from .common import SettingsProxy, TARGET_LANGUAGES
+from .common import SettingsProxy, TARGET_LANGUAGES, url_to_html_links
 from .model_manager import ModelManager, default_providers
 from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 
@@ -73,6 +73,7 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _show_provider_error_gui(self, msg: str):
+        msg = url_to_html_links(msg)
         QMessageBox.critical(self, "Provider Error", msg)
 
     def _restore_models_lists(self):

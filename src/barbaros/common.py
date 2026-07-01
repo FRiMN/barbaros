@@ -86,6 +86,13 @@ def truncate_key(key: str) -> str:
     return f"****{key[-truncate_len:]}"
 
 
+def url_to_html_links(text: str) -> str:
+    import re
+
+    url_pattern = re.compile(r'(https?://[^\s]+)')
+    return url_pattern.sub(r'<a href="\1">\1</a>', text)
+
+
 TARGET_LANGUAGES = [
     "ru",
     "en",
