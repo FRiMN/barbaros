@@ -16,6 +16,7 @@ dependencies = [
     "any-llm-sdk[all]",
     "keyring>=25.7.0",
     "psygnal>=0.15.1",
+    "dataclasses-json>=0.6.7",
 ]
 
 [project.gui-scripts]

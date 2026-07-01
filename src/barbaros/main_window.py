@@ -17,7 +17,7 @@ from .features.text import TextFeature
 from .features.settings import SettingsFeature
 from .features.base import AbstractFeature
 from .common import SettingsProxy, TARGET_LANGUAGES, url_to_html_links
-from .model_manager import ModelManager, default_providers
+from .model_manager import ModelManager, default_providers, ProviderMeta
 from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 
 
@@ -35,9 +35,13 @@ class MainWindow(QMainWindow):
         self.model_manager = ModelManager()
         self.model_manager.error.connect(self._show_provider_error)
         self.model_manager.loaded_list_models.connect(self.save_models_list)
-        past_providers = self.settings.value(self.settings_llm_providers_key, default=default_providers)
+        past_providers = self.settings.valueFromJson(
+            self.settings_llm_providers_key, default=default_providers
+        )
+        print(f"Loading providers {past_providers}")
         for provider in past_providers:
-            self.model_manager.add(provider)
+            p = ProviderMeta.from_dict(provider)
+            self.model_manager.add(p)
 
         self._restore_models_lists()
 
@@ -81,6 +85,10 @@ class MainWindow(QMainWindow):
 
         past_models_lists = self.settings.valueFromJson(self.settings_llm_by_providers_key)
         for provider, models_list in past_models_lists.items():
+            if provider not in self.model_manager:
+                print(f"Provider `{provider}` not found in Model Manager. Skip model list cache.")
+                continue
+
             models = [Model.model_validate(d) for d in models_list]
             self.model_manager.set_models(provider, models)
 
@@ -96,8 +104,9 @@ class MainWindow(QMainWindow):
 
     def save_providers(self):
         providers = self.model_manager.to_list()
+        print(f"Saving providers {providers}")
         if providers:
-            self.settings.setValue(self.settings_llm_providers_key, providers)
+            self.settings.setValueAsJson(self.settings_llm_providers_key, providers)
         else:
             # Case: Raise `TypeError: 'NoneType' object is not iterable`
             # while load providers after `past_providers = self.settings.value`.

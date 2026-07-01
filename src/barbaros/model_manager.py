@@ -10,6 +10,7 @@ from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
 from psygnal import Signal
 from PySide6.QtCore import QThread
+from dataclasses_json import dataclass_json
 
 from barbaros.security import KeySecurityManager
 
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from barbaros.workers import ListModelWorker
 
 
+@dataclass_json
 @dataclass
 class ProviderMeta:
     name: str
@@ -94,8 +96,9 @@ class ModelManager(dict):
         name = item if isinstance(item, str) else item.name
         return super().__getitem__(name)
 
-    def to_list(self) -> list[ProviderMeta]:
-        return [v.meta for v in self.values()]
+    def to_list(self) -> list[dict]:
+        metas = [v.meta for v in self.values()]
+        return ProviderMeta.schema().dump(metas, many=True)
 
     def to_models_dict(self) -> dict[str, list[dict]]:
         d = {}
