@@ -7,9 +7,10 @@ from PySide6.QtWidgets import (
     QComboBox,
     QMessageBox,
     QTabWidget, QLabel, QSizePolicy,
+    QStyle
 )
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QStyle
+from PySide6.QtCore import Q_ARG, QMetaObject, Qt, Slot
 
 from .features.ocr import OCRFeature
 from .features.text import TextFeature
@@ -63,7 +64,16 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
 
     def _show_provider_error(self, msg: str):
-        QMessageBox.warning(self, "Provider Error", msg)
+        # Off‑main thread – queue the call
+        QMetaObject.invokeMethod(
+            self, "_show_provider_error_gui",
+            Qt.ConnectionType.QueuedConnection,
+            Q_ARG(str, msg)
+        )
+
+    @Slot(str)
+    def _show_provider_error_gui(self, msg: str):
+        QMessageBox.critical(self, "Provider Error", msg)
 
     def _restore_models_lists(self):
         from .model_manager import Model

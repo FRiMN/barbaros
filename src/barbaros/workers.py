@@ -105,11 +105,12 @@ class ListModelWorker(QObject):
                 m.model_dump(include=self.marshaling_fields)
                 for m in models
             ])
-            print(f"emit finished {self.provider.name=} (found {len(models)} models)")
-            self.finished.emit(self.provider, marshaled_models)
         except Exception as e:
             print(f"emit error {self.provider.name=}")
             self.error.emit(self.provider, str(e))
+        else:
+            print(f"emit finished {self.provider.name=} (found {len(models)} models)")
+            self.finished.emit(self.provider, marshaled_models)
 
     def connect_terminate(self, thread: QThread):
         for signal in (self.finished, self.error):
