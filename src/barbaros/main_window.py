@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
     def _restore_models_lists(self):
         from .model_manager import Model
 
-        past_models_lists = self.settings.valueFromJson(self.settings_llm_by_providers_key)
+        past_models_lists = self.settings.valueFromJson(self.settings_llm_by_providers_key, default={})
         for provider, models_list in past_models_lists.items():
             if provider not in self.model_manager:
                 print(f"Provider `{provider}` not found in Model Manager. Skip model list cache.")
