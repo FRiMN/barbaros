@@ -15,11 +15,14 @@ Barbaros is a lightweight desktop application that provides instant AI translati
 
 - **🚀 System Tray Integration**: Runs quietly in the background without cluttering your desktop
 - **📋 Clipboard Translation**: Automatically translates text from your clipboard
+- **🖼️ OCR Functionality**: Text recognition from images with screen capture and cropping support
 - **🤖 AI-Powered**: Leverages advanced AI models through multiple LLM providers (Ollama, OpenAI, Anthropic, and 40+ others) for accurate translations
+- **🎯 Separate Models for OCR**: Ability to choose a dedicated model for text recognition from images
 - **🔒 Privacy-First**: Process translations locally with Ollama or securely with cloud providers (your data protection depends on chosen provider)
 - **🏠 Offline Capable**: Works completely offline with local providers (e.g., Ollama) once models are downloaded
 - **⚡ Quick Access**: Instant popup with customizable hotkeys
 - **🔄 Multiple Communication Methods**: Uses DBus and Unix signals for reliable operation
+- **🎛️ Three Functional Tabs**: Text (text translation), Image (OCR), Settings (configuration)
 
 ## Prerequisites
 
@@ -103,10 +106,12 @@ uv run barbaros --opened
 
 ## Usage
 
+### Text Translation
+
 1. **Start the Application**: Launch Barbaros to run it in your system tray
 2. **Select Provider and Model** (optional):
    - Open the application window
-   - In the "Text" or "OCR" tab, select a provider and model from the dropdown
+   - In the "Text" tab, select a provider and model from the dropdown
    - Default: Ollama with your first available model
 3. **Configure Providers** (optional):
    - Go to "Settings" tab
@@ -117,7 +122,31 @@ uv run barbaros --opened
    - Use the `--popup` command, or click the system tray icon
    - In the translation window, select target language
    - Press "Translate" button or `Ctrl+Return` shortcut
-5. **Get Results**: The translation window will appear with your translated text
+5. **Get Results**: The translation window will appear with your translated text and performance statistics
+
+### Image Text Recognition (OCR)
+
+Barbaros supports text recognition from images with subsequent translation:
+
+1. **Navigate to "Image" Tab**: In the main application window, select the "Image" tab
+2. **Load an Image**:
+   - Click "Load Image" button to load an image from disk
+   - Or click "Screenshot" button to capture a screen
+3. **Select Text Area**:
+   - Click on the image preview to open the cropping editor
+   - Select the text area you want to recognize
+   - Use the corner and side handles for precise area adjustment
+   - Use the zoom slider for detailed viewing
+4. **Select OCR Model**:
+   - From the "OCR Model" dropdown, select a provider and model for text recognition
+   - Recommended: vision-capable models like `llava` or specialized OCR models
+5. **Start Recognition**:
+   - Click "OCR" button to recognize text from the selected area
+   - Recognized text will appear in the text field
+6. **Translate Recognized Text**:
+   - Select target language
+   - Click "Translate" button to translate the recognized text
+   - Translation result will appear in the bottom text field
 
 ## Providers
 
@@ -183,14 +212,26 @@ Barbaros uses a dual-communication system for reliable popup functionality:
 - **Primary**: DBus messaging for seamless desktop integration
 - **Fallback**: Unix signals (`SIGUSR1`) for reliable operation
 
+### Text Translation
+
 When you use the `--popup` argument, the command communicates with the running application instance, which then:
 1. Brings the main window to the foreground
 2. Retrieves text from your clipboard
 3. Processes the translation through the selected provider and model
 4. Displays the results
 
+### Image Text Recognition (OCR)
+
+For OCR functionality, Barbaros uses a separate worker process:
+
+1. **Image Loading**: User loads an image or takes a screenshot
+2. **Cropping**: Built-in editor allows precise selection of text area
+3. **Model Submission**: Image is converted to PNG and sent to the selected OCR model
+4. **Recognition**: Model analyzes the image and returns recognized text
+5. **Translation**: Recognized text can be translated using the selected translation model
+
 **Provider Communication:**
-- **Local Providers** (e.g., Ollama): Translations processed offline on your machine
+- **Local Providers** (e.g., Ollama): Translations and OCR processed offline on your machine
 - **Cloud Providers** (e.g., OpenAI, Anthropic): Secure API calls to provider servers
 - **Dual-Communication System**: DBus messages + Unix signals for reliable popup functionality
 
@@ -204,6 +245,10 @@ When you use the `--popup` argument, the command communicates with the running a
 
 **Optional (for local AI models):**
 - [Ollama](https://ollama.ai/) - Local LLM provider (default, pre-configured)
+
+**For OCR Functionality:**
+- Compatible vision-capable models (models with image support)
+- Recommended models: `glm-ocr` or other multimodal models
 
 **Development Tools:**
 - [uv](https://docs.astral.sh/uv/) - Python package management
