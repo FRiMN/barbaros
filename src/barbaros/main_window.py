@@ -21,7 +21,6 @@ from .model_manager import ModelManager, default_providers, ProviderMeta
 from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 
 
-
 class MainWindow(QMainWindow):
     settings_key_prefix = "main_window"
     settings_llm_providers_key = "llm_providers"
@@ -38,7 +37,6 @@ class MainWindow(QMainWindow):
         past_providers = self.settings.valueFromJson(
             self.settings_llm_providers_key, default=default_providers
         )
-        print(f"Loading providers {past_providers}")
         for provider in past_providers:
             p = ProviderMeta.from_dict(provider)
             self.model_manager.add(p)
@@ -52,6 +50,7 @@ class MainWindow(QMainWindow):
             SettingsFeature(self)
         ]
 
+        # Window geometry
         if past_geometry := self.settings.value("geometry"):
             self.restoreGeometry(past_geometry)
         else:
@@ -104,7 +103,6 @@ class MainWindow(QMainWindow):
 
     def save_providers(self):
         providers = self.model_manager.to_list()
-        print(f"Saving providers {providers}")
         if providers:
             self.settings.setValueAsJson(self.settings_llm_providers_key, providers)
         else:
