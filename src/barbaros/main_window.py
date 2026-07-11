@@ -25,11 +25,16 @@ class MainWindow(QMainWindow):
     settings_key_prefix = "main_window"
     settings_llm_providers_key = "llm_providers"
     settings_llm_by_providers_key = "llm_by_providers"
+    settings_target_language_list_key = "target_language_list"
+    settings_target_language_key = "target_language"
 
     def __init__(self, *args, app, **kwargs):
         super().__init__(*args, **kwargs)
         self.app = app
         self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
+
+        self.target_language_list = []
+        self.restore_target_languages()
 
         self.model_manager = ModelManager()
         self.model_manager.error.connect(self._show_provider_error)
@@ -99,7 +104,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("model", selection)
 
     def save_choosed_target_language(self, lang: str):
-        self.settings.setValue("target_language", lang)
+        self.settings.setValue(self.settings_target_language_key, lang)
 
     def save_providers(self):
         providers = self.model_manager.to_list()
@@ -126,7 +131,7 @@ class MainWindow(QMainWindow):
         self.clear_button.setMaximumWidth(clear_button_height)
 
         self.target_language_select = tls = QComboBox()
-        tls.addItems(TARGET_LANGUAGES)
+        tls.addItems(self.target_language_list)
         tls.currentTextChanged.connect(self.save_choosed_target_language)
         self.restore_target_language()
 
@@ -143,6 +148,10 @@ class MainWindow(QMainWindow):
 
         for f in self.features:
             f.set_widgets()
+
+    def refresh_target_language_select(self):
+        self.target_language_select.clear()
+        self.target_language_select.addItems(self.target_language_list)
         
     def update_fetching_workers(self, workers: list[str]):
         """Update the fetching workers label with the current count of workers in self.model_manager"""
@@ -160,12 +169,26 @@ class MainWindow(QMainWindow):
     def _on_update_fetching_workers(self, *args, **kwargs):
         self.update_fetching_workers(self.model_manager.fetching_models_active_workers)
 
+    def restore_target_languages(self):
+        """Restore available target language list from settings"""
+        if past_languages := self.settings.value(self.settings_target_language_list_key):
+            self.target_language_list = [l.strip().lower() for l in past_languages.split(",")]
+        else:
+            self.target_language_list = TARGET_LANGUAGES
+
+    def save_target_languages(self):
+        l = ",".join(self.target_language_list)
+        self.settings.setValue(self.settings_target_language_list_key, l)
+
     def restore_target_language(self):
         """Restore target language from settings"""
         tls = self.target_language_select
 
-        if past_language := self.settings.value("target_language"):
-            tls.setCurrentIndex(TARGET_LANGUAGES.index(past_language))
+        if past_language := self.settings.value(self.settings_target_language_key):
+            try:
+                tls.setCurrentIndex(self.target_language_list.index(past_language))
+            except ValueError:
+                tls.setCurrentIndex(0)
         else:
             print("set default language")
             tls.setCurrentIndex(0)

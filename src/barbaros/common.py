@@ -93,18 +93,4 @@ def url_to_html_links(text: str) -> str:
     return url_pattern.sub(r'<a href="\1">\1</a>', text)
 
 
-TARGET_LANGUAGES = [
-    "ru",
-    "en",
-    "fr",
-    "de",
-    "es",
-    "it",
-    "pt",
-    "ja",
-    "ko",
-    "zh",
-    "ar",
-    "hi",
-    "ua",
-]
+TARGET_LANGUAGES = ['ar', 'de', 'en', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt', 'ru', 'ua', 'zh']
