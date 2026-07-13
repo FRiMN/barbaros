@@ -25,7 +25,6 @@ class ProvidersCard(QFrame):
 
     def setup_ui(self):
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
