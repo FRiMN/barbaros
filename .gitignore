@@ -13,3 +13,4 @@ dist/
 .pi
 AI_AGENT_INFO.md
 .aider*
+**/i18n/*.qm

@@ -14,7 +14,7 @@ class AddProviderDialog(QDialog):
         super().__init__(parent)
         self.provider = provider
         self.is_edit = provider is not None
-        self.setWindowTitle("Edit Provider" if self.is_edit else "Add Provider")
+        self.setWindowTitle(self.tr("Edit Provider") if self.is_edit else self.tr("Add Provider"))
         self.setModal(True)
         self.setMinimumWidth(400)
 
@@ -43,27 +43,27 @@ class AddProviderDialog(QDialog):
     def _build_form(self):
         form = QFormLayout()
         self.name_edit = QLineEdit()
-        form.addRow("Name:", self.name_edit)
+        form.addRow(self.tr("Name:"), self.name_edit)
 
         self.type_combo = QComboBox()
         for p in LLMProvider:
             self.type_combo.addItem(p.value, p)
-        form.addRow("Type:", self.type_combo)
+        form.addRow(self.tr("Type:"), self.type_combo)
 
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("API Key:", self.api_key_edit)
+        form.addRow(self.tr("API Key:"), self.api_key_edit)
 
         self.api_url_edit = QLineEdit()
-        form.addRow("API URL:", self.api_url_edit)
+        form.addRow(self.tr("API URL:"), self.api_url_edit)
 
         return form
 
     def _build_bottom_controls(self):
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(self.tr("Cancel"))
         cancel_btn.clicked.connect(self.reject)
 
-        ok_btn = QPushButton("Save" if self.is_edit else "Add")
+        ok_btn = QPushButton(self.tr("Save") if self.is_edit else self.tr("Add"))
         ok_btn.setDefault(True)
         ok_btn.clicked.connect(self._validate)
 
@@ -77,16 +77,16 @@ class AddProviderDialog(QDialog):
     def _validate(self):
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.warning(self, "Invalid Input", "Name is required")
+            QMessageBox.warning(self, self.tr("Invalid Input"), self.tr("Name is required"))
             return
 
         if not self.is_edit and name in self.parent().model_manager.keys():
-            QMessageBox.warning(self, "Invalid Input", "Name is exist")
+            QMessageBox.warning(self, self.tr("Invalid Input"), self.tr("Name is exist"))
             return
 
         url = self.api_url_edit.text().strip()
         if url and not is_valid_url(url):
-            QMessageBox.warning(self, "Invalid Input", "Invalid API URL format")
+            QMessageBox.warning(self, self.tr("Invalid Input"), self.tr("Invalid API URL format"))
             return
 
         self.accept()
@@ -111,7 +111,7 @@ class ProviderDialog(QDialog):
     def __init__(self, model_manager: ModelManager, parent=None):
         super().__init__(parent)
         self.model_manager = model_manager
-        self.setWindowTitle("Manage Providers")
+        self.setWindowTitle(self.tr("Manage Providers"))
         self.setModal(True)
         self.resize(700, 400)
 
@@ -128,7 +128,9 @@ class ProviderDialog(QDialog):
 
     def _build_table(self):
         table = QTableWidget(0, 4)
-        table.setHorizontalHeaderLabels(["Name", "Type", "API URL", "API Key"])
+        table.setHorizontalHeaderLabels([
+            self.tr("Name"), self.tr("Type"), self.tr("API URL"), self.tr("API Key")
+        ])
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         return table
@@ -137,19 +139,19 @@ class ProviderDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        add_btn = QPushButton("Add")
+        add_btn = QPushButton(self.tr("Add"))
         add_btn.clicked.connect(self._add_provider)
         btn_layout.addWidget(add_btn)
 
-        edit_btn = QPushButton("Edit")
+        edit_btn = QPushButton(self.tr("Edit"))
         edit_btn.clicked.connect(self._edit_provider)
         btn_layout.addWidget(edit_btn)
 
-        del_btn = QPushButton("Delete")
+        del_btn = QPushButton(self.tr("Delete"))
         del_btn.clicked.connect(self._delete_provider)
         btn_layout.addWidget(del_btn)
 
-        close_btn = QPushButton("Close")
+        close_btn = QPushButton(self.tr("Close"))
         close_btn.setDefault(True)
         close_btn.clicked.connect(self.accept)
         btn_layout.addWidget(close_btn)
@@ -177,7 +179,7 @@ class ProviderDialog(QDialog):
     def _edit_provider(self):
         row = self.table.currentRow()
         if row < 0:
-            QMessageBox.warning(self, "No Selection", "Select a provider to edit")
+            QMessageBox.warning(self, self.tr("No Selection"), self.tr("Select a provider to edit"))
             return
         name = self.table.item(row, 0).text()
         client = self.model_manager[name]
@@ -191,7 +193,10 @@ class ProviderDialog(QDialog):
             provider = dialog.get_provider()
             if provider:
                 if is_new and provider.name in self.model_manager:
-                    QMessageBox.warning(self, "Duplicate", f"Provider '{provider.name}' already exists")
+                    QMessageBox.warning(
+                        self, self.tr("Duplicate"),
+                        self.tr("Provider '%1' already exists").replace("%1", provider.name)
+                    )
                     return
 
                 provider.provider_type = LLMProvider.from_string(provider.provider_type)
@@ -205,12 +210,12 @@ class ProviderDialog(QDialog):
     def _delete_provider(self):
         row = self.table.currentRow()
         if row < 0:
-            QMessageBox.warning(self, "No Selection", "Select a provider to delete")
+            QMessageBox.warning(self, self.tr("No Selection"), self.tr("Select a provider to delete"))
             return
         name = self.table.item(row, 0).text()
         reply = QMessageBox.question(
-            self, "Confirm Delete",
-            f"Delete provider '{name}'?",
+            self, self.tr("Confirm Delete"),
+            self.tr("Delete provider '%1'?").replace("%1", name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:

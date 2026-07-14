@@ -47,16 +47,16 @@ class ImageManagerWidget(QWidget):
         self.setLayout(layout)
 
     def _create_widgets(self):
-        self._load_button = QPushButton("Load Image")
-        self._load_button.setToolTip("Load an image for processing")
+        self._load_button = QPushButton(self.tr("Load Image"))
+        self._load_button.setToolTip(self.tr("Load an image for processing"))
         self._load_button.clicked.connect(self._handle_load_image)
 
-        self._screenshot_button = QPushButton("Screenshot")
-        self._screenshot_button.setToolTip("Capture a screenshot for processing")
+        self._screenshot_button = QPushButton(self.tr("Screenshot"))
+        self._screenshot_button.setToolTip(self.tr("Capture a screenshot for processing"))
         self._screenshot_button.clicked.connect(self._handle_screenshot)
 
         self._crop_preview = CropPreviewWidget()
-        self._crop_preview.setToolTip("Click to crop the image and set area for OCR")
+        self._crop_preview.setToolTip(self.tr("Click to crop the image and set area for OCR"))
         self._crop_preview.clicked.connect(self._handle_crop_preview_clicked)
 
     def set_image(self, image: QImage, file_path: str):
@@ -106,7 +106,7 @@ class ImageManagerWidget(QWidget):
     def _handle_load_image(self):
         """Handle load image button click - open file dialog and load selected image"""
         file_dialog = QFileDialog()
-        file_dialog.setWindowTitle("Select Image")
+        file_dialog.setWindowTitle(self.tr("Select Image"))
         file_dialog.setNameFilter(
             "Images (*.png *.xpm *.jpg *.jpeg *.bmp *.gif *.tif *.tiff)"
         )

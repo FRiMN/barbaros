@@ -33,7 +33,7 @@ class FilterableComboBox(QWidget):
         layout = QVBoxLayout(self)
 
         # Создаем виджет для отображения текущего выбора
-        self.display_label = LinkLabel("Select an item", self)
+        self.display_label = LinkLabel(self.tr("Select an item"), self)
         self.display_label.setMouseTracking(True)  # Включаем мониторинг мыши
         self.display_label.mousePressEvent = self.show_filterable_popup
         layout.addWidget(self.display_label)
@@ -106,7 +106,7 @@ class FilterablePopup(QWidget):
 
         # Создаем поле ввода для фильтра
         self.filter_edit = QLineEdit(self.frame)
-        self.filter_edit.setPlaceholderText("Filter items")
+        self.filter_edit.setPlaceholderText(self.tr("Filter items"))
         self.filter_edit.textChanged.connect(self.apply_filter)
         frame_layout.addWidget(self.filter_edit)
 
@@ -194,7 +194,7 @@ class ProviderModelTreePopup(QWidget):
 
         # Filter input
         self.filter_edit = QLineEdit(self.frame)
-        self.filter_edit.setPlaceholderText("Filter models")
+        self.filter_edit.setPlaceholderText(self.tr("Filter models"))
         self.filter_edit.textChanged.connect(self.apply_filter)
         frame_layout.addWidget(self.filter_edit)
 
@@ -347,7 +347,7 @@ class ProviderModelComboBox(QWidget):
         self.filterable_popup.setModelManager(model_manager)
 
     def _update_label_like_none(self):
-        self.display_label.setText("Select a model")
+        self.display_label.setText(self.tr("Select a model"))
         self.display_label.setToolTip("")
 
     def _update_label_like_model(self):

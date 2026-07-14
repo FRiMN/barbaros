@@ -36,6 +36,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 write_to = "src/barbaros/__version__.py"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+barbaros = ["i18n/*.qm", "i18n/*.ts"]
+
 [tool.setuptools.data-files]
 "share/applications" = ["flatpak/io.github.frimn.barbaros.desktop"]
 "share/icons/hicolor/256x256/apps" = ["src/barbaros/resources/icons/icon3.png"]

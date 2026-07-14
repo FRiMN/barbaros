@@ -42,13 +42,13 @@ class CustomTextEdit(QTextEdit):
         # --- Font Size Actions ---
         st_k = QKeySequence.StandardKey
 
-        enlarge_font_action = self._create_action("&Enlarge Font", self.enlarge_font, st_k.ZoomIn)
+        enlarge_font_action = self._create_action(self.tr("&Enlarge Font"), self.enlarge_font, st_k.ZoomIn)
         context_menu.addAction(enlarge_font_action)
 
-        decrease_font_action = self._create_action("&Decrease Font", self.decrease_font, st_k.ZoomOut)
+        decrease_font_action = self._create_action(self.tr("&Decrease Font"), self.decrease_font, st_k.ZoomOut)
         context_menu.addAction(decrease_font_action)
 
-        reset_font_action = self._create_action("Reset Font", self.reset_font)
+        reset_font_action = self._create_action(self.tr("Reset Font"), self.reset_font)
         context_menu.addAction(reset_font_action)
 
         return context_menu

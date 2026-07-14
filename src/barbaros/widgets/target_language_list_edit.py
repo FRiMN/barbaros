@@ -45,13 +45,17 @@ class LanguageListEdit(QWidget):
         self.language_edit = QLineEdit()
         default_trg_lang_str = ', '.join(TARGET_LANGUAGES)
         self.language_edit.setToolTip(
-            f"Comma separated list of target languages in 2 or 3 characters. Default: {default_trg_lang_str}"
+            self.tr(
+                "Comma separated list of target languages in 2 or 3 characters. Default: %1"
+            ).replace("%1", default_trg_lang_str)
         )
         self.language_edit.setText(", ".join(self.parent.target_language_list))
         layout.addWidget(self.language_edit)
 
         self.language_edit_status = QLabel(
-            "Some invalid chars. Valid only comma separated list of target languages in 2 or 3 characters."
+            self.tr(
+                "Some invalid chars. Valid only comma separated list of target languages in 2 or 3 characters."
+            )
         )
         self.language_edit_status.setWordWrap(True)
         self.language_edit_status.setStyleSheet("color: yellow; font-style: oblique;")

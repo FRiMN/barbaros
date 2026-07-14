@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _show_provider_error_gui(self, msg: str):
         msg = url_to_html_links(msg)
-        QMessageBox.critical(self, "Provider Error", msg)
+        QMessageBox.critical(self, self.tr("Provider Error"), msg)
 
     def _restore_models_lists(self):
         from .model_manager import Model
@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
         self.clear_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
         )
-        self.clear_button.setToolTip("Clear widgets")
+        self.clear_button.setToolTip(self.tr("Clear widgets"))
         self.clear_button.clicked.connect(self.handle_clear_button)
         clear_button_height = self.clear_button.sizeHint().height()
         self.clear_button.setMaximumWidth(clear_button_height)
@@ -158,8 +158,10 @@ class MainWindow(QMainWindow):
         count = len(workers)
         l = self.fetching_workers_label
         if count:
-            l.setText(f"Active {count} fetching models")
-            l.setToolTip(f"Fetching models for providers: {', '.join(workers)}")
+            l.setText(self.tr("Active %1 fetching models").replace("%1", str(count)))
+            l.setToolTip(
+                self.tr("Fetching models for providers: %1").replace("%1", ", ".join(workers))
+            )
             l.show()
         else:
             l.setText("")
@@ -222,7 +224,7 @@ class MainWindow(QMainWindow):
         top_panel.addWidget(self.model)
         top_panel.addStretch()
         top_panel.addWidget(self.clear_button)
-        top_panel.addWidget(QLabel("Target:"))
+        top_panel.addWidget(QLabel(self.tr("Target:")))
         top_panel.addWidget(self.target_language_select)
 
         main_layout.addLayout(top_panel)

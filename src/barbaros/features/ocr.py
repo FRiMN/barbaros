@@ -18,8 +18,11 @@ from barbaros.workers import OCRWorker, TranslationWorker
 
 
 class OCRFeature(AbstractFeature):
-    tab_name = "Image"
     settings_key_prefix = "ocr_feature"
+
+    @property
+    def tab_name(self) -> str:
+        return self.tr("Image")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -28,7 +31,7 @@ class OCRFeature(AbstractFeature):
         l = QVBoxLayout()
 
         select_panel = QHBoxLayout()
-        select_panel.addWidget(QLabel("OCR Model:"))
+        select_panel.addWidget(QLabel(self.tr("OCR Model:")))
         select_panel.addWidget(self.ocr_model_select)
         l.addLayout(select_panel)
 
@@ -50,17 +53,17 @@ class OCRFeature(AbstractFeature):
         self.image_manager = ImageManagerWidget(self.parent)
         self.image_manager.imageCropped.connect(self._handle_image_cropped)
 
-        self.ocr_button = QPushButton("OCR")
-        self.ocr_button.setToolTip("Get text from image")
+        self.ocr_button = QPushButton(self.tr("OCR"))
+        self.ocr_button.setToolTip(self.tr("Get text from image"))
         self.ocr_button.clicked.connect(self.handle_ocr_button)
         self.ocr_button.setDisabled(True)
 
-        self.translate_button = QPushButton("Translate")
-        self.translate_button.setToolTip("Translate text extracted via OCR")
+        self.translate_button = QPushButton(self.tr("Translate"))
+        self.translate_button.setToolTip(self.tr("Translate text extracted via OCR"))
         self.translate_button.clicked.connect(self.handle_translate_button)
         self.translate_button.setDisabled(True)
 
-        self.progressbar = GradientRainbowLabel("Processing...")
+        self.progressbar = GradientRainbowLabel(self.tr("Processing..."))
         self.progressbar.hide()
 
         self.ocr_text = CustomTextEdit(readOnly=True)
@@ -142,7 +145,7 @@ class OCRFeature(AbstractFeature):
 
     def on_ocr_error(self, error_msg: str):
         self.progressbar.hide()
-        QMessageBox.critical(self.parent, "OCR Error", error_msg)
+        QMessageBox.critical(self.parent, self.tr("OCR Error"), error_msg)
         self.ocr_button.setDisabled(False)
 
     def handle_translate_button(self):
@@ -190,7 +193,7 @@ class OCRFeature(AbstractFeature):
 
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()
-        QMessageBox.critical(self.parent, "Translation Error", error_msg)
+        QMessageBox.critical(self.parent, self.tr("Translation Error"), error_msg)
         self.translate_button.setDisabled(False)
 
     def handle_clear_button(self):
