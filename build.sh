@@ -42,7 +42,18 @@ function log_step_time() {
 
 # Шаги сборки:
 
-echo "1/4. Проверка и подготовка dist директории."
+echo "1/5. Компиляция файлов переводов (.ts -> .qm)..."
+if [ -x "./.venv/bin/pyside6-lrelease" ]; then
+  for ts in src/barbaros/i18n/*.ts; do
+    [ -e "$ts" ] || continue
+    ./.venv/bin/pyside6-lrelease "$ts" -qm "${ts%.ts}.qm"
+  done
+  echo "Файлы переводов скомпилированы."
+else
+  echo "Пропуск компиляции переводов: .venv/pyside6-lrelease не найден."
+fi
+
+echo -e "\n\n2/5. Проверка и подготовка dist директории."
 if [ ! -d "./dist" ]; then
   mkdir -p ./dist
   echo "Создана директория dist."
@@ -52,7 +63,7 @@ else
 fi
 log_step_time
 
-echo -e "\n\n2/4. Сборка приложения..."
+echo -e "\n\n3/5. Сборка приложения..."
 if uv build; then
   echo "Сборка приложения выполнена успешно."
 else
@@ -64,7 +75,7 @@ log_step_time
 version=$(ls dist/barbaros-*.whl | head -1 | sed 's/.*barbaros-\([^-]*\).*/\1/')
 echo -e "\nВерсия: ${version}"
 
-echo -e "\n\n3/4. Сборка Flatpak-пакета в репозитории..."
+echo -e "\n\n4/5. Сборка Flatpak-пакета в репозитории..."
 if flatpak-builder --ccache --force-clean --repo=repo --install-deps-from=flathub build flatpak/barbaros.yaml; then
   echo "Сборка Flatpak-пакета в репозитории выполнена успешно."
 else
@@ -73,7 +84,7 @@ else
 fi
 log_step_time
 
-echo -e "\n\n4/4. Создание одиночного установочного файла (bundle)..."
+echo -e "\n\n5/5. Создание одиночного установочного файла (bundle)..."
 if flatpak build-bundle -vv repo dist/barbaros-${version}.flatpak io.github.frimn.barbaros; then
   echo "Создание одиночного установочного файла (bundle) выполнено успешно."
 else
