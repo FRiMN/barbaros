@@ -261,8 +261,9 @@ Barbaros использует двойную систему коммуникац
 Для получения подробной информации о сборке пакета Flatpak, смотрите [build_flatpak.md](build_flatpak.md).
 
 **Быстрая сборка:**
+Мы используем **[invoke](https://docs.pyinvoke.org/ru/stable/)** для процесса сборки. См. файл `tasks.py` в корне проекта.
 ```bash
-./build.sh
+uv run invoke build
 ```
 
 ## Отказ от ответственности за качество перевода

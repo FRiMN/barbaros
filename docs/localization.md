@@ -25,7 +25,7 @@ Barbaros uses Qt's translation system (`.ts` / `.qm` files) for UI localization.
 3. **Compile to `.qm`**  
    Run the build script (compiles all `.ts` files):
    ```bash
-   ./build.sh
+   uv run invoke compile_translations
    ```
    Or manually:
    ```bash

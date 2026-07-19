@@ -23,7 +23,7 @@ dependencies = [
 barbaros = "barbaros.main:main"
 
 [project.optional-dependencies]
-dev = ["ruff", "pytest"]
+dev = ["ruff", "pytest", "invoke"]
 
 [project.urls]
 Homepage = "https://github.com/FRiMN/barbaros"
