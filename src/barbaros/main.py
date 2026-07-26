@@ -3,12 +3,13 @@ import signal
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QIcon, QAction
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QCoreApplication, QSettings
 
 from .main_window import MainWindow
 from .about_window import AboutWindow
 from .ipc import IPCService
 from .__version__ import version
+from .i18n import resolve_language, load_translator
 
 
 class App(QApplication):
@@ -25,12 +26,23 @@ class App(QApplication):
         self.settings = QSettings(QSettings.Scope.UserScope)
         print(f"Settings filepath: {self.settings.fileName()}")
 
+        # Install UI translator before any window is built so that all
+        # ``tr()`` calls at construction time resolve to the chosen language.
+        lang = resolve_language(self.settings.value("language"))
+        self.translator = load_translator(lang)
+        if self.translator is not None:
+            self.installTranslator(self.translator)
+
         self.ipc = IPCService(app=self, as_server=True, as_client=False)
 
         # Windows and tray
         self.main_window = MainWindow(app=self)
         self.tray = TrayIcon(self)
         self.about_window = AboutWindow()
+
+    def save_language(self, lang: str):
+        """Persist the chosen UI language (applied on next launch)."""
+        self.settings.setValue("language", lang)
 
         # Clean up threads on quit
         self.aboutToQuit.connect(self.cleanup)
@@ -90,15 +102,21 @@ class TrayIcon:
         # Parent is important in this place
         menu = QMenu()
 
-        open_window = QAction("Open Window", parent=self.icon)
+        open_window = QAction(
+            QCoreApplication.translate("Tray", "Open Window"), parent=self.icon
+        )
         open_window.triggered.connect(self.app.raise_window)
         menu.addAction(open_window)
 
-        about_action = QAction("About", parent=self.icon)
+        about_action = QAction(
+            QCoreApplication.translate("Tray", "About"), parent=self.icon
+        )
         about_action.triggered.connect(self.on_about_activated)
         menu.addAction(about_action)
 
-        exit_action = QAction("Exit", parent=self.icon)
+        exit_action = QAction(
+            QCoreApplication.translate("Tray", "Exit"), parent=self.icon
+        )
         exit_action.triggered.connect(self.app.quit)
         menu.addAction(exit_action)
 

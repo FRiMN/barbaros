@@ -65,7 +65,7 @@ class MonitorSelectDialog(QDialog):
 
     def __init__(self, screens: list[QScreen], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Select Monitor")
+        self.setWindowTitle(self.tr("Select Monitor"))
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.setMinimumWidth(300)
@@ -75,13 +75,19 @@ class MonitorSelectDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        label = QLabel("Select a monitor to capture:")
+        label = QLabel(self.tr("Select a monitor to capture:"))
         layout.addWidget(label)
 
         self.list_widget = QListWidget()
         for i, screen in enumerate(screens):
             geom = screen.geometry()
-            item_text = f"Monitor {i + 1}  —  {geom.width()}\u00d7{geom.height()}  ({screen.name()})"
+            item_text = (
+                self.tr("Monitor %1  —  %2×%3  (%4)")
+                .replace("%1", str(i + 1))
+                .replace("%2", str(geom.width()))
+                .replace("%3", str(geom.height()))
+                .replace("%4", screen.name())
+            )
             self.list_widget.addItem(item_text)
         self.list_widget.setCurrentRow(0)
         layout.addWidget(self.list_widget)
@@ -89,11 +95,11 @@ class MonitorSelectDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(self.tr("Cancel"))
         cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(cancel_btn)
 
-        capture_btn = QPushButton("Capture")
+        capture_btn = QPushButton(self.tr("Capture"))
         capture_btn.setDefault(True)
         capture_btn.clicked.connect(self._on_capture)
         button_layout.addWidget(capture_btn)

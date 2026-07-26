@@ -54,7 +54,7 @@ class CropWidget(QWidget):
             painter.fillRect(self.rect(), Qt.GlobalColor.lightGray)
             painter.setPen(QPen(Qt.GlobalColor.darkGray, 1))
             painter.drawText(
-                self.rect(), Qt.AlignmentFlag.AlignCenter, "No image loaded"
+                self.rect(), Qt.AlignmentFlag.AlignCenter, self.tr("No image loaded")
             )
             return
 
@@ -454,7 +454,7 @@ class CropPreviewWidget(QWidget):
         if self.image is None or self.image.isNull():
             painter.fillRect(self.rect(), Qt.GlobalColor.lightGray)
             painter.setPen(QPen(Qt.GlobalColor.darkGray, 1))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Click to crop")
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.tr("Click to crop"))
             return
 
         widget_rect = self.rect()
@@ -537,7 +537,7 @@ class CropDialog(QDialog):
         self, image: QImage, parent=None, initial_crop_rect: QRect | None = None
     ):
         super().__init__(parent)
-        self.setWindowTitle("Crop Image")
+        self.setWindowTitle(self.tr("Crop Image"))
         self.setModal(True)
         self.resize(800, 600)
 
@@ -579,7 +579,7 @@ class CropDialog(QDialog):
             Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
         )
 
-        btn_reset = QPushButton("Reset")
+        btn_reset = QPushButton(self.tr("Reset"))
         btn_reset.setFixedWidth(50)
         btn_reset.clicked.connect(self._zoom_reset)
 
@@ -620,9 +620,10 @@ class CropDialog(QDialog):
         self.crop_widget.set_zoom(1.0)
 
     def _show_help(self):
+        # TODO: translate
         QMessageBox.information(
             self,
-            "Crop Controls",
+            self.tr("Crop Controls"),
             "<table>"
             "<tr><td><b>Action</b></td><td><b>Control</b></td></tr>"
             "<tr><td>Zoom in/out</td><td>Ctrl + Scroll Wheel</td></tr>"

@@ -25,7 +25,6 @@ class ProvidersCard(QFrame):
 
     def setup_ui(self):
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -41,7 +40,7 @@ class ProvidersCard(QFrame):
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        manage_btn = QPushButton("Manage Providers")
+        manage_btn = QPushButton(self.tr("Manage Providers"))
         manage_btn.clicked.connect(self._open_provider_dialog)
         btn_layout.addWidget(manage_btn)
 
@@ -107,7 +106,7 @@ class ProvidersCard(QFrame):
         reload_btn = QPushButton()
         reload_btn.setIcon(QIcon.fromTheme("view-refresh", QIcon.fromTheme("reload")))
         reload_btn.setFixedSize(24, 24)
-        reload_btn.setToolTip("Reload models")
+        reload_btn.setToolTip(self.tr("Reload models"))
         reload_btn.clicked.connect(lambda checked, n=name: self._reload_provider_models(n))
         header_layout.addWidget(reload_btn)
 

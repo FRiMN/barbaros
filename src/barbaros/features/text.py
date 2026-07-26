@@ -21,8 +21,11 @@ from barbaros.workers import TranslationWorker
 
 
 class TextFeature(AbstractFeature):
-    tab_name = "Text"
     settings_key_prefix = "text_feature"
+
+    @property
+    def tab_name(self) -> str:
+        return self.tr("Text")
 
     def build_layout(self) -> QBoxLayout:
         l = QVBoxLayout()
@@ -44,7 +47,7 @@ class TextFeature(AbstractFeature):
         self.translated_text.hide()
 
         self.translate_button = QPushButton()
-        self.translate_button.setText("Translate")
+        self.translate_button.setText(self.tr("Translate"))
         self.translate_button.clicked.connect(self.handle_translate_button)
         self.translate_button.setShortcut("Ctrl+Return")
 
@@ -53,7 +56,7 @@ class TextFeature(AbstractFeature):
         font.setPointSize(8)
         self.stats.setFont(font)
 
-        self.progressbar = GradientRainbowLabel("Translating...")
+        self.progressbar = GradientRainbowLabel(self.tr("Translating..."))
         self.progressbar.hide()
 
     def handle_translate_button(self):
@@ -124,12 +127,14 @@ class TextFeature(AbstractFeature):
         eval_secs = ended - resp.created
         eval_speed = resp.usage.total_tokens / eval_secs
         self.stats.setText(
-            f"Eval: {eval_secs:.2f}s; {eval_speed:.2f} tkn/s"
+            self.tr("Eval: %1s; %2 tkn/s")
+            .replace("%1", f"{eval_secs:.2f}")
+            .replace("%2", f"{eval_speed:.2f}")
         )
 
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()
-        QMessageBox.critical(self.parent, "Translation Error", error_msg)
+        QMessageBox.critical(self.parent, self.tr("Translation Error"), error_msg)
         self.translate_button.setDisabled(False)
         self.translate_button.show()
 
