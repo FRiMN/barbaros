@@ -10,6 +10,8 @@ finish-args:
   - --socket=wayland
   - --device=dri # Для аппаратного ускорения
   - --share=network
+  - --socket=session-bus
+  - --talk-name=org.freedesktop.secrets  # Разрешение на общение с сервисом паролей
   # Если приложению нужен доступ к файлам пользователя:
   # - --filesystem=home
 
