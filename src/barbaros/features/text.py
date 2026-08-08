@@ -37,7 +37,6 @@ class TextFeature(AbstractFeature):
         l.addWidget(self.translate_button)
         l.addWidget(self.progressbar)
         l.addWidget(self.translated_text)
-        l.addWidget(self.stats)
 
         return l
 
@@ -51,11 +50,6 @@ class TextFeature(AbstractFeature):
         self.translate_button.clicked.connect(self.handle_translate_button)
         self.translate_button.setShortcut("Ctrl+Return")
 
-        self.stats = QLabel("")
-        font = QFont()
-        font.setPointSize(8)
-        self.stats.setFont(font)
-
         self.progressbar = GradientRainbowLabel(self.tr("Translating..."))
         self.progressbar.hide()
 
@@ -66,7 +60,6 @@ class TextFeature(AbstractFeature):
         text_to_translate = self.orig_text.toPlainText().strip()
 
         self.translated_text.clear()
-        self.stats.clear()
 
         if not text_to_translate:
             return
@@ -122,15 +115,6 @@ class TextFeature(AbstractFeature):
         self.translated_text.show()
         self.translate_button.setDisabled(False)
         self.translate_button.show()
-
-        ended = time.time()
-        eval_secs = ended - resp.created
-        eval_speed = resp.usage.total_tokens / eval_secs
-        self.stats.setText(
-            self.tr("Eval: %1s; %2 tkn/s")
-            .replace("%1", f"{eval_secs:.2f}")
-            .replace("%2", f"{eval_speed:.2f}")
-        )
 
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()
