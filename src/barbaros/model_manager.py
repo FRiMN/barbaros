@@ -115,9 +115,10 @@ class ModelManager(dict):
             self.stop_fetching_models(name)
 
     def stop_fetching_models(self, provider_name: str):
-        print(f"Stop fetching models for '{provider_name}'")
         if provider_name not in self._fetching_models_workers:
             return
+
+        print(f"Stop fetching models for '{provider_name}'")
 
         worker, thread = self._fetching_models_workers.pop(provider_name)
         worker: ListModelWorker
