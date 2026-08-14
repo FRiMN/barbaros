@@ -68,5 +68,5 @@ def build(c):
 @task
 def clean(c):
     """Очистка артефактов"""
-    c.run("rm -rf dist/ repo/ build/")
+    c.run("rm -rf dist/ build/ .flatpak-builder/", echo=True)
     print("Очищено.")
