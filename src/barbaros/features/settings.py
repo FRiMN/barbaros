@@ -97,9 +97,7 @@ class LanguageGroup(BaseGroup):
         # English is the source language, so no .qm file is needed for it.
         self.lang_combo.addItem(self.tr("English"), "en")
         for lang in available_languages():
-            if lang == "en":
-                continue
-            self.lang_combo.addItem(language_display_name(lang), lang)
+            self.lang_combo.addItem(self.tr(language_display_name(lang)), lang)
 
         current = self.parent.app.settings.value("language") or ""
         idx = self.lang_combo.findData(current)
