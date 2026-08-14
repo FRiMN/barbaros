@@ -16,6 +16,7 @@ Barbaros is a lightweight desktop application that provides instant AI translati
 - **🚀 System Tray Integration**: Runs quietly in the background without cluttering your desktop
 - **📋 Clipboard Translation**: Automatically translates text from your clipboard
 - **🖼️ OCR Functionality**: Text recognition from images with screen capture and cropping support
+- **🌐 UI Localization**: Interface available in English and Russian
 - **🤖 AI-Powered**: Leverages advanced AI models through multiple LLM providers (Ollama, OpenAI, Anthropic, and 40+ others) for accurate translations
 - **🎯 Separate Models for OCR**: Ability to choose a dedicated model for text recognition from images
 - **🔒 Privacy-First**: Process translations locally with Ollama or securely with cloud providers (your data protection depends on chosen provider)
@@ -147,6 +148,22 @@ Barbaros supports text recognition from images with subsequent translation:
    - Select target language
    - Click "Translate" button to translate the recognized text
    - Translation result will appear in the bottom text field
+
+### Settings
+
+The "Settings" tab provides configuration for providers, target languages, and the UI language:
+
+- **Target languages**: Set the list of languages offered in the translation language dropdown. Enter a comma-separated list of 2 or 3 character language codes (e.g., `en, de, es, ru`). Invalid characters are rejected, and the list is saved automatically when you finish editing.
+- **Language**: Choose the UI language. Select "System default" to follow your operating system's locale, "English", or any other installed language (e.g., Russian). Changes apply after restart.
+
+## Localization
+
+Barbaros supports multiple UI languages through Qt's translation system:
+
+- **English**
+- **Russian**
+
+The UI language is auto-detected from your system locale on first launch and can be changed anytime in **Settings → Language**. Adding new languages is supported for developers — see the [localization guide](docs/localization.md).
 
 ## Providers
 
