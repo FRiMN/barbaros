@@ -92,7 +92,7 @@ class LanguageGroup(BaseGroup):
 
     def build_ui(self):
         self.lang_combo = QComboBox()
-        # Empty data == use system locale
+        # Empty data ("") == use system locale
         self.lang_combo.addItem(self.tr("System default"), "")
         # English is the source language, so no .qm file is needed for it.
         self.lang_combo.addItem(self.tr("English"), "en")

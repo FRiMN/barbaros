@@ -65,7 +65,7 @@ Qt Designer marks translatable strings automatically. Run `pyside6-lupdate` to e
    ```bash
    pyside6-lupdate src/barbaros -ts src/barbaros/i18n/barbaros_ru.ts
    ```
-   Repeat for each `.ts` file.
+   Repeat for each language-specific `.ts` file.
 
 2. **Translate new entries** in Qt Linguist.
 
