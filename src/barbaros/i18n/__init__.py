@@ -23,10 +23,7 @@ def _qm_dir() -> typing.Any:
 
 def available_languages() -> list[str]:
     """Return language codes that have a compiled ``.qm`` file."""
-    try:
-        qm_dir = _qm_dir()
-    except ModuleNotFoundError:
-        return [DEFAULT_LANGUAGE]
+    qm_dir = _qm_dir()
 
     langs: set[str] = set()
     for entry in qm_dir.iterdir():
@@ -62,10 +59,7 @@ def load_translator(lang: str) -> QTranslator | None:
         return None
 
     qm_name = f"{_QM_PREFIX}{lang}.qm"
-    try:
-        qm_path = str(_qm_dir().joinpath(qm_name))
-    except ModuleNotFoundError:
-        return None
+    qm_path = str(_qm_dir().joinpath(qm_name))
 
     translator = QTranslator()
     if translator.load(qm_path):
