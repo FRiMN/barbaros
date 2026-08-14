@@ -4,10 +4,30 @@
 
 ## Предварительные требования
 
-*   Установленный `flatpak`, `flatpak-builder` и `uv`.
+*   Установленные `flatpak`, `flatpak-builder`, `uv` и зависимости проекта (`uv sync`).
 *   Настроенный репозиторий Flathub (для установки зависимостей).
 
-## Шаги сборки
+## Сборка через invoke (рекомендуется)
+
+Проект использует **[invoke](https://docs.pyinvoke.org/ru/stable/)** (см. `tasks.py`) для автоматизации сборки. 
+Задачи выполняются через `uv run invoke <задача>`:
+
+1.  **Сборка приложения** — `uv run invoke build_python`
+2.  **Сборка Flatpak-репозитория** — `uv run invoke build_flatpak`
+3.  **Создание bundle (`.flatpak`)** — `uv run invoke bundle`
+
+Либо выполните полную сборку одной командой (включает компиляцию переводов, сборку Python-пакета, Flatpak-репозитория и bundle):
+
+```sh
+uv run invoke build
+```
+
+Другие полезные задачи:
+*   `uv run invoke update_translations` — обновление файлов переводов (`.ts`).
+*   `uv run invoke compile_translations` — компиляция переводов (`.ts` → `.qm`).
+*   `uv run invoke clean` — удаление артефактов сборки.
+
+## Ручная сборка (для детального контроля)
 
 ### 1.  Сборка приложения
 

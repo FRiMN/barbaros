@@ -23,7 +23,7 @@ Barbaros uses Qt's translation system (`.ts` / `.qm` files) for UI localization.
    - `<translation>` — translated text (edit this)
 
 3. **Compile to `.qm`**  
-   Run the build script (compiles all `.ts` files):
+   Run the build task (compiles all `.ts` files):
    ```bash
    uv run invoke compile_translations
    ```
@@ -61,11 +61,14 @@ Qt Designer marks translatable strings automatically. Run `pyside6-lupdate` to e
 
 ## Updating Translations After Code Changes
 
-1. **Extract new strings** (run from project root):
+1. **Extract new strings** (run from project root). Use the invoke task, which runs `pyside6-lupdate` on every language-specific `.ts` file:
+   ```bash
+   uv run invoke update_translations
+   ```
+   Or manually, per language-specific `.ts` file:
    ```bash
    pyside6-lupdate src/barbaros -ts src/barbaros/i18n/barbaros_ru.ts
    ```
-   Repeat for each language-specific `.ts` file.
 
 2. **Translate new entries** in Qt Linguist.
 
@@ -75,9 +78,9 @@ Qt Designer marks translatable strings automatically. Run `pyside6-lupdate` to e
 ## Adding Translatable Strings Checklist
 
 - [ ] Wrap user-visible strings with `self.tr()` or `_()`
-- [ ] Run `pyside6-lupdate` to update `.ts` files
+- [ ] Run `uv run invoke update_translations` to update `.ts` files
 - [ ] Translate new entries in Qt Linguist
-- [ ] Run `./build.sh` (or `pyside6-lrelease`) to compile
+- [ ] Run `uv run invoke compile_translations` to compile
 - [ ] Test language switch in Settings → restart app
 
 ## Common Patterns
