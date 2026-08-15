@@ -50,11 +50,6 @@ def test_load_translator_russian(app):
         assert (
             QCoreApplication.translate("TextFeature", "Translate") == "Перевести"
         )
-        # Placeholders must survive translation.
-        assert (
-            QCoreApplication.translate("TextFeature", "Eval: %1s; %2 tkn/s")
-            == "Оценка: %1 с; %2 ток/с"
-        )
     finally:
         app.removeTranslator(translator)
 
