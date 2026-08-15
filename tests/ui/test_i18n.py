@@ -19,18 +19,22 @@ def app():
     yield application
 
 
-def _ts_files() -> tuple[list[Path], Path]:
-    ts_dir = Path(__file__).resolve().parents[2] / "src" / "barbaros" / "i18n"
-    return sorted(ts_dir.glob("*.ts")), ts_dir
+@pytest.fixture()
+def i18n_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "src" / "barbaros" / "i18n"
 
 
-def _qm_files() -> tuple[list[Path], Path]:
-    qm_dir = Path(__file__).resolve().parents[2] / "src" / "barbaros" / "i18n"
-    return sorted(qm_dir.glob("*.qm")), qm_dir
+@pytest.fixture()
+def ts_files(i18n_dir: Path) -> list[Path]:
+    return sorted(i18n_dir.glob("*.ts"))
 
 
-def test_available_languages_includes_all_ts():
-    ts_files, ts_dir = _ts_files()
+@pytest.fixture()
+def qm_files(i18n_dir: Path) -> list[Path]:
+    return sorted(i18n_dir.glob("*.qm"))
+
+
+def test_available_languages_includes_all_ts(ts_files):
     assert len(available_languages()) == len(ts_files)
 
 
@@ -75,9 +79,8 @@ def test_load_translator_default_is_none():
     assert load_translator("") is None
 
 
-def test_ts_files_have_locations_and_no_vanished():
-    ts_files, ts_dir = _ts_files()
-    assert ts_files, f"no .ts files found in {ts_dir}"
+def test_ts_files_have_locations_and_no_vanished(ts_files, i18n_dir):
+    assert ts_files, f"no .ts files found in {i18n_dir}"
 
     for ts in ts_files:
         root = ET.parse(ts).getroot()
@@ -97,9 +100,8 @@ def test_ts_files_have_locations_and_no_vanished():
             )
 
 
-def test_compiled_translations_are_non_trivial():
-    qm_files, qm_dir = _qm_files()
-    assert qm_files, f"no .qm files found in {qm_dir}"
+def test_compiled_translations_are_non_trivial(qm_files, i18n_dir):
+    assert qm_files, f"no .qm files found in {i18n_dir}"
 
     for qm in qm_files:
         size = qm.stat().st_size
