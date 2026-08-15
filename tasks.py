@@ -36,6 +36,11 @@ def compile_translations(c):
     print("Файлы переводов скомпилированы.")
 
 @task(pre=[compile_translations])
+def testing(c):
+    """Запуск тестов"""
+    c.run("uv run pytest")
+
+@task(pre=[compile_translations])
 def build_python(c):
     """Подготовка dist и сборка Python-пакета"""
     print("Подготовка dist...")
