@@ -23,7 +23,7 @@ def update_translations(c):
     """Обновление переводов (lupdate)"""
     print("Обновление файлов переводов (.ts)...")
     for ts in sorted(Path("src/barbaros/i18n").glob("*.ts")):
-        c.run(f"./.venv/bin/pyside6-lupdate src/barbaros -ts {ts}")
+        c.run(f"./.venv/bin/pyside6-lupdate -extensions py -no-obsolete src/barbaros -ts {ts}")
     print("Переводы обновлены.")
 
 @task(pre=[update_translations])
