@@ -40,7 +40,7 @@ def testing(c):
     """Запуск тестов"""
     c.run("uv run pytest")
 
-@task(pre=[compile_translations])
+@task(pre=[testing])
 def build_python(c):
     """Подготовка dist и сборка Python-пакета"""
     print("Подготовка dist...")
