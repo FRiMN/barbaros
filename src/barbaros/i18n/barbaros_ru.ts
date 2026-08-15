@@ -4,454 +4,533 @@
 <context>
     <name>AboutWindow</name>
     <message>
+        <location filename="../about_window.py" line="10"/>
         <source>About Barbaros</source>
-        <translation type="vanished">О приложении Barbaros</translation>
+        <translation>О приложении Barbaros</translation>
     </message>
     <message>
+        <location filename="../about_window.py" line="31"/>
         <source>Barbaros</source>
-        <translation type="vanished">Barbaros</translation>
+        <translation>Barbaros</translation>
     </message>
     <message>
+        <location filename="../about_window.py" line="36"/>
         <source>AI translation tool</source>
-        <translation type="vanished">ИИ-инструмент перевода</translation>
+        <translation>ИИ-инструмент перевода</translation>
     </message>
     <message>
+        <location filename="../about_window.py" line="42"/>
         <source>Version: %1</source>
-        <translation type="vanished">Версия: %1</translation>
+        <translation>Версия: %1</translation>
     </message>
     <message>
+        <location filename="../about_window.py" line="47"/>
         <source>&lt;a href=&apos;%1&apos;&gt;Source code on GitHub&lt;/a&gt;</source>
-        <translation type="vanished">&lt;a href=&apos;%1&apos;&gt;Исходный код на GitHub&lt;/a&gt;</translation>
+        <translation>&lt;a href=&apos;%1&apos;&gt;Исходный код на GitHub&lt;/a&gt;</translation>
     </message>
     <message>
+        <location filename="../about_window.py" line="53"/>
         <source>License: MIT</source>
-        <translation type="vanished">Лицензия: MIT</translation>
+        <translation>Лицензия: MIT</translation>
     </message>
     <message>
+        <location filename="../about_window.py" line="58"/>
         <source>Copyright © %1 Nikolay Volkov</source>
-        <translation type="vanished">Авторские права © %1 Николай Волков</translation>
+        <translation>Авторские права © %1 Николай Волков</translation>
     </message>
     <message>
+        <location filename="../about_window.py" line="65"/>
         <source>OK</source>
-        <translation type="vanished">ОК</translation>
+        <translation>ОК</translation>
     </message>
 </context>
 <context>
     <name>AddProviderDialog</name>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="17"/>
         <source>Edit Provider</source>
-        <translation type="vanished">Изменить провайдера</translation>
+        <translation>Изменить провайдера</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="17"/>
         <source>Add Provider</source>
-        <translation type="vanished">Добавить провайдера</translation>
+        <translation>Добавить провайдера</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="46"/>
         <source>Name:</source>
-        <translation type="vanished">Имя:</translation>
+        <translation>Имя:</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="51"/>
         <source>Type:</source>
-        <translation type="vanished">Тип:</translation>
+        <translation>Тип:</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="55"/>
         <source>API Key:</source>
-        <translation type="vanished">API-ключ:</translation>
+        <translation>API-ключ:</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="58"/>
         <source>API URL:</source>
-        <translation type="vanished">URL API:</translation>
+        <translation>URL API:</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="63"/>
         <source>Cancel</source>
-        <translation type="vanished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="66"/>
         <source>Save</source>
-        <translation type="vanished">Сохранить</translation>
+        <translation>Сохранить</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="66"/>
         <source>Add</source>
-        <translation type="vanished">Добавить</translation>
+        <translation>Добавить</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="80"/>
+        <location filename="../widgets/provider_dialog.py" line="84"/>
+        <location filename="../widgets/provider_dialog.py" line="89"/>
         <source>Invalid Input</source>
-        <translation type="vanished">Некорректные данные</translation>
+        <translation>Некорректные данные</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="80"/>
         <source>Name is required</source>
-        <translation type="vanished">Имя обязательно</translation>
+        <translation>Имя обязательно</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="84"/>
         <source>Name is exist</source>
-        <translation type="vanished">Имя уже существует</translation>
+        <translation>Имя уже существует</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="89"/>
         <source>Invalid API URL format</source>
-        <translation type="vanished">Некорректный формат URL API</translation>
+        <translation>Некорректный формат URL API</translation>
     </message>
 </context>
 <context>
     <name>CropDialog</name>
     <message>
+        <location filename="../widgets/image_crop.py" line="540"/>
         <source>Crop Image</source>
-        <translation type="vanished">Обрезать изображение</translation>
+        <translation>Обрезать изображение</translation>
     </message>
     <message>
-        <source>-</source>
-        <translation type="vanished">−</translation>
-    </message>
-    <message>
-        <source>+</source>
-        <translation type="vanished">+</translation>
-    </message>
-    <message>
+        <location filename="../widgets/image_crop.py" line="582"/>
         <source>Reset</source>
-        <translation type="vanished">Сброс</translation>
+        <translation>Сброс</translation>
     </message>
     <message>
-        <source>?</source>
-        <translation type="vanished">?</translation>
-    </message>
-    <message>
+        <location filename="../widgets/image_crop.py" line="626"/>
         <source>Crop Controls</source>
-        <translation type="vanished">Управление обрезкой</translation>
+        <translation>Управление обрезкой</translation>
     </message>
 </context>
 <context>
     <name>CropPreviewWidget</name>
     <message>
+        <location filename="../widgets/image_crop.py" line="457"/>
         <source>Click to crop</source>
-        <translation type="vanished">Нажмите, чтобы обрезать</translation>
+        <translation>Нажмите, чтобы обрезать</translation>
     </message>
 </context>
 <context>
     <name>CropWidget</name>
     <message>
+        <location filename="../widgets/image_crop.py" line="57"/>
         <source>No image loaded</source>
-        <translation type="vanished">Изображение не загружено</translation>
+        <translation>Изображение не загружено</translation>
     </message>
 </context>
 <context>
     <name>CustomTextEdit</name>
     <message>
+        <location filename="../widgets/custom_text_edit.py" line="45"/>
         <source>&amp;Enlarge Font</source>
-        <translation type="vanished">Увеличить шрифт</translation>
+        <translation>Увеличить шрифт</translation>
     </message>
     <message>
+        <location filename="../widgets/custom_text_edit.py" line="48"/>
         <source>&amp;Decrease Font</source>
-        <translation type="vanished">Уменьшить шрифт</translation>
+        <translation>Уменьшить шрифт</translation>
     </message>
     <message>
+        <location filename="../widgets/custom_text_edit.py" line="51"/>
         <source>Reset Font</source>
-        <translation type="vanished">Сбросить шрифт</translation>
+        <translation>Сбросить шрифт</translation>
     </message>
 </context>
 <context>
     <name>FilterableComboBox</name>
     <message>
+        <location filename="../widgets/filterable_combobox.py" line="36"/>
         <source>Select an item</source>
-        <translation type="vanished">Выберите элемент</translation>
+        <translation>Выберите элемент</translation>
     </message>
 </context>
 <context>
     <name>FilterablePopup</name>
     <message>
+        <location filename="../widgets/filterable_combobox.py" line="109"/>
         <source>Filter items</source>
-        <translation type="vanished">Фильтровать элементы</translation>
+        <translation>Фильтровать элементы</translation>
     </message>
 </context>
 <context>
     <name>ImageManagerWidget</name>
     <message>
+        <location filename="../widgets/image_manager.py" line="50"/>
         <source>Load Image</source>
-        <translation type="vanished">Загрузить изображение</translation>
+        <translation>Загрузить изображение</translation>
     </message>
     <message>
+        <location filename="../widgets/image_manager.py" line="51"/>
         <source>Load an image for processing</source>
-        <translation type="vanished">Загрузить изображение для обработки</translation>
+        <translation>Загрузить изображение для обработки</translation>
     </message>
     <message>
+        <location filename="../widgets/image_manager.py" line="54"/>
         <source>Screenshot</source>
-        <translation type="vanished">Скриншот</translation>
+        <translation>Скриншот</translation>
     </message>
     <message>
+        <location filename="../widgets/image_manager.py" line="55"/>
         <source>Capture a screenshot for processing</source>
-        <translation type="vanished">Сделать скриншот для обработки</translation>
+        <translation>Сделать скриншот для обработки</translation>
     </message>
     <message>
+        <location filename="../widgets/image_manager.py" line="59"/>
         <source>Click to crop the image and set area for OCR</source>
-        <translation type="vanished">Нажмите, чтобы обрезать изображение и выбрать область для OCR</translation>
+        <translation>Нажмите, чтобы обрезать изображение и выбрать область для OCR</translation>
     </message>
     <message>
+        <location filename="../widgets/image_manager.py" line="109"/>
         <source>Select Image</source>
-        <translation type="vanished">Выбрать изображение</translation>
+        <translation>Выбрать изображение</translation>
     </message>
 </context>
 <context>
     <name>LanguageGroup</name>
     <message>
+        <location filename="../features/settings.py" line="91"/>
         <source>Language</source>
-        <translation type="vanished">Язык приложения</translation>
+        <translation>Язык приложения</translation>
     </message>
     <message>
+        <location filename="../features/settings.py" line="96"/>
         <source>System default</source>
-        <translation type="vanished">Системный по умолчанию</translation>
+        <translation>Системный по умолчанию</translation>
     </message>
     <message>
+        <location filename="../features/settings.py" line="98"/>
         <source>English</source>
-        <translation type="vanished">Английский</translation>
+        <translation>Английский</translation>
     </message>
     <message>
+        <location filename="../features/settings.py" line="112"/>
         <source>Changes apply after restart.</source>
-        <translation type="vanished">Изменения вступят в силу после перезапуска.</translation>
+        <translation>Изменения вступят в силу после перезапуска.</translation>
     </message>
 </context>
 <context>
     <name>LanguageListEdit</name>
     <message>
+        <location filename="../widgets/target_language_list_edit.py" line="49"/>
         <source>Comma separated list of target languages in 2 or 3 characters. Default: %1</source>
-        <translation type="vanished">Список целевых языков через запятую, по 2–3 символа. По умолчанию: %1</translation>
+        <translation>Список целевых языков через запятую, по 2–3 символа. По умолчанию: %1</translation>
     </message>
     <message>
+        <location filename="../widgets/target_language_list_edit.py" line="57"/>
         <source>Some invalid chars. Valid only comma separated list of target languages in 2 or 3 characters.</source>
-        <translation type="vanished">Есть недопустимые символы. Допустим только список целевых языков через запятую, по 2–3 символа.</translation>
+        <translation>Есть недопустимые символы. Допустим только список целевых языков через запятую, по 2–3 символа.</translation>
     </message>
 </context>
 <context>
     <name>MainWindow</name>
     <message>
+        <location filename="../main_window.py" line="85"/>
         <source>Provider Error</source>
-        <translation type="vanished">Ошибка провайдера</translation>
+        <translation>Ошибка провайдера</translation>
     </message>
     <message>
+        <location filename="../main_window.py" line="128"/>
         <source>Clear widgets</source>
-        <translation type="vanished">Очистить виджеты</translation>
+        <translation>Очистить виджеты</translation>
     </message>
     <message>
+        <location filename="../main_window.py" line="161"/>
         <source>Active %1 fetching models</source>
-        <translation type="vanished">Загрузка моделей: %1</translation>
+        <translation>Загрузка моделей: %1</translation>
     </message>
     <message>
+        <location filename="../main_window.py" line="163"/>
         <source>Fetching models for providers: %1</source>
-        <translation type="vanished">Загрузка моделей для провайдеров: %1</translation>
+        <translation>Загрузка моделей для провайдеров: %1</translation>
     </message>
     <message>
+        <location filename="../main_window.py" line="227"/>
         <source>Target:</source>
-        <translation type="vanished">Цель:</translation>
+        <translation>Цель:</translation>
     </message>
 </context>
 <context>
     <name>MonitorSelectDialog</name>
     <message>
+        <location filename="../widgets/screen_capture.py" line="68"/>
         <source>Select Monitor</source>
-        <translation type="vanished">Выбрать монитор</translation>
+        <translation>Выбрать монитор</translation>
     </message>
     <message>
+        <location filename="../widgets/screen_capture.py" line="78"/>
         <source>Select a monitor to capture:</source>
-        <translation type="vanished">Выберите монитор для захвата:</translation>
+        <translation>Выберите монитор для захвата:</translation>
     </message>
     <message>
+        <location filename="../widgets/screen_capture.py" line="85"/>
         <source>Monitor %1  —  %2×%3  (%4)</source>
-        <translation type="vanished">Монитор %1  —  %2×%3  (%4)</translation>
+        <translation>Монитор %1  —  %2×%3  (%4)</translation>
     </message>
     <message>
+        <location filename="../widgets/screen_capture.py" line="98"/>
         <source>Cancel</source>
-        <translation type="vanished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
+        <location filename="../widgets/screen_capture.py" line="102"/>
         <source>Capture</source>
-        <translation type="vanished">Захват</translation>
+        <translation>Захват</translation>
     </message>
 </context>
 <context>
     <name>OCRFeature</name>
     <message>
+        <location filename="../features/ocr.py" line="25"/>
         <source>Image</source>
-        <translation type="vanished">Изображение</translation>
+        <translation>Изображение</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="34"/>
         <source>OCR Model:</source>
-        <translation type="vanished">Модель OCR:</translation>
+        <translation>Модель OCR:</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="56"/>
         <source>OCR</source>
-        <translation type="vanished">OCR</translation>
+        <translation>OCR</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="57"/>
         <source>Get text from image</source>
-        <translation type="vanished">Получить текст из изображения</translation>
+        <translation>Получить текст из изображения</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="61"/>
         <source>Translate</source>
-        <translation type="vanished">Перевести</translation>
+        <translation>Перевести</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="62"/>
         <source>Translate text extracted via OCR</source>
-        <translation type="vanished">Перевести текст, извлечённый через OCR</translation>
+        <translation>Перевести текст, извлечённый через OCR</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="66"/>
         <source>Processing...</source>
-        <translation type="vanished">Обработка...</translation>
+        <translation>Обработка...</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="148"/>
         <source>OCR Error</source>
-        <translation type="vanished">Ошибка OCR</translation>
+        <translation>Ошибка OCR</translation>
     </message>
     <message>
+        <location filename="../features/ocr.py" line="196"/>
         <source>Translation Error</source>
-        <translation type="vanished">Ошибка перевода</translation>
+        <translation>Ошибка перевода</translation>
     </message>
 </context>
 <context>
     <name>ProviderDialog</name>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="114"/>
         <source>Manage Providers</source>
-        <translation type="vanished">Управление провайдерами</translation>
+        <translation>Управление провайдерами</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="132"/>
         <source>Name</source>
-        <translation type="vanished">Имя</translation>
+        <translation>Имя</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="132"/>
         <source>Type</source>
-        <translation type="vanished">Тип</translation>
+        <translation>Тип</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="132"/>
         <source>API URL</source>
-        <translation type="vanished">URL API</translation>
+        <translation>URL API</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="132"/>
         <source>API Key</source>
-        <translation type="vanished">API-ключ</translation>
+        <translation>API-ключ</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="142"/>
         <source>Add</source>
-        <translation type="vanished">Добавить</translation>
+        <translation>Добавить</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="146"/>
         <source>Edit</source>
-        <translation type="vanished">Изменить</translation>
+        <translation>Изменить</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="150"/>
         <source>Delete</source>
-        <translation type="vanished">Удалить</translation>
+        <translation>Удалить</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="154"/>
         <source>Close</source>
-        <translation type="vanished">Закрыть</translation>
+        <translation>Закрыть</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="182"/>
+        <location filename="../widgets/provider_dialog.py" line="213"/>
         <source>No Selection</source>
-        <translation type="vanished">Ничего не выбрано</translation>
+        <translation>Ничего не выбрано</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="182"/>
         <source>Select a provider to edit</source>
-        <translation type="vanished">Выберите провайдера для изменения</translation>
+        <translation>Выберите провайдера для изменения</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="197"/>
         <source>Duplicate</source>
-        <translation type="vanished">Дубликат</translation>
+        <translation>Дубликат</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="198"/>
         <source>Provider &apos;%1&apos; already exists</source>
-        <translation type="vanished">Провайдер «%1» уже существует</translation>
+        <translation>Провайдер «%1» уже существует</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="213"/>
         <source>Select a provider to delete</source>
-        <translation type="vanished">Выберите провайдера для удаления</translation>
+        <translation>Выберите провайдера для удаления</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="217"/>
         <source>Confirm Delete</source>
-        <translation type="vanished">Подтвердите удаление</translation>
+        <translation>Подтвердите удаление</translation>
     </message>
     <message>
+        <location filename="../widgets/provider_dialog.py" line="218"/>
         <source>Delete provider &apos;%1&apos;?</source>
-        <translation type="vanished">Удалить провайдера «%1»?</translation>
+        <translation>Удалить провайдера «%1»?</translation>
     </message>
 </context>
 <context>
     <name>ProviderModelComboBox</name>
     <message>
+        <location filename="../widgets/filterable_combobox.py" line="350"/>
         <source>Select a model</source>
-        <translation type="vanished">Выберите модель</translation>
+        <translation>Выберите модель</translation>
     </message>
 </context>
 <context>
     <name>ProviderModelTreePopup</name>
     <message>
+        <location filename="../widgets/filterable_combobox.py" line="197"/>
         <source>Filter models</source>
-        <translation type="vanished">Фильтровать модели</translation>
+        <translation>Фильтровать модели</translation>
     </message>
 </context>
 <context>
     <name>ProvidersCard</name>
     <message>
+        <location filename="../widgets/providers_card.py" line="43"/>
         <source>Manage Providers</source>
-        <translation type="vanished">Управление провайдерами</translation>
+        <translation>Управление провайдерами</translation>
     </message>
     <message>
+        <location filename="../widgets/providers_card.py" line="109"/>
         <source>Reload models</source>
-        <translation type="vanished">Перезагрузить модели</translation>
+        <translation>Перезагрузить модели</translation>
     </message>
 </context>
 <context>
     <name>ProvidersGroup</name>
     <message>
+        <location filename="../features/settings.py" line="81"/>
         <source>Providers</source>
-        <translation type="vanished">Провайдеры</translation>
+        <translation>Провайдеры</translation>
     </message>
 </context>
 <context>
     <name>SettingsFeature</name>
     <message>
+        <location filename="../features/settings.py" line="27"/>
         <source>Settings</source>
-        <translation type="vanished">Настройки</translation>
+        <translation>Настройки</translation>
     </message>
 </context>
 <context>
     <name>TargetLanguageListEditGroup</name>
     <message>
+        <location filename="../features/settings.py" line="71"/>
         <source>Target languages</source>
-        <translation type="vanished">Целевые языки</translation>
+        <translation>Целевые языки</translation>
     </message>
 </context>
 <context>
     <name>TextFeature</name>
     <message>
+        <location filename="../features/text.py" line="28"/>
         <source>Text</source>
-        <translation type="vanished">Текст</translation>
+        <translation>Текст</translation>
     </message>
     <message>
+        <location filename="../features/text.py" line="49"/>
         <source>Translate</source>
-        <translation type="vanished">Перевести</translation>
+        <translation>Перевести</translation>
     </message>
     <message>
+        <location filename="../features/text.py" line="53"/>
         <source>Translating...</source>
-        <translation type="vanished">Перевод...</translation>
+        <translation>Перевод...</translation>
     </message>
     <message>
-        <source>Eval: %1s; %2 tkn/s</source>
-        <translation type="vanished">Оценка: %1 с; %2 ток/с</translation>
-    </message>
-    <message>
+        <location filename="../features/text.py" line="121"/>
         <source>Translation Error</source>
-        <translation type="vanished">Ошибка перевода</translation>
+        <translation>Ошибка перевода</translation>
     </message>
 </context>
 <context>
     <name>Tray</name>
     <message>
+        <location filename="../main.py" line="106"/>
         <source>Open Window</source>
-        <translation type="vanished">Открыть окно</translation>
+        <translation>Открыть окно</translation>
     </message>
     <message>
+        <location filename="../main.py" line="112"/>
         <source>About</source>
-        <translation type="vanished">О программе</translation>
+        <translation>О программе</translation>
     </message>
     <message>
+        <location filename="../main.py" line="118"/>
         <source>Exit</source>
-        <translation type="vanished">Выход</translation>
+        <translation>Выход</translation>
     </message>
 </context>
 </TS>
