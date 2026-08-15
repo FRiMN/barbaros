@@ -24,6 +24,11 @@ def _ts_files() -> tuple[list[Path], Path]:
     return sorted(ts_dir.glob("*.ts")), ts_dir
 
 
+def _qm_files() -> tuple[list[Path], Path]:
+    qm_dir = Path(__file__).resolve().parents[2] / "src" / "barbaros" / "i18n"
+    return sorted(qm_dir.glob("*.qm")), qm_dir
+
+
 def test_available_languages_includes_all_ts():
     ts_files, ts_dir = _ts_files()
     assert len(available_languages()) == len(ts_files)
@@ -90,3 +95,15 @@ def test_ts_files_have_locations_and_no_vanished():
             assert translation.get("type") != "vanished", (
                 f"{ts.name}: message {source!r} is vanished"
             )
+
+
+def test_compiled_translations_are_non_trivial():
+    qm_files, qm_dir = _qm_files()
+    assert qm_files, f"no .qm files found in {qm_dir}"
+
+    for qm in qm_files:
+        size = qm.stat().st_size
+        assert size > 100, (
+            f"{qm.name} is only {size} bytes; "
+            f"likely compiled from an empty/vanished .ts"
+        )
