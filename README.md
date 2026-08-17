@@ -178,7 +178,7 @@ The application supports providers including:
 - **Major Cloud**: OpenAI, Anthropic, Google Gemini, Azure
 - **Specialized**: Groq, Together AI, Cerebras, Fireworks, Sambanova
 - **Enterprise**: AWS Bedrock, IBM watsonx, Databricks, Vertex AI
-- **And 30+ more**: See [any_llm documentation](https://github.com/nikudotdot/any_llm) for complete list
+- **And 30+ more**: See [any_llm documentation](https://github.com/mozilla-ai/any-llm) for complete list
 
 ### Managing Providers
 
