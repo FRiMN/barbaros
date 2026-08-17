@@ -277,6 +277,10 @@ For OCR functionality, Barbaros uses a separate worker process:
 
 For detailed information about building the Flatpak package, see [build_flatpak.md](docs/build_flatpak.md).
 
+### Application Versioning
+
+For details on how the application version is generated (setuptools_scm, CalVer format) and how it is displayed in the About window, see [versioning.md](docs/versioning.md).
+
 **Quick Build:**
 We use **[invoke](https://docs.pyinvoke.org/en/stable/)** for the build process. See the `tasks.py` file in the project root.
 ```bash
