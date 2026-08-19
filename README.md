@@ -7,9 +7,20 @@
 Barbaros is a lightweight desktop application that provides instant AI translations through your system tray. Simply copy text to your clipboard and get quick translations with a hotkey.
 > **Note:** Tested only on Linux, but may also work on Windows and macOS.
 
-![Screenshot 1](docs/img/window-1.png)
-![Screenshot 2](docs/img/window_translation_process.png)
-![Screenshot 3](docs/img/window-2.png)
+## Gallery
+
+| Model Selector | Manage Providers | Settings |
+| :---: | :---: | :---: |
+| ![Model Selector](docs/img/model_selector.png) | ![Manage Providers](docs/img/manage_providers.png) | ![Settings](docs/img/settings.png) |
+
+| OCR | Translation Process | Error |
+| :---: | :---: | :---: |
+| ![OCR](docs/img/ocr.png) | ![Translation Process](docs/img/translation_process.png) | ![Error](docs/img/error.png) |
+
+| Text 1 | Text 2 |
+| :---: | :---: |
+| ![Text 1](docs/img/text1.png) | ![Text 2](docs/img/text2.png) |
+
 
 ## Features
 
@@ -22,8 +33,6 @@ Barbaros is a lightweight desktop application that provides instant AI translati
 - **🔒 Privacy-First**: Process translations locally with Ollama or securely with cloud providers (your data protection depends on chosen provider)
 - **🏠 Offline Capable**: Works completely offline with local providers (e.g., Ollama) once models are downloaded
 - **⚡ Quick Access**: Instant popup with customizable hotkeys
-- **🔄 Multiple Communication Methods**: Uses DBus and Unix signals for reliable operation
-- **🎛️ Three Functional Tabs**: Text (text translation), Image (OCR), Settings (configuration)
 
 ## Prerequisites
 
