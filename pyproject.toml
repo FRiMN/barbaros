@@ -19,11 +19,16 @@ dependencies = [
     "dataclasses-json>=0.6.7",
 ]
 
+[dependency-groups]
+dev = [
+    "ruff",
+    "pytest",
+    "pytest-qt",
+    "invoke",
+]
+
 [project.gui-scripts]
 barbaros = "barbaros.main:main"
-
-[project.optional-dependencies]
-dev = ["ruff", "pytest", "invoke"]
 
 [project.urls]
 Homepage = "https://github.com/FRiMN/barbaros"
@@ -49,3 +54,7 @@ barbaros = ["i18n/*.qm", "i18n/*.ts"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ruff.lint]
+ignore = [
+    "E741", # Ambiguous variable name
+]

@@ -40,7 +40,12 @@ def testing(c):
     """Запуск тестов"""
     c.run("uv run pytest")
 
-@task(pre=[testing])
+@task
+def check(c):
+    """Проверка кода"""
+    c.run("uv run ruff check")
+
+@task(pre=[testing, check])
 def build_python(c):
     """Подготовка dist и сборка Python-пакета"""
     print("Подготовка dist...")
