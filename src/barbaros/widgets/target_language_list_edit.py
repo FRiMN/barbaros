@@ -76,7 +76,7 @@ class LanguageListEdit(QWidget):
         self.language_edit_status.hide()
 
     def update_list(self):
-        l = [l.strip().lower() for l in self.language_edit.text().split(",")]
-        self.parent.target_language_list = l
+        ll = [l.strip().lower() for l in self.language_edit.text().split(",")]
+        self.parent.target_language_list = ll
         self.parent.refresh_target_language_select()
         self.parent.save_target_languages()
