@@ -77,7 +77,7 @@ class SignalHandling(QObject):
         """Signal handler that writes to socket"""
         try:
             self.signal_write_sock.send(bytes([signum]))
-        except:
+        except: # noqa: E722
             pass  # Ignore errors during signal handling
 
     def _handle_signal_from_socket(self):
@@ -87,7 +87,7 @@ class SignalHandling(QObject):
             if data:
                 signum = data[0]
                 self.signal_received.emit(signum)
-        except:
+        except: # noqa: E722
             pass  # Ignore errors
 
 
