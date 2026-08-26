@@ -495,22 +495,22 @@
 <context>
     <name>TextFeature</name>
     <message>
-        <location filename="../features/text.py" line="28"/>
+        <location filename="../features/text.py" line="25"/>
         <source>Text</source>
         <translation>Текст</translation>
     </message>
     <message>
-        <location filename="../features/text.py" line="49"/>
+        <location filename="../features/text.py" line="46"/>
         <source>Translate</source>
         <translation>Перевести</translation>
     </message>
     <message>
-        <location filename="../features/text.py" line="53"/>
+        <location filename="../features/text.py" line="50"/>
         <source>Translating...</source>
         <translation>Перевод...</translation>
     </message>
     <message>
-        <location filename="../features/text.py" line="121"/>
+        <location filename="../features/text.py" line="118"/>
         <source>Translation Error</source>
         <translation>Ошибка перевода</translation>
     </message>
