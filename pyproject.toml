@@ -23,7 +23,6 @@ dependencies = [
 dev = [
     "ruff",
     "pytest",
-    "pytest-qt",
     "invoke",
 ]
 
