@@ -75,6 +75,11 @@ def build(c):
     """Полная сборка"""
     print("Сборка завершена.")
 
+@task(pre=[compile_translations, testing, check])
+def prerelease(c):
+    """Предрелизные действия"""
+    print("Готово к релизу")
+
 @task
 def clean(c):
     """Очистка артефактов"""
