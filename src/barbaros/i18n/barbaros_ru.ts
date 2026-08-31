@@ -458,14 +458,19 @@
 <context>
     <name>ProvidersCard</name>
     <message>
-        <location filename="../widgets/providers_card.py" line="43"/>
+        <location filename="../widgets/providers_card.py" line="44"/>
         <source>Manage Providers</source>
         <translation>Управление провайдерами</translation>
     </message>
     <message>
-        <location filename="../widgets/providers_card.py" line="109"/>
+        <location filename="../widgets/providers_card.py" line="110"/>
         <source>Reload models</source>
         <translation>Перезагрузить модели</translation>
+    </message>
+    <message>
+        <location filename="../widgets/providers_card.py" line="140"/>
+        <source>Models are not loaded. Click the button above to refresh the list of models.</source>
+        <translation>Модели не загружены. Нажмите на кнопку выше для обновления списка моделей.</translation>
     </message>
 </context>
 <context>
