@@ -94,7 +94,7 @@ class ProvidersCard(QFrame):
         return card
 
     def _build_header_layout(self, name: str) -> QHBoxLayout:
-        # Header layout for name and reload button
+        """Header layout for name and reload button"""
         header_layout = QHBoxLayout()
 
         name_label = QLabel(name)
@@ -113,6 +113,7 @@ class ProvidersCard(QFrame):
         return header_layout
 
     def _build_info_layout(self, provider_client: ProviderClient) -> QHBoxLayout:
+        """Layout for info and warning icon"""
         info_layout = QHBoxLayout()
         info_layout.setSpacing(10)
 
