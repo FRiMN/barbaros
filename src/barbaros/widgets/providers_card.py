@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QScrollArea, QLabel, QPushButton, QHBoxLayout
+    QFrame, QVBoxLayout, QScrollArea, QLabel, QPushButton, QHBoxLayout, QStyle
 )
 from PySide6.QtGui import QIcon
 
@@ -127,7 +127,23 @@ class ProvidersCard(QFrame):
             info_layout.addWidget(self._create_bordered_label(truncate_key(key)))
 
         info_layout.addStretch()
+
+        if not provider_client.models:
+            warn_label = self._build_no_models_warn_label()
+            info_layout.addWidget(warn_label)
+
         return info_layout
+
+    def _build_no_models_warn_label(self) -> QLabel:
+        warn_label = QLabel()
+        warn_label.setToolTip(self.tr("Models are not loaded. Click the button above to refresh the list of models."))
+
+        style = warn_label.style()
+        warn_icon = style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+        icon_size = style.pixelMetric(QStyle.PixelMetric.PM_ButtonIconSize)
+        warn_label.setPixmap(warn_icon.pixmap(icon_size))
+
+        return warn_label
 
     def _open_provider_dialog(self):
         dialog = ProviderDialog(self.model_manager, self.parent)
