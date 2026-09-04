@@ -1,3 +1,8 @@
+"""
+TODO:
+    - Refactor to states of widgets; before ocr -> ocr -> before translate -> translate
+"""
+
 from PySide6.QtWidgets import (
     QVBoxLayout,
     QPushButton,
@@ -105,8 +110,7 @@ class OCRFeature(AbstractFeature):
         self.ocr_text.clear()
         self.translated_text.clear()
 
-        self.ocr_button.setDisabled(True)
-        self.translate_button.setDisabled(True)
+        self._disable_action_buttons(True)
         self.progressbar.show()
         self.progressbar.start_animation()
 
@@ -140,8 +144,7 @@ class OCRFeature(AbstractFeature):
         r: Choice = resp.choices[0]
         ocr_text = r.message.content
         self.ocr_text.setText(ocr_text)
-        self.translate_button.setDisabled(False)
-        self.ocr_button.setDisabled(False)
+        self._disable_action_buttons(False)
 
     def on_ocr_error(self, error_msg: str):
         self.progressbar.hide()
@@ -155,7 +158,7 @@ class OCRFeature(AbstractFeature):
 
         self.translated_text.clear()
 
-        self.translate_button.setDisabled(True)
+        self._disable_action_buttons(True)
         self.progressbar.show()
         self.progressbar.start_animation()
 
@@ -189,12 +192,12 @@ class OCRFeature(AbstractFeature):
         translated_text = r.message.content
         translated_text = translated_text.strip()
         self.translated_text.setText(translated_text)
-        self.translate_button.setDisabled(False)
+        self._disable_action_buttons(False)
 
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()
         QMessageBox.critical(self.parent, self.tr("Translation Error"), error_msg)
-        self.translate_button.setDisabled(False)
+        self._disable_action_buttons(False)
 
     def handle_clear_button(self):
         self.ocr_text.clear()
@@ -202,3 +205,8 @@ class OCRFeature(AbstractFeature):
         self.image_manager.clear()
 
         self.translate_button.setDisabled(True)
+
+    def _disable_action_buttons(self, is_disable: bool):
+        self.translate_button.setDisabled(is_disable)
+        self.ocr_button.setDisabled(is_disable)
+
