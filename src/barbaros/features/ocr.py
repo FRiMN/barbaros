@@ -42,10 +42,10 @@ class OCRFeature(AbstractFeature):
 
         l.addWidget(self.image_manager)
         l.addWidget(self.ocr_button)
-        l.addWidget(self.progressbar)
         l.addWidget(self.ocr_text)
         l.addWidget(self.translate_button)
         l.addWidget(self.translated_text)
+        l.addWidget(self.progressbar)
         l.addStretch()  # Push everything to the top
 
         return l
