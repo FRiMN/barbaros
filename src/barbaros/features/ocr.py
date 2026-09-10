@@ -46,6 +46,7 @@ class OCRFeature(AbstractFeature):
         l.addWidget(self.translate_button)
         l.addWidget(self.translated_text)
         l.addWidget(self.progressbar)
+        l.addWidget(self.stop_button)
         l.addStretch()  # Push everything to the top
 
         return l
@@ -70,6 +71,11 @@ class OCRFeature(AbstractFeature):
 
         self.progressbar = GradientRainbowLabel(self.tr("Processing..."))
         self.progressbar.hide()
+
+        self.stop_button = QPushButton()
+        self.stop_button.setText(self.tr("Stop"))
+        self.stop_button.hide()
+        self.stop_button.clicked.connect(self.handle_stop_button)
 
         self.ocr_text = CustomTextEdit(readOnly=True)
 
@@ -161,6 +167,7 @@ class OCRFeature(AbstractFeature):
         self._disable_action_buttons(True)
         self.progressbar.show()
         self.progressbar.start_animation()
+        self.stop_button.show()
 
         self._threaded_translate(text)
 
@@ -191,6 +198,7 @@ class OCRFeature(AbstractFeature):
     def on_translation_finished(self):
         self.progressbar.hide()
         self._disable_action_buttons(False)
+        self.stop_button.hide()
 
     def on_translation_done(self, resp: ChatCompletion):
         r: Choice = resp.choices[0]
@@ -202,6 +210,7 @@ class OCRFeature(AbstractFeature):
         self.progressbar.hide()
         QMessageBox.critical(self.parent, self.tr("Translation Error"), error_msg)
         self._disable_action_buttons(False)
+        self.stop_button.hide()
 
     def handle_clear_button(self):
         self.ocr_text.clear()
@@ -209,6 +218,9 @@ class OCRFeature(AbstractFeature):
         self.image_manager.clear()
 
         self.translate_button.setDisabled(True)
+
+    def handle_stop_button(self):
+        self.translation_worker.cancel()
 
     def _disable_action_buttons(self, is_disable: bool):
         self.translate_button.setDisabled(is_disable)
