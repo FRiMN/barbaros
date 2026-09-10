@@ -33,6 +33,7 @@ class TextFeature(AbstractFeature):
         l.addWidget(self.orig_text)
         l.addWidget(self.translate_button)
         l.addWidget(self.progressbar)
+        l.addWidget(self.stop_button)
         l.addWidget(self.translated_text)
 
         return l
@@ -50,6 +51,11 @@ class TextFeature(AbstractFeature):
         self.progressbar = GradientRainbowLabel(self.tr("Translating..."))
         self.progressbar.hide()
 
+        self.stop_button = QPushButton()
+        self.stop_button.setText(self.tr("Stop"))
+        self.stop_button.hide()
+        self.stop_button.clicked.connect(self.handle_stop_button)
+
     def handle_translate_button(self):
         self.translate()
 
@@ -65,6 +71,7 @@ class TextFeature(AbstractFeature):
         self.translate_button.hide()
         self.progressbar.show()
         self.progressbar.start_animation()
+        self.stop_button.show()
         self.translated_text.hide()
 
         self._threaded_translate(text_to_translate)
@@ -74,8 +81,8 @@ class TextFeature(AbstractFeature):
         from barbaros.main_window import MainWindow
 
         self.parent: MainWindow
-        translation_thread = QThread(parent=self)
-        translation_thread.finished.connect(translation_thread.deleteLater)
+        self._translation_thread = QThread(parent=self)
+        self._translation_thread.finished.connect(self._translation_thread.deleteLater)
 
         selected_item = self.parent.model.selected_item
         provider = self.parent.model_manager[selected_item.provider]
@@ -83,15 +90,17 @@ class TextFeature(AbstractFeature):
         self.worker = TranslationWorker(
             text_to_translate, lang, selected_item, provider
         )
-        self.worker.moveToThread(translation_thread)
+        self.worker.moveToThread(self._translation_thread)
 
         self.worker.finished.connect(self.on_translation_finished)
-        self.worker.finished.connect(translation_thread.quit)
+        self.worker.done.connect(self.on_translation_done)
+
+        self.worker.finished.connect(self._translation_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.error.connect(self.on_translation_error)
-        translation_thread.started.connect(self.worker.run)
+        self._translation_thread.started.connect(self.worker.run)
 
-        translation_thread.start()
+        self._translation_thread.start()
 
     def pop_think(self, text: str) -> tuple[str, str]:
         m = re.search(r"<think>.*?<\/think>", text, re.MULTILINE | re.DOTALL)
@@ -101,8 +110,14 @@ class TextFeature(AbstractFeature):
             return think_text, text.strip()
         return "", text
 
-    def on_translation_finished(self, resp: ChatCompletion):
+    def on_translation_finished(self):
         self.progressbar.hide()
+        self.stop_button.hide()
+
+        self.translate_button.setDisabled(False)
+        self.translate_button.show()
+
+    def on_translation_done(self, resp: ChatCompletion):
         r: Choice = resp.choices[0]
         translated_text = r.message.content
         # TODO: We have `reasoning` in ChatCompletionMessage. I think we not need this.
@@ -110,11 +125,10 @@ class TextFeature(AbstractFeature):
         translated_text = translated_text.strip()
         self.translated_text.setText(translated_text)
         self.translated_text.show()
-        self.translate_button.setDisabled(False)
-        self.translate_button.show()
 
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()
+        self.stop_button.hide()
         QMessageBox.critical(self.parent, self.tr("Translation Error"), error_msg)
         self.translate_button.setDisabled(False)
         self.translate_button.show()
@@ -122,3 +136,6 @@ class TextFeature(AbstractFeature):
     def handle_clear_button(self):
         self.orig_text.clear()
         self.translated_text.clear()
+
+    def handle_stop_button(self):
+        self.worker.cancel()

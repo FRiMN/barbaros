@@ -179,6 +179,8 @@ class OCRFeature(AbstractFeature):
         self.translation_worker.moveToThread(translation_thread)
 
         self.translation_worker.finished.connect(self.on_translation_finished)
+        self.translation_worker.done.connect(self.on_translation_done)
+
         self.translation_worker.finished.connect(translation_thread.quit)
         self.translation_worker.finished.connect(self.translation_worker.deleteLater)
         self.translation_worker.error.connect(self.on_translation_error)
@@ -186,13 +188,15 @@ class OCRFeature(AbstractFeature):
 
         translation_thread.start()
 
-    def on_translation_finished(self, resp: ChatCompletion):
+    def on_translation_finished(self):
         self.progressbar.hide()
+        self._disable_action_buttons(False)
+
+    def on_translation_done(self, resp: ChatCompletion):
         r: Choice = resp.choices[0]
         translated_text = r.message.content
         translated_text = translated_text.strip()
         self.translated_text.setText(translated_text)
-        self._disable_action_buttons(False)
 
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()

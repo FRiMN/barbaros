@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 from collections.abc import Sequence
@@ -10,8 +11,40 @@ from .model_manager import ProviderClient, ProviderMeta
 from .widgets.filterable_combobox import ModelSelection
 
 
-class TranslationWorker(QObject):
-    finished = Signal(ChatCompletion)
+class AsyncWorker(QObject):
+    finished = Signal()
+    cancelled = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self._task = None
+
+    @Slot()
+    def run(self):
+        """Run in thread."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self._task = loop.create_task(self.run_task())
+
+        try:
+            loop.run_until_complete(self._task)
+        except asyncio.CancelledError:
+            self.cancelled.emit()
+        finally:
+            self.finished.emit()
+
+    async def run_task(self):
+        pass
+
+    def cancel(self):
+        if not self._task:
+            return
+
+        self._task.get_loop().call_soon_threadsafe(self._task.cancel)
+
+
+class TranslationWorker(AsyncWorker):
+    done = Signal(ChatCompletion)
     error = Signal(str)
 
     def __init__(self, text_to_translate: str, target_language: str, model: ModelSelection, provider: ProviderClient):
@@ -25,9 +58,7 @@ class TranslationWorker(QObject):
         """
         self.client = provider.client()
 
-    @Slot()
-    def run(self):
-        """Run in thread."""
+    async def run_task(self):
         from .resources_loader import Resource
 
         try:
@@ -35,9 +66,9 @@ class TranslationWorker(QObject):
                 {"role": "system", "content": Resource.translation_agent_system_prompt.value},
                 {"role": "user", "content": self.text_prompt}
             ]
-            resp: ChatCompletion = self.client.completion(self.model.model, messages)
+            resp: ChatCompletion = await self.client.acompletion(self.model.model, messages)
 
-            self.finished.emit(resp)
+            self.done.emit(resp)
         except Exception as e:
             self.error.emit(str(e))
 
