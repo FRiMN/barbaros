@@ -11,7 +11,7 @@ from .model_manager import ProviderClient, ProviderMeta
 from .widgets.filterable_combobox import ModelSelection
 
 
-class AsyncWorker(QObject):
+class AbstractAsyncWorker(QObject):
     finished = Signal()
     cancelled = Signal()
 
@@ -34,7 +34,7 @@ class AsyncWorker(QObject):
             self.finished.emit()
 
     async def run_task(self):
-        pass
+        raise NotImplementedError
 
     def cancel(self):
         if not self._task:
@@ -43,7 +43,7 @@ class AsyncWorker(QObject):
         self._task.get_loop().call_soon_threadsafe(self._task.cancel)
 
 
-class TranslationWorker(AsyncWorker):
+class TranslationWorker(AbstractAsyncWorker):
     done = Signal(ChatCompletion)
     error = Signal(str)
 
