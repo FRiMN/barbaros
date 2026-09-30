@@ -130,18 +130,18 @@ class OCRFeature(AbstractFeature):
         provider = self.parent.model_manager[selected_item.provider]
         image_bytes = self.image_manager.get_cropped_image_bytes()
 
-        self.worker = OCRWorker(
+        self.ocr_worker = OCRWorker(
             image_bytes,
             self.ocr_model_select.selected_item,
             provider
         )
-        self.worker.moveToThread(ocr_thread)
+        self.ocr_worker.moveToThread(ocr_thread)
 
-        self.worker.finished.connect(self.on_ocr_finished)
-        self.worker.finished.connect(ocr_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker.error.connect(self.on_ocr_error)
-        ocr_thread.started.connect(self.worker.run)
+        self.ocr_worker.finished.connect(self.on_ocr_finished)
+        self.ocr_worker.finished.connect(ocr_thread.quit)
+        self.ocr_worker.finished.connect(self.ocr_worker.deleteLater)
+        self.ocr_worker.error.connect(self.on_ocr_error)
+        ocr_thread.started.connect(self.ocr_worker.run)
 
         ocr_thread.start()
 
