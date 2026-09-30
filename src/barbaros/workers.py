@@ -73,8 +73,8 @@ class TranslationWorker(AbstractAsyncWorker):
             self.error.emit(str(e))
 
 
-class OCRWorker(QObject):
-    finished = Signal(ChatCompletion)
+class OCRWorker(AbstractAsyncWorker):
+    done = Signal(ChatCompletion)
     error = Signal(str)
 
     def __init__(self, image_bytes: bytes, model: ModelSelection, provider: ProviderClient):
@@ -83,8 +83,7 @@ class OCRWorker(QObject):
         self.model = model
         self.client = provider.client()
 
-    @Slot()
-    def run(self):
+    async def run_task(self):
         if not self.client.SUPPORTS_COMPLETION_IMAGE:
             self.error.emit(f"Provider '{self.model.provider}' ({self.client.PROVIDER_NAME}) not supports images")
 
@@ -100,9 +99,9 @@ class OCRWorker(QObject):
             messages = [
                 {"role": "user", "content": msg}
             ]
-            resp: ChatCompletion = self.client.completion(self.model.model, messages)
+            resp: ChatCompletion = await self.client.acompletion(self.model.model, messages)
 
-            self.finished.emit(resp)
+            self.done.emit(resp)
         except Exception as e:
             self.error.emit(str(e))
 

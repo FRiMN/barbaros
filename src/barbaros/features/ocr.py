@@ -119,8 +119,23 @@ class OCRFeature(AbstractFeature):
         self._disable_action_buttons(True)
         self.progressbar.show()
         self.progressbar.start_animation()
+        self.stop_button.show()
 
         self._threaded_ocr()
+
+    def handle_translate_button(self):
+        text = self.ocr_text.toPlainText().strip()
+        if not text:
+            return
+
+        self.translated_text.clear()
+
+        self._disable_action_buttons(True)
+        self.progressbar.show()
+        self.progressbar.start_animation()
+        self.stop_button.show()
+
+        self._threaded_translate(text)
 
     def _threaded_ocr(self):
         ocr_thread = QThread(parent=self)
@@ -138,38 +153,14 @@ class OCRFeature(AbstractFeature):
         self.ocr_worker.moveToThread(ocr_thread)
 
         self.ocr_worker.finished.connect(self.on_ocr_finished)
+        self.ocr_worker.done.connect(self.on_ocr_done)
+
         self.ocr_worker.finished.connect(ocr_thread.quit)
         self.ocr_worker.finished.connect(self.ocr_worker.deleteLater)
         self.ocr_worker.error.connect(self.on_ocr_error)
         ocr_thread.started.connect(self.ocr_worker.run)
 
         ocr_thread.start()
-
-    def on_ocr_finished(self, resp: ChatCompletion):
-        self.progressbar.hide()
-        r: Choice = resp.choices[0]
-        ocr_text = r.message.content
-        self.ocr_text.setText(ocr_text)
-        self._disable_action_buttons(False)
-
-    def on_ocr_error(self, error_msg: str):
-        self.progressbar.hide()
-        QMessageBox.critical(self.parent, self.tr("OCR Error"), error_msg)
-        self.ocr_button.setDisabled(False)
-
-    def handle_translate_button(self):
-        text = self.ocr_text.toPlainText().strip()
-        if not text:
-            return
-
-        self.translated_text.clear()
-
-        self._disable_action_buttons(True)
-        self.progressbar.show()
-        self.progressbar.start_animation()
-        self.stop_button.show()
-
-        self._threaded_translate(text)
 
     def _threaded_translate(self, text_to_translate: str):
         translation_thread = QThread(parent=self)
@@ -200,15 +191,31 @@ class OCRFeature(AbstractFeature):
         self._disable_action_buttons(False)
         self.stop_button.hide()
 
+    def on_ocr_finished(self):
+        self.progressbar.hide()
+        self._disable_action_buttons(False)
+        self.stop_button.hide()
+
     def on_translation_done(self, resp: ChatCompletion):
         r: Choice = resp.choices[0]
         translated_text = r.message.content
         translated_text = translated_text.strip()
         self.translated_text.setText(translated_text)
 
+    def on_ocr_done(self, resp: ChatCompletion):
+        r: Choice = resp.choices[0]
+        ocr_text = r.message.content
+        self.ocr_text.setText(ocr_text)
+
     def on_translation_error(self, error_msg: str):
         self.progressbar.hide()
         QMessageBox.critical(self.parent, self.tr("Translation Error"), error_msg)
+        self._disable_action_buttons(False)
+        self.stop_button.hide()
+
+    def on_ocr_error(self, error_msg: str):
+        self.progressbar.hide()
+        QMessageBox.critical(self.parent, self.tr("OCR Error"), error_msg)
         self._disable_action_buttons(False)
         self.stop_button.hide()
 
@@ -220,7 +227,10 @@ class OCRFeature(AbstractFeature):
         self.translate_button.setDisabled(True)
 
     def handle_stop_button(self):
-        self.translation_worker.cancel()
+        if hasattr(self, "translation_worker"):
+            self.translation_worker.cancel()
+        if hasattr(self, "ocr_worker"):
+            self.ocr_worker.cancel()
 
     def _disable_action_buttons(self, is_disable: bool):
         self.translate_button.setDisabled(is_disable)
