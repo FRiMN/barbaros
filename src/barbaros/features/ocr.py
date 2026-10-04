@@ -152,7 +152,7 @@ class OCRFeature(AbstractFeature):
         )
         self.ocr_worker.moveToThread(ocr_thread)
 
-        self.ocr_worker.finished.connect(self.on_ocr_finished)
+        self.ocr_worker.finished.connect(self.on_worker_finished)
         self.ocr_worker.done.connect(self.on_ocr_done)
 
         self.ocr_worker.finished.connect(ocr_thread.quit)
@@ -176,7 +176,7 @@ class OCRFeature(AbstractFeature):
         )
         self.translation_worker.moveToThread(translation_thread)
 
-        self.translation_worker.finished.connect(self.on_translation_finished)
+        self.translation_worker.finished.connect(self.on_worker_finished)
         self.translation_worker.done.connect(self.on_translation_done)
 
         self.translation_worker.finished.connect(translation_thread.quit)
@@ -186,12 +186,7 @@ class OCRFeature(AbstractFeature):
 
         translation_thread.start()
 
-    def on_translation_finished(self):
-        self.progressbar.hide()
-        self._disable_action_buttons(False)
-        self.stop_button.hide()
-
-    def on_ocr_finished(self):
+    def on_worker_finished(self):
         self.progressbar.hide()
         self._disable_action_buttons(False)
         self.stop_button.hide()
@@ -208,14 +203,14 @@ class OCRFeature(AbstractFeature):
         self.ocr_text.setText(ocr_text)
 
     def on_translation_error(self, error_msg: str):
-        self.progressbar.hide()
-        QMessageBox.critical(self.parent, self.tr("Translation Error"), error_msg)
-        self._disable_action_buttons(False)
-        self.stop_button.hide()
+        self._on_worker_error(error_msg, self.tr("Translation Error"))
 
     def on_ocr_error(self, error_msg: str):
+        self._on_worker_error(error_msg, self.tr("OCR Error"))
+
+    def _on_worker_error(self, error_msg: str, title: str):
         self.progressbar.hide()
-        QMessageBox.critical(self.parent, self.tr("OCR Error"), error_msg)
+        QMessageBox.critical(self.parent, title, error_msg)
         self._disable_action_buttons(False)
         self.stop_button.hide()
 
