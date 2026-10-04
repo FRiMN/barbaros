@@ -194,7 +194,6 @@ class OCRFeature(AbstractFeature):
     def on_translation_done(self, resp: ChatCompletion):
         r: Choice = resp.choices[0]
         translated_text = r.message.content
-        translated_text = translated_text.strip()
         self.translated_text.setText(translated_text)
 
     def on_ocr_done(self, resp: ChatCompletion):
@@ -219,7 +218,7 @@ class OCRFeature(AbstractFeature):
         self.translated_text.clear()
         self.image_manager.clear()
 
-        self.translate_button.setDisabled(True)
+        self._disable_action_buttons(False)
 
     def handle_stop_button(self):
         if hasattr(self, "translation_worker"):
