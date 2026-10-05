@@ -2,6 +2,13 @@ app-id: io.github.frimn.barbaros
 runtime: org.kde.Platform
 runtime-version: "6.9" # Версия KDE Runtime, совместимая с PySide6
 sdk: org.kde.Sdk
+base: io.qt.PySide.BaseApp
+base-version: 6.9
+build-options:
+  env:
+    BASEAPP_REMOVE_WEBENGINE: 1
+    BASEAPP_DISABLE_NUMPY: 1
+
 command: barbaros # Команда для запуска, должна совпадать с Exec в .desktop и точкой входа
 finish-args:
   # Разрешения для GUI-приложения
@@ -14,6 +21,16 @@ finish-args:
   - --talk-name=org.freedesktop.secrets  # Разрешение на общение с сервисом паролей
   # Если приложению нужен доступ к файлам пользователя:
   # - --filesystem=home
+
+cleanup-commands:
+  - /app/cleanup-BaseApp.sh
+  - rm -rf /app/bin/pyside6-*
+  - rm -rf /app/lib/python3.*/site-packages/PySide6/assistant
+  - rm -rf /app/lib/python3.*/site-packages/PySide6/designer
+  - rm -rf /app/lib/python3.*/site-packages/PySide6/linguist
+  - rm -rf /app/lib/python3.*/site-packages/PySide6/examples
+  - rm -rf /app/lib/python3.*/site-packages/PySide6/Qt/qml
+  - rm -rf /app/lib/python3.*/site-packages/PySide6/Qt/translations/qtwebengine_locales
 
 modules:
   - name: barbaros
