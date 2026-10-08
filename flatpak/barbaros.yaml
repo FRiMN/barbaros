@@ -54,8 +54,10 @@ modules:
     build-commands:
       - echo ${FLATPAK_DEST} # /app
       - echo ${PWD} # /run/build/barbaros
-      # Установка приложения с помощью pip
-      - pip3 install --verbose --exists-action=i --find-links="file://${PWD}/dist" --prefix=${FLATPAK_DEST} "barbaros"
+      # Установка зависимостей (без PySide6, так как он в BaseApp)
+      - pip3 install --verbose --prefix=${FLATPAK_DEST} -r requirements-flatpak.txt
+      # Установка приложения с помощью pip без подтягивания зависимостей
+      - pip3 install --no-deps --verbose --exists-action=i --find-links="file://${PWD}/dist" --prefix=${FLATPAK_DEST} "barbaros"
       # Копирование файлов
       - install -Dm644 io.github.frimn.barbaros.desktop /app/share/applications/io.github.frimn.barbaros.desktop
       - install -Dm644 icon3.png /app/share/icons/hicolor/256x256/apps/io.github.frimn.barbaros.png
@@ -65,6 +67,8 @@ modules:
       - type: dir
         path: ../dist
         dest: dist/
+      - type: file
+        path: requirements-flatpak.txt
       # Также нужно включить файлы данных (.desktop, иконки)
       - type: file
         path: io.github.frimn.barbaros.desktop
