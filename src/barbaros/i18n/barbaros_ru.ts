@@ -310,47 +310,52 @@
 <context>
     <name>OCRFeature</name>
     <message>
-        <location filename="../features/ocr.py" line="25"/>
+        <location filename="../features/ocr.py" line="30"/>
         <source>Image</source>
         <translation>Изображение</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="34"/>
+        <location filename="../features/ocr.py" line="39"/>
         <source>OCR Model:</source>
         <translation>Модель OCR:</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="56"/>
+        <location filename="../features/ocr.py" line="62"/>
         <source>OCR</source>
         <translation>OCR</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="57"/>
+        <location filename="../features/ocr.py" line="63"/>
         <source>Get text from image</source>
         <translation>Получить текст из изображения</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="61"/>
+        <location filename="../features/ocr.py" line="67"/>
         <source>Translate</source>
         <translation>Перевести</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="62"/>
+        <location filename="../features/ocr.py" line="68"/>
         <source>Translate text extracted via OCR</source>
         <translation>Перевести текст, извлечённый через OCR</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="66"/>
+        <location filename="../features/ocr.py" line="72"/>
         <source>Processing...</source>
         <translation>Обработка...</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="148"/>
+        <location filename="../features/ocr.py" line="76"/>
+        <source>Stop</source>
+        <translation>Стоп</translation>
+    </message>
+    <message>
+        <location filename="../features/ocr.py" line="208"/>
         <source>OCR Error</source>
         <translation>Ошибка OCR</translation>
     </message>
     <message>
-        <location filename="../features/ocr.py" line="196"/>
+        <location filename="../features/ocr.py" line="205"/>
         <source>Translation Error</source>
         <translation>Ошибка перевода</translation>
     </message>
@@ -458,12 +463,12 @@
 <context>
     <name>ProvidersCard</name>
     <message>
-        <location filename="../widgets/providers_card.py" line="44"/>
+        <location filename="../widgets/providers_card.py" line="43"/>
         <source>Manage Providers</source>
         <translation>Управление провайдерами</translation>
     </message>
     <message>
-        <location filename="../widgets/providers_card.py" line="110"/>
+        <location filename="../widgets/providers_card.py" line="109"/>
         <source>Reload models</source>
         <translation>Перезагрузить модели</translation>
     </message>
@@ -505,17 +510,22 @@
         <translation>Текст</translation>
     </message>
     <message>
-        <location filename="../features/text.py" line="46"/>
+        <location filename="../features/text.py" line="47"/>
         <source>Translate</source>
         <translation>Перевести</translation>
     </message>
     <message>
-        <location filename="../features/text.py" line="50"/>
+        <location filename="../features/text.py" line="51"/>
         <source>Translating...</source>
         <translation>Перевод...</translation>
     </message>
     <message>
-        <location filename="../features/text.py" line="118"/>
+        <location filename="../features/text.py" line="55"/>
+        <source>Stop</source>
+        <translation>Стоп</translation>
+    </message>
+    <message>
+        <location filename="../features/text.py" line="132"/>
         <source>Translation Error</source>
         <translation>Ошибка перевода</translation>
     </message>
