@@ -24,7 +24,7 @@ dev = [
     "ruff",
     "pytest",
     "invoke",
-    "pyside6-addons"
+    "pyside6"
 ]
 
 [project.gui-scripts]
