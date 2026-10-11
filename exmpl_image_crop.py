@@ -80,22 +80,25 @@ class SideStrategy(CropStrategy):
 class PanStrategy(CropStrategy):
     def __init__(self):
         self.drag_start = QPoint()
-        self.rect_start = QPoint()
+        self.rect_on_press = QRect()
 
     def on_mouse_press(self, pos: QPoint, rect: QRect):
         self.drag_start = pos
-        self.rect_start = rect.topLeft()
+        self.rect_on_press = rect
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+        # Всё выделение сдвигается на вектор движения мыши относительно точки
+        # нажатия, не меняя размера. Сдвиг относительно drag_start применяется
+        # к прямоугольнику, запомненному на нажатии (rect_on_press), а не к уже
+        # сдвинутому текущему rect, поэтому перемещение не накапливается в
+        # цепочке mouse-move: результат каждого хода — rect_on_press +
+        # (pos - drag_start), независимо от промежуточных шагов (в отличие от
+        # старого расчёта, где дельта до точки нажатия добавлялась к уже
+        # сдвинутому rect — «ускорение»).
         delta = pos - self.drag_start
-        new_tl = self.rect_start + delta
-        new_br = rect.bottomRight() + delta
-        new_rect = QRect(
-            new_tl,
-            new_br
-        )
-        assert rect.size() == new_rect.size()
-        return new_rect
+        new_tl = self.rect_on_press.topLeft() + delta
+        new_br = self.rect_on_press.bottomRight() + delta
+        return QRect(new_tl, new_br)
 
 
 class CreateStrategy(CropStrategy):
