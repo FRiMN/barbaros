@@ -60,12 +60,12 @@ class CornerStrategy(CropStrategy):
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
         if self.anchor == 'tl': return QRect(pos, rect.bottomRight())
         if self.anchor == 'tr': return QRect(
-            rect.topLeft().x(), pos.y(),
-            pos.x() - rect.topLeft().x(), rect.bottom() - pos.y()
+            QPoint(rect.left(), pos.y()),
+            QPoint(pos.x(), rect.bottom())
         )
         if self.anchor == 'bl': return QRect(
-            pos.x(), rect.topLeft().y(),
-            rect.right() - pos.x(), pos.y() - rect.topLeft().y()
+            QPoint(pos.x(), rect.top()),
+            QPoint(rect.right(), pos.y())
         )
         if self.anchor == 'br': return QRect(rect.topLeft(), pos)
         return rect
