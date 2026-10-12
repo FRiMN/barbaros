@@ -76,9 +76,9 @@ class SideStrategy(CropStrategy):
         self.side = side
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
-        if self.side == 'top':    return QRect(rect.left(), pos.y(), rect.width(), rect.bottom() - pos.y())
+        if self.side == 'top':    return QRect(QPoint(rect.left(), pos.y()), rect.bottomRight())
         if self.side == 'bottom':  return QRect(rect.left(), rect.top(), rect.width(), pos.y() - rect.top())
-        if self.side == 'left':   return QRect(pos.x(), rect.top(), rect.right() - pos.x(), rect.height())
+        if self.side == 'left':   return QRect(QPoint(pos.x(), rect.top()), rect.bottomRight())
         if self.side == 'right':  return QRect(rect.left(), rect.top(), pos.x() - rect.left(), rect.height())
         return rect
 
