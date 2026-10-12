@@ -44,6 +44,12 @@ class CropStrategy(ABC):
 
     @abstractmethod
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+        """
+        Метод для расчета трансформации rect при drag-and-drop.
+
+        rect - выделение
+        pos - позиция курсора
+        """
         pass
 
 
