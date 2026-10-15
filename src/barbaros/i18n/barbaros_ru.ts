@@ -117,17 +117,17 @@
 <context>
     <name>CropDialog</name>
     <message>
-        <location filename="../widgets/image_crop.py" line="540"/>
+        <location filename="../widgets/image_crop.py" line="598"/>
         <source>Crop Image</source>
         <translation>Обрезать изображение</translation>
     </message>
     <message>
-        <location filename="../widgets/image_crop.py" line="582"/>
+        <location filename="../widgets/image_crop.py" line="640"/>
         <source>Reset</source>
         <translation>Сброс</translation>
     </message>
     <message>
-        <location filename="../widgets/image_crop.py" line="626"/>
+        <location filename="../widgets/image_crop.py" line="684"/>
         <source>Crop Controls</source>
         <translation>Управление обрезкой</translation>
     </message>
@@ -135,15 +135,15 @@
 <context>
     <name>CropPreviewWidget</name>
     <message>
-        <location filename="../widgets/image_crop.py" line="457"/>
+        <location filename="../widgets/image_crop.py" line="515"/>
         <source>Click to crop</source>
         <translation>Нажмите, чтобы обрезать</translation>
     </message>
 </context>
 <context>
-    <name>CropWidget</name>
+    <name>GimpStyleCropSelection</name>
     <message>
-        <location filename="../widgets/image_crop.py" line="57"/>
+        <location filename="../widgets/image_crop.py" line="293"/>
         <source>No image loaded</source>
         <translation>Изображение не загружено</translation>
     </message>
