@@ -1,5 +1,7 @@
-from PySide6.QtCore import QRect, QPoint, Qt, Signal
-from PySide6.QtGui import QImage, QPainter, QColor, QPen, QBrush
+from abc import ABC, abstractmethod
+
+from PySide6.QtCore import QRect, QPoint, Qt, Signal, QSize
+from PySide6.QtGui import QImage, QPixmap, QPainter, QColor, QPen, QBrush
 from PySide6.QtWidgets import (
     QWidget,
     QDialog,
@@ -12,8 +14,165 @@ from PySide6.QtWidgets import (
 )
 
 
-class CropWidget(QWidget):
-    """Widget for displaying image and allowing crop rectangle adjustment"""
+# --- ПОЛИТИКИ (POLICIES) ---
+
+
+class CropPolicy(ABC):
+    """Базовый класс для правил ограничения обрезки"""
+
+    @abstractmethod
+    def apply(self, rect: QRect, image_size: QSize) -> QRect:
+        pass
+
+
+class BoundaryPolicy(CropPolicy):
+    """Политика: запрещает выходить за границы изображения"""
+
+    def apply(self, rect: QRect, image_size: QSize) -> QRect:
+        return rect.intersected(QRect(0, 0, image_size.width(), image_size.height()))
+
+
+class MinSizePolicy(CropPolicy):
+    """Политика: минимальный размер области (по умолчанию 50x50)"""
+
+    def __init__(self, min_w: int = 50, min_h: int = 50):
+        self.min_w = min_w
+        self.min_h = min_h
+
+    def apply(self, rect: QRect, image_size: QSize) -> QRect:
+        rect = rect.normalized()
+        max_w = image_size.width()
+        max_h = image_size.height()
+
+        if rect.width() < self.min_w:
+            extra = self.min_w - rect.width()
+            new_right = min(max_w, rect.right() + extra)
+            new_left = max(0, new_right - self.min_w)
+            rect = QRect(new_left, rect.top(), new_right - new_left, rect.height())
+
+        if rect.height() < self.min_h:
+            extra = self.min_h - rect.height()
+            new_bottom = min(max_h, rect.bottom() + extra)
+            new_top = max(0, new_bottom - self.min_h)
+            rect = QRect(rect.left(), new_top, rect.width(), new_bottom - new_top)
+
+        return rect
+
+
+# --- СТРАТЕГИИ ТРАНСФОРМАЦИИ ---
+
+
+class CropStrategy(ABC):
+    """Абстрактный базовый класс для стратегии изменения выделения"""
+
+    def on_mouse_press(self, pos: QPoint, rect: QRect):
+        """Метод для подготовки состояния перед началом drag-and-drop."""
+        pass
+
+    @abstractmethod
+    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+        """
+        Метод для расчета трансформации rect при drag-and-drop.
+
+        rect - выделение
+        pos - позиция курсора
+        """
+        pass
+
+
+class CornerStrategy(CropStrategy):
+    def __init__(self, anchor_type: str):
+        self.anchor = anchor_type
+
+    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+        if self.anchor == "tl":
+            return QRect(pos, rect.bottomRight())
+        if self.anchor == "tr":
+            return QRect(QPoint(rect.left(), pos.y()), QPoint(pos.x(), rect.bottom()))
+        if self.anchor == "bl":
+            return QRect(QPoint(pos.x(), rect.top()), QPoint(rect.right(), pos.y()))
+        if self.anchor == "br":
+            return QRect(rect.topLeft(), pos)
+        return rect
+
+
+class SideStrategy(CropStrategy):
+    def __init__(self, side: str):
+        self.side = side
+
+    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+        if self.side == "top":
+            return QRect(QPoint(rect.left(), pos.y()), rect.bottomRight())
+        if self.side == "bottom":
+            return QRect(rect.left(), rect.top(), rect.width(), pos.y() - rect.top())
+        if self.side == "left":
+            return QRect(QPoint(pos.x(), rect.top()), rect.bottomRight())
+        if self.side == "right":
+            return QRect(rect.left(), rect.top(), pos.x() - rect.left(), rect.height())
+        return rect
+
+
+class PanStrategy(CropStrategy):
+    def __init__(self):
+        self.drag_start = QPoint()
+        self.rect_on_press = QRect()
+
+    def on_mouse_press(self, pos: QPoint, rect: QRect):
+        self.drag_start = pos
+        self.rect_on_press = rect
+
+    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+        # Всё выделение сдвигается на вектор движения мыши относительно точки
+        # нажатия, не меняя размера. Сдвиг относительно drag_start применяется
+        # к прямоугольнику, запомненному на нажатии (rect_on_press), а не к уже
+        # сдвинутому текущему rect, поэтому перемещение не накапливается в
+        # цепочке mouse-move.
+        delta = pos - self.drag_start
+        new_tl = self.rect_on_press.topLeft() + delta
+        new_br = self.rect_on_press.bottomRight() + delta
+        return QRect(new_tl, new_br)
+
+
+class CreateStrategy(CropStrategy):
+    def __init__(self):
+        self.begin = QPoint()
+
+    def on_mouse_press(self, pos: QPoint, rect: QRect):
+        self.begin = pos
+
+    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+        return QRect(self.begin, pos)
+
+
+# --- КНОПКИ УПРАВЛЕНИЯ ВЫДЕЛЕНИЕМ ---
+
+
+class HandlePos:
+    NONE = 0
+    TOP_LEFT = 1
+    TOP_RIGHT = 2
+    BOTTOM_LEFT = 3
+    BOTTOM_RIGHT = 4
+    TOP_CENTER = 5
+    BOTTOM_CENTER = 6
+    LEFT_CENTER = 7
+    RIGHT_CENTER = 8
+    INSIDE = 9
+
+
+# --- ОСНОВНОЙ ВИДЖЕТ ---
+
+
+class GimpStyleCropSelection(QWidget):
+    """Виджет обрезки в стиле GIMP с использованием стратегий и политик.
+
+    Принимает QImage, вписывает его в виджет и поддерживает зум/панорамирование.
+    Выделение области управляется диспетчеризацией по типу кнопки мыши
+    (HandlePos) через соответствующие CropStrategy и фильтруется CropPolicy
+    (границы изображения + минимальный размер). Координаты выделения хранятся
+    в системе координат изображения; конвертация в координаты виджета
+    выполняется при отрисовке и определении кнопок.
+    """
 
     zoomChanged = Signal(float)
 
@@ -22,33 +181,130 @@ class CropWidget(QWidget):
 
     def __init__(self, image: QImage, parent=None):
         super().__init__(parent)
-        self.image = image
+        self.image = image if image is not None else QImage()
+        self.pixmap = (
+            QPixmap.fromImage(self.image) if not self.image.isNull() else QPixmap()
+        )
+
         self.setMinimumSize(400, 300)
-
-        self.crop_rect: QRect | None = None
-
-        self.dragging_handle: str | None = None
-        self.drag_start_pos: QPoint | None = None
-        self.drag_start_rect: QRect | None = None
-
-        self.handle_size = 6
-        self.handle_hit_radius = 8
-
         self.setMouseTracking(True)
 
-        self.display_rect: QRect | None = None
-        self.image_offset: QPoint | None = None
-        self.scale_factor: float = 1.0
-        self.fit_scale: float = 1.0
+        self.selection_rect: QRect | None = None
+        self.handle_size = 8
+        self.active_handle = HandlePos.NONE
+        self.is_selecting = False
 
+        self.strategies = {
+            HandlePos.TOP_LEFT: CornerStrategy("tl"),
+            HandlePos.TOP_RIGHT: CornerStrategy("tr"),
+            HandlePos.BOTTOM_LEFT: CornerStrategy("bl"),
+            HandlePos.BOTTOM_RIGHT: CornerStrategy("br"),
+            HandlePos.TOP_CENTER: SideStrategy("top"),
+            HandlePos.BOTTOM_CENTER: SideStrategy("bottom"),
+            HandlePos.LEFT_CENTER: SideStrategy("left"),
+            HandlePos.RIGHT_CENTER: SideStrategy("right"),
+            HandlePos.INSIDE: PanStrategy(),
+            HandlePos.NONE: CreateStrategy(),
+        }
+
+        self.handle_map = {
+            HandlePos.TOP_LEFT: lambda r, s: QRect(
+                r.topLeft().x() - s, r.topLeft().y() - s, 2 * s, 2 * s
+            ),
+            HandlePos.TOP_RIGHT: lambda r, s: QRect(
+                r.topRight().x() - s, r.topRight().y() - s, 2 * s, 2 * s
+            ),
+            HandlePos.BOTTOM_LEFT: lambda r, s: QRect(
+                r.bottomLeft().x() - s, r.bottomLeft().y() - s, 2 * s, 2 * s
+            ),
+            HandlePos.BOTTOM_RIGHT: lambda r, s: QRect(
+                r.bottomRight().x() - s, r.bottomRight().y() - s, 2 * s, 2 * s
+            ),
+            HandlePos.TOP_CENTER: lambda r, s: QRect(
+                r.center().x() - s, r.top() - s, 2 * s, 2 * s
+            ),
+            HandlePos.BOTTOM_CENTER: lambda r, s: QRect(
+                r.center().x() - s, r.bottom() - s, 2 * s, 2 * s
+            ),
+            HandlePos.LEFT_CENTER: lambda r, s: QRect(
+                r.left() - s, r.center().y() - s, 2 * s, 2 * s
+            ),
+            HandlePos.RIGHT_CENTER: lambda r, s: QRect(
+                r.right() - s, r.center().y() - s, 2 * s, 2 * s
+            ),
+        }
+
+        # Список активных политик: сначала минимальный размер, затем границы
+        # (границы применяются последними — финально обрезают выделение).
+        self.policies = [
+            MinSizePolicy(50, 50),
+            BoundaryPolicy(),
+        ]
+
+        # Состояние зума/панорамирования.
         self.zoom_level: float = 1.0
         self.pan_x: int = 0
         self.pan_y: int = 0
+        self.fit_scale: float = 1.0
+        self.scale_factor: float = 1.0
+        self.display_rect: QRect | None = None
+        self.image_offset: QPoint | None = None
+
+        self._update_layout()
+
+    # --- Конвертация координат и расчёт макета ---
+
+    def _update_layout(self):
+        """Пересчитывает масштаб и смещение под текущий размер виджета и зум."""
+        if self.image.isNull():
+            self.scale_factor = 1.0
+            self.fit_scale = 1.0
+            self.display_rect = None
+            self.image_offset = None
+            return
+
+        w = self.width()
+        h = self.height()
+        iw = self.image.width()
+        ih = self.image.height()
+        if w <= 0 or h <= 0 or iw <= 0 or ih <= 0:
+            return
+
+        self.fit_scale = min(w / iw, h / ih)
+        self.scale_factor = self.fit_scale * self.zoom_level
+        scaled_w = int(iw * self.scale_factor)
+        scaled_h = int(ih * self.scale_factor)
+
+        ox = (w - scaled_w) // 2 + self.pan_x
+        oy = (h - scaled_h) // 2 + self.pan_y
+        self.display_rect = QRect(ox, oy, scaled_w, scaled_h)
+        self.image_offset = QPoint(ox, oy)
+
+    def _to_widget_point(self, img_point: QPoint) -> QPoint:
+        return QPoint(
+            int(self.image_offset.x() + img_point.x() * self.scale_factor),
+            int(self.image_offset.y() + img_point.y() * self.scale_factor),
+        )
+
+    def _to_image_point(self, widget_point: QPoint) -> QPoint:
+        if self.image_offset is None or self.scale_factor == 0:
+            return widget_point
+        return QPoint(
+            int((widget_point.x() - self.image_offset.x()) / self.scale_factor),
+            int((widget_point.y() - self.image_offset.y()) / self.scale_factor),
+        )
+
+    def _widget_rect_from_image(self, img_rect: QRect) -> QRect:
+        tl = self._to_widget_point(img_rect.topLeft())
+        br = self._to_widget_point(img_rect.bottomRight())
+        return QRect(tl, br).normalized()
+
+    # --- Отрисовка ---
 
     def paintEvent(self, event):
-        """Paint the image and crop rectangle with handles"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._update_layout()
 
         if self.image.isNull():
             painter.fillRect(self.rect(), Qt.GlobalColor.lightGray)
@@ -58,138 +314,97 @@ class CropWidget(QWidget):
             )
             return
 
-        widget_rect = self.rect()
-        widget_width = widget_rect.width()
-        widget_height = widget_rect.height()
+        if self.display_rect is not None:
+            painter.drawPixmap(self.display_rect, self.pixmap)
 
-        image_width = self.image.width()
-        image_height = self.image.height()
-
-        # Fit scale: makes image fit within widget
-        self.fit_scale = min(widget_width / image_width, widget_height / image_height)
-        total_scale = self.fit_scale * self.zoom_level
-
-        scaled_width = int(image_width * total_scale)
-        scaled_height = int(image_height * total_scale)
-
-        # Center the image, apply pan offset
-        x_offset = (widget_width - scaled_width) // 2 + self.pan_x
-        y_offset = (widget_height - scaled_height) // 2 + self.pan_y
-
-        scaled_rect = QRect(x_offset, y_offset, scaled_width, scaled_height)
-
-        painter.drawImage(scaled_rect, self.image)
-
-        self.display_rect = scaled_rect
-        self.image_offset = QPoint(x_offset, y_offset)
-        self.scale_factor = total_scale
-
-        if self.crop_rect is None:
+        if self.selection_rect is None or self.selection_rect.isNull():
             return
 
-        display_crop_rect = QRect(
-            self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
-            self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
-            int(self.crop_rect.width() * self.scale_factor),
-            int(self.crop_rect.height() * self.scale_factor),
+        disp = self._widget_rect_from_image(self.selection_rect)
+
+        overlay_color = QColor(0, 0, 0, 100)
+        painter.fillRect(QRect(0, 0, self.width(), disp.top()), overlay_color)
+        painter.fillRect(
+            QRect(0, disp.bottom(), self.width(), self.height() - disp.bottom()),
+            overlay_color,
+        )
+        painter.fillRect(
+            QRect(0, disp.top(), disp.left(), disp.height()), overlay_color
+        )
+        painter.fillRect(
+            QRect(
+                disp.right(),
+                disp.top(),
+                self.width() - disp.right(),
+                disp.height(),
+            ),
+            overlay_color,
         )
 
-        # Semi-transparent overlay outside crop region
-        overlay_color = QColor(0, 0, 0, 100)
-        painter.fillRect(self.rect(), overlay_color)
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(disp)
 
-        # Cut out crop area: redraw image through the crop region
-        painter.setClipRect(display_crop_rect, Qt.ClipOperation.IntersectClip)
-        painter.drawImage(display_crop_rect, self.image.copy(self.crop_rect))
-
-        painter.setClipRect(widget_rect)
-
-        pen_color = QColor(255, 255, 255)
-        painter.setPen(QPen(pen_color, 2))
-        painter.drawRect(display_crop_rect)
-
-        self._draw_handles(painter, display_crop_rect)
-
-    def _draw_handles(self, painter: QPainter, rect: QRect):
-        """Draw the resize handles on the crop rectangle"""
         handle_color = QColor(255, 165, 0)
         painter.setBrush(QBrush(handle_color))
-        painter.setPen(QPen(handle_color, 1))
+        painter.setPen(QPen(handle_color.darker(115), 1))
+        s = self.handle_size
+        for h_id, func in self.handle_map.items():
+            painter.drawRect(func(disp, s))
 
-        hs = self.handle_size
+    # --- Определение кнопок выделения ---
 
-        corners = [
-            (rect.left(), rect.top(), "nw"),
-            (rect.right() - hs, rect.top(), "ne"),
-            (rect.left(), rect.bottom() - hs, "sw"),
-            (rect.right() - hs, rect.bottom() - hs, "se"),
-        ]
+    def get_handle_at(self, pos: QPoint) -> int:
+        """Возвращает id кнопки выделения в точке (или HandlePos.NONE)."""
+        if self.selection_rect is None or self.selection_rect.isNull():
+            return HandlePos.NONE
 
-        for x, y, handle_type in corners:
-            painter.drawRect(QRect(x, y, hs, hs))
+        img_pos = self._to_image_point(pos)
+        s = self.handle_size
+        for h_id, func in self.handle_map.items():
+            if func(self.selection_rect, s).contains(img_pos):
+                return h_id
 
-        edges = [
-            (rect.center().x() - hs // 2, rect.top(), "n"),
-            (rect.right() - hs, rect.center().y() - hs // 2, "e"),
-            (rect.center().x() - hs // 2, rect.bottom() - hs, "s"),
-            (rect.left(), rect.center().y() - hs // 2, "w"),
-        ]
+        if self.selection_rect.contains(img_pos):
+            return HandlePos.INSIDE
+        return HandlePos.NONE
 
-        for x, y, handle_type in edges:
-            painter.drawRect(QRect(x, y, hs, hs))
+    def _update_cursor(self, pos: QPoint):
+        h = self.get_handle_at(pos)
+        cursors = {
+            HandlePos.TOP_LEFT: Qt.CursorShape.SizeFDiagCursor,
+            HandlePos.BOTTOM_RIGHT: Qt.CursorShape.SizeFDiagCursor,
+            HandlePos.TOP_RIGHT: Qt.CursorShape.SizeBDiagCursor,
+            HandlePos.BOTTOM_LEFT: Qt.CursorShape.SizeBDiagCursor,
+            HandlePos.TOP_CENTER: Qt.CursorShape.SizeVerCursor,
+            HandlePos.BOTTOM_CENTER: Qt.CursorShape.SizeVerCursor,
+            HandlePos.LEFT_CENTER: Qt.CursorShape.SizeHorCursor,
+            HandlePos.RIGHT_CENTER: Qt.CursorShape.SizeHorCursor,
+            HandlePos.INSIDE: Qt.CursorShape.SizeAllCursor,
+        }
+        self.setCursor(cursors.get(h, Qt.CursorShape.ArrowCursor))
 
-    def get_crop_rect(self) -> QRect | None:
-        """Get the current crop rectangle in image coordinates"""
-        return self.crop_rect
-
-    def set_crop_rect(self, rect: QRect | None):
-        """Set the initial crop rectangle in image coordinates"""
-        self.crop_rect = rect
-        self.update()
+    # --- Обработчики мыши ---
 
     def mousePressEvent(self, event):
-        """Handle mouse press events for resizing/moving crop rectangle"""
         if self.image.isNull():
             return
 
         pos = event.position().toPoint()
+        img_pos = self._to_image_point(pos)
 
-        if self.crop_rect is None:
-            image_pos = self._widget_to_image_coords(pos)
-            size = 50
-            self.crop_rect = QRect(
-                image_pos.x() - size // 2, image_pos.y() - size // 2, size, size
-            )
-            self.crop_rect = self.crop_rect.intersected(
-                QRect(0, 0, self.image.width(), self.image.height())
-            )
-            self.dragging_handle = None
-            self.drag_start_pos = pos
-            self.drag_start_rect = QRect(self.crop_rect)
-            self.update()
-            return
+        self.active_handle = self.get_handle_at(pos)
+        self.is_selecting = True
 
-        handle_type = self._get_handle_at_position(pos)
-        if handle_type:
-            self.dragging_handle = handle_type
-            self.drag_start_pos = pos
-            self.drag_start_rect = QRect(self.crop_rect)
-        elif self._is_point_in_crop_rect(pos):
-            self.dragging_handle = "move"
-            self.drag_start_pos = pos
-            self.drag_start_rect = QRect(self.crop_rect)
-        else:
-            image_pos = self._widget_to_image_coords(pos)
-            size = 50
-            self.crop_rect = QRect(
-                image_pos.x() - size // 2, image_pos.y() - size // 2, size, size
+        # Стратегия готовится к перемещению/изменению выделения.
+        self.strategies[self.active_handle].on_mouse_press(img_pos, self.selection_rect)
+
+        if self.active_handle == HandlePos.NONE:
+            # Создание нового выделения из текущей точки.
+            bounds = QRect(0, 0, self.image.width(), self.image.height())
+            self.selection_rect = (
+                QRect(img_pos, img_pos).normalized().intersected(bounds)
             )
-            self.crop_rect = self.crop_rect.intersected(
-                QRect(0, 0, self.image.width(), self.image.height())
-            )
-            self.dragging_handle = None
-            self.drag_start_pos = pos
-            self.drag_start_rect = QRect(self.crop_rect)
 
         self.update()
 
@@ -197,103 +412,56 @@ class CropWidget(QWidget):
         """Handle mouse move events for resizing/moving crop rectangle"""
         pos = event.position().toPoint()
 
-        if (
-            self.dragging_handle is None
-            or self.drag_start_pos is None
-            or self.drag_start_rect is None
-        ):
-            handle_type = self._get_handle_at_position(pos)
-            if handle_type:
-                self._set_cursor_for_handle(handle_type)
-            elif self._is_point_in_crop_rect(pos):
-                self.setCursor(Qt.CursorShape.SizeAllCursor)
-            else:
-                self.setCursor(Qt.CursorShape.ArrowCursor)
+        if not self.is_selecting:
+            self._update_cursor(pos)
             return
 
-        delta = pos - self.drag_start_pos
+        img_pos = self._to_image_point(pos)
 
-        if self.scale_factor > 0:
-            delta_x = int(delta.x() / self.scale_factor)
-            delta_y = int(delta.y() / self.scale_factor)
-        else:
-            delta_x = delta.x()
-            delta_y = delta.y()
+        # 1. Стратегия рассчитывает «желаемый» результат.
+        strategy = self.strategies[self.active_handle]
+        proposed_rect = strategy.on_mouse_move(
+            self.selection_rect, img_pos
+        ).normalized()
 
-        new_rect = QRect(self.drag_start_rect)
+        # 2. Политики фильтруют и корректируют результат.
+        final_rect = proposed_rect
+        for policy in self.policies:
+            final_rect = policy.apply(final_rect, self.image.size())
 
-        if self.dragging_handle == "move":
-            new_rect.translate(delta_x, delta_y)
-        else:
-            if "n" in self.dragging_handle:
-                new_rect.setTop(new_rect.top() + delta_y)
-            if "s" in self.dragging_handle:
-                new_rect.setBottom(new_rect.bottom() + delta_y)
-            if "w" in self.dragging_handle:
-                new_rect.setLeft(new_rect.left() + delta_x)
-            if "e" in self.dragging_handle:
-                new_rect.setRight(new_rect.right() + delta_x)
-
-        image_bounds = QRect(0, 0, self.image.width(), self.image.height())
-        new_rect = new_rect.intersected(image_bounds)
-
-        if new_rect.width() < 5:
-            if "w" in self.dragging_handle:
-                new_rect.setLeft(new_rect.right() - 5)
-            else:
-                new_rect.setRight(new_rect.left() + 5)
-
-        if new_rect.height() < 5:
-            if "n" in self.dragging_handle:
-                new_rect.setTop(new_rect.bottom() - 5)
-            else:
-                new_rect.setBottom(new_rect.top() + 5)
-
-        self.crop_rect = new_rect
+        self.selection_rect = final_rect
         self.update()
 
     def mouseReleaseEvent(self, event):
-        """Handle mouse release events"""
-        self.dragging_handle = None
-        self.drag_start_pos = None
-        self.drag_start_rect = None
-        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.is_selecting = False
+        self.active_handle = HandlePos.NONE
+        self.update()
 
-    def wheelEvent(self, event):
-        """Handle mouse wheel for zoom (Ctrl+wheel) and pan (wheel / Shift+wheel)"""
-        delta = event.angleDelta().y()
+    # --- Публичный API ---
 
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            # Zoom in/out
-            factor = 1.1 if delta > 0 else 1 / 1.1
-            new_zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, self.zoom_level * factor))
-            if new_zoom != self.zoom_level:
-                self.zoom_level = new_zoom
-                self._clamp_pan()
-                self.zoomChanged.emit(self.zoom_level)
-                self.update()
-        elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            # Horizontal pan
-            self.pan_x += delta // 2
-            self._clamp_pan()
-            self.update()
-        else:
-            # Vertical pan
-            self.pan_y += delta // 2
-            self._clamp_pan()
-            self.update()
+    def get_crop_rect(self) -> QRect | None:
+        """Текущая область обрезки в координатах изображения."""
+        return self.selection_rect
+
+    def set_crop_rect(self, rect: QRect | None):
+        """Устанавливает начальную область обрезки (в координатах изображения)."""
+        self.selection_rect = rect
+        self.update()
+
+    # --- Зум/панорамирование ---
 
     def set_zoom(self, zoom: float):
-        """Set zoom level (1.0 = fit to widget)"""
+        """Установить уровень зума (1.0 = вписано в виджет)."""
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
         if zoom != self.zoom_level:
             self.zoom_level = zoom
             self._clamp_pan()
+            self._update_layout()
             self.zoomChanged.emit(self.zoom_level)
             self.update()
 
     def _clamp_pan(self):
-        """Clamp pan offset so image doesn't drift too far from widget center"""
+        """Ограничивает смещение панорамирования пределами изображения."""
         if self.image.isNull() or self.fit_scale <= 0:
             return
 
@@ -315,112 +483,27 @@ class CropWidget(QWidget):
         else:
             self.pan_y = 0
 
-    def _get_handle_at_position(self, pos: QPoint) -> str | None:
-        """Get handle type at the given position, or None if not on a handle"""
-        if self.crop_rect is None or self.image.isNull():
-            return None
+    def wheelEvent(self, event):
+        """Колесо мыши: зум (Ctrl), панорамирование по вертикали/горизонтали."""
+        delta = event.angleDelta().y()
 
-        display_rect = QRect(
-            self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
-            self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
-            int(self.crop_rect.width() * self.scale_factor),
-            int(self.crop_rect.height() * self.scale_factor),
-        )
-
-        hs = self.handle_size
-        hr = self.handle_hit_radius
-
-        corners = [
-            (display_rect.left() - hr // 2, display_rect.top() - hr // 2, "nw"),
-            (
-                display_rect.right() - hs // 2 - hr // 2,
-                display_rect.top() - hr // 2,
-                "ne",
-            ),
-            (
-                display_rect.left() - hr // 2,
-                display_rect.bottom() - hs // 2 - hr // 2,
-                "sw",
-            ),
-            (
-                display_rect.right() - hs // 2 - hr // 2,
-                display_rect.bottom() - hs // 2 - hr // 2,
-                "se",
-            ),
-        ]
-
-        for x, y, handle_type in corners:
-            if QRect(x, y, hs + hr, hs + hr).contains(pos):
-                return handle_type
-
-        edges = [
-            (
-                display_rect.center().x() - hs // 2 - hr // 2,
-                display_rect.top() - hr // 2,
-                "n",
-            ),
-            (
-                display_rect.right() - hs // 2 - hr // 2,
-                display_rect.center().y() - hs // 2 - hr // 2,
-                "e",
-            ),
-            (
-                display_rect.center().x() - hs // 2 - hr // 2,
-                display_rect.bottom() - hs // 2 - hr // 2,
-                "s",
-            ),
-            (
-                display_rect.left() - hr // 2,
-                display_rect.center().y() - hs // 2 - hr // 2,
-                "w",
-            ),
-        ]
-
-        for x, y, handle_type in edges:
-            if QRect(x, y, hs + hr, hs + hr).contains(pos):
-                return handle_type
-
-        return None
-
-    def _is_point_in_crop_rect(self, pos: QPoint) -> bool:
-        """Check if point is inside the crop rectangle (in widget coordinates)"""
-        if self.crop_rect is None or self.image.isNull():
-            return False
-
-        display_rect = QRect(
-            self.image_offset.x() + int(self.crop_rect.x() * self.scale_factor),
-            self.image_offset.y() + int(self.crop_rect.y() * self.scale_factor),
-            int(self.crop_rect.width() * self.scale_factor),
-            int(self.crop_rect.height() * self.scale_factor),
-        )
-
-        return display_rect.contains(pos)
-
-    def _set_cursor_for_handle(self, handle_type: str):
-        """Set appropriate cursor for the given handle type"""
-        if handle_type in ["nw", "se"]:
-            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
-        elif handle_type in ["ne", "sw"]:
-            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
-        elif handle_type in ["n", "s"]:
-            self.setCursor(Qt.CursorShape.SizeVerCursor)
-        elif handle_type in ["w", "e"]:
-            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            factor = 1.1 if delta > 0 else 1 / 1.1
+            new_zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, self.zoom_level * factor))
+            if new_zoom != self.zoom_level:
+                self.zoom_level = new_zoom
+                self._clamp_pan()
+                self._update_layout()
+                self.zoomChanged.emit(self.zoom_level)
+                self.update()
+        elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.pan_x += delta // 2
+            self._clamp_pan()
+            self.update()
         else:
-            self.setCursor(Qt.CursorShape.ArrowCursor)
-
-    def _widget_to_image_coords(self, widget_pos: QPoint) -> QPoint:
-        """Convert widget coordinates to image coordinates"""
-        if self.display_rect is None or self.image.isNull():
-            return widget_pos
-
-        x = int((widget_pos.x() - self.display_rect.x()) / self.scale_factor)
-        y = int((widget_pos.y() - self.display_rect.y()) / self.scale_factor)
-
-        x = max(0, min(x, self.image.width() - 1))
-        y = max(0, min(y, self.image.height() - 1))
-
-        return QPoint(x, y)
+            self.pan_y += delta // 2
+            self._clamp_pan()
+            self.update()
 
 
 class CropPreviewWidget(QWidget):
@@ -454,7 +537,9 @@ class CropPreviewWidget(QWidget):
         if self.image is None or self.image.isNull():
             painter.fillRect(self.rect(), Qt.GlobalColor.lightGray)
             painter.setPen(QPen(Qt.GlobalColor.darkGray, 1))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.tr("Click to crop"))
+            painter.drawText(
+                self.rect(), Qt.AlignmentFlag.AlignCenter, self.tr("Click to crop")
+            )
             return
 
         widget_rect = self.rect()
@@ -542,7 +627,7 @@ class CropDialog(QDialog):
         self.resize(800, 600)
 
         self.original_image = image
-        self.crop_widget = CropWidget(image)
+        self.crop_widget = GimpStyleCropSelection(image, self)
         initial_crop_rect = initial_crop_rect or QRect(
             0, 0, image.width(), image.height()
         )
@@ -563,8 +648,8 @@ class CropDialog(QDialog):
         btn_minus.clicked.connect(self._zoom_out)
 
         self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
-        self.zoom_slider.setMinimum(int(CropWidget.ZOOM_MIN * 100))
-        self.zoom_slider.setMaximum(int(CropWidget.ZOOM_MAX * 100))
+        self.zoom_slider.setMinimum(int(GimpStyleCropSelection.ZOOM_MIN * 100))
+        self.zoom_slider.setMaximum(int(GimpStyleCropSelection.ZOOM_MAX * 100))
         self.zoom_slider.setValue(100)
         self.zoom_slider.setTickPosition(QSlider.TickPosition.NoTicks)
         self.zoom_slider.valueChanged.connect(self._on_slider_changed)
