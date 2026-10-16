@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QRect, Signal, QBuffer, QIODevice
 from PySide6.QtGui import QImage, QScreen
 
-from barbaros.widgets.image_crop import CropPreviewWidget, CropDialog
+from barbaros.widgets.image_crop.crop_selection import CropDialog
+from barbaros.widgets.image_crop.preview import CropPreviewWidget
 from barbaros.widgets.screen_capture import MonitorSelectDialog, ScreenHintWidget
 
 
