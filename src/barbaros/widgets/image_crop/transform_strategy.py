@@ -38,14 +38,17 @@ class CornerStrategy(CropStrategy):
         self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
-        if self.anchor == HandlePos.TOP_LEFT:
-            return QRect(pos, rect.bottomRight())
-        if self.anchor == HandlePos.TOP_RIGHT:
-            return QRect(QPoint(rect.left(), pos.y()), QPoint(pos.x(), rect.bottom()))
-        if self.anchor == HandlePos.BOTTOM_LEFT:
-            return QRect(QPoint(pos.x(), rect.top()), QPoint(rect.right(), pos.y()))
-        if self.anchor == HandlePos.BOTTOM_RIGHT:
-            return QRect(rect.topLeft(), pos)
+        match self.anchor:
+            case HandlePos.TOP_LEFT:
+                return QRect(pos, rect.bottomRight())
+            case HandlePos.TOP_RIGHT:
+                return QRect(QPoint(rect.left(), pos.y()), QPoint(pos.x(), rect.bottom()))
+            case HandlePos.BOTTOM_LEFT:
+                return QRect(QPoint(pos.x(), rect.top()), QPoint(rect.right(), pos.y()))
+            case HandlePos.BOTTOM_RIGHT:
+                return QRect(rect.topLeft(), pos)
+            case _:
+                return rect
 
 
 class SideStrategy(CropStrategy):
@@ -57,14 +60,17 @@ class SideStrategy(CropStrategy):
         self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
-        if self.anchor == HandlePos.TOP_CENTER:
-            return QRect(QPoint(rect.left(), pos.y()), rect.bottomRight())
-        if self.anchor == HandlePos.BOTTOM_CENTER:
-            return QRect(rect.left(), rect.top(), rect.width(), pos.y() - rect.top())
-        if self.anchor == HandlePos.LEFT_CENTER:
-            return QRect(QPoint(pos.x(), rect.top()), rect.bottomRight())
-        if self.anchor == HandlePos.RIGHT_CENTER:
-            return QRect(rect.left(), rect.top(), pos.x() - rect.left(), rect.height())
+        match self.anchor:
+            case HandlePos.TOP_CENTER:
+                return QRect(QPoint(rect.left(), pos.y()), rect.bottomRight())
+            case HandlePos.BOTTOM_CENTER:
+                return QRect(rect.left(), rect.top(), rect.width(), pos.y() - rect.top())
+            case HandlePos.LEFT_CENTER:
+                return QRect(QPoint(pos.x(), rect.top()), rect.bottomRight())
+            case HandlePos.RIGHT_CENTER:
+                return QRect(rect.left(), rect.top(), pos.x() - rect.left(), rect.height())
+            case _:
+                return rect
 
 
 class PanStrategy(CropStrategy):
