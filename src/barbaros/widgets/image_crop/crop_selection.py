@@ -6,7 +6,9 @@ from barbaros.widgets.image_crop.policy import MinSizePolicy, BoundaryPolicy
 from barbaros.widgets.image_crop.transform_strategy import CornerStrategy, SideStrategy, PanStrategy, CreateStrategy
 
 
-class HandlePos:
+from enum import IntEnum
+
+class HandlePos(IntEnum):
     NONE = 0
     TOP_LEFT = 1
     TOP_RIGHT = 2
@@ -51,14 +53,14 @@ class GimpStyleCropSelection(QWidget):
         self.is_selecting = False
 
         self.strategies = {
-            HandlePos.TOP_LEFT: CornerStrategy("tl"),
-            HandlePos.TOP_RIGHT: CornerStrategy("tr"),
-            HandlePos.BOTTOM_LEFT: CornerStrategy("bl"),
-            HandlePos.BOTTOM_RIGHT: CornerStrategy("br"),
-            HandlePos.TOP_CENTER: SideStrategy("top"),
-            HandlePos.BOTTOM_CENTER: SideStrategy("bottom"),
-            HandlePos.LEFT_CENTER: SideStrategy("left"),
-            HandlePos.RIGHT_CENTER: SideStrategy("right"),
+            HandlePos.TOP_LEFT: CornerStrategy(HandlePos.TOP_LEFT),
+            HandlePos.TOP_RIGHT: CornerStrategy(HandlePos.TOP_RIGHT),
+            HandlePos.BOTTOM_LEFT: CornerStrategy(HandlePos.BOTTOM_LEFT),
+            HandlePos.BOTTOM_RIGHT: CornerStrategy(HandlePos.BOTTOM_RIGHT),
+            HandlePos.TOP_CENTER: SideStrategy(HandlePos.TOP_CENTER),
+            HandlePos.BOTTOM_CENTER: SideStrategy(HandlePos.BOTTOM_CENTER),
+            HandlePos.LEFT_CENTER: SideStrategy(HandlePos.LEFT_CENTER),
+            HandlePos.RIGHT_CENTER: SideStrategy(HandlePos.RIGHT_CENTER),
             HandlePos.INSIDE: PanStrategy(),
             HandlePos.NONE: CreateStrategy(),
         }

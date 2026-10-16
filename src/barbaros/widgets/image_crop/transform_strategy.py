@@ -27,44 +27,44 @@ class CropStrategy(ABC):
         pass
 
 
+from barbaros.widgets.image_crop.crop_selection import HandlePos
+
 class CornerStrategy(CropStrategy):
     """Изменение размера за угол: угол-якорь неподвижен, противоположный угол
-    следует за курсором. anchor — «tl»/«tr»/«bl»/«br».
+    следует за курсором.
     """
 
-    def __init__(self, anchor_type: str):
-        self.anchor = anchor_type
+    def __init__(self, anchor: HandlePos):
+        self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
-        if self.anchor == "tl":
+        if self.anchor == HandlePos.TOP_LEFT:
             return QRect(pos, rect.bottomRight())
-        if self.anchor == "tr":
+        if self.anchor == HandlePos.TOP_RIGHT:
             return QRect(QPoint(rect.left(), pos.y()), QPoint(pos.x(), rect.bottom()))
-        if self.anchor == "bl":
+        if self.anchor == HandlePos.BOTTOM_LEFT:
             return QRect(QPoint(pos.x(), rect.top()), QPoint(rect.right(), pos.y()))
-        if self.anchor == "br":
+        if self.anchor == HandlePos.BOTTOM_RIGHT:
             return QRect(rect.topLeft(), pos)
-        return rect
 
 
 class SideStrategy(CropStrategy):
     """Изменение размера за сторону: противоположная сторона неподвижна,
-    размер меняется по одной оси. side — «top»/«bottom»/«left»/«right».
+    размер меняется по одной оси.
     """
 
-    def __init__(self, side: str):
-        self.side = side
+    def __init__(self, anchor: HandlePos):
+        self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
-        if self.side == "top":
+        if self.anchor == HandlePos.TOP_CENTER:
             return QRect(QPoint(rect.left(), pos.y()), rect.bottomRight())
-        if self.side == "bottom":
+        if self.anchor == HandlePos.BOTTOM_CENTER:
             return QRect(rect.left(), rect.top(), rect.width(), pos.y() - rect.top())
-        if self.side == "left":
+        if self.anchor == HandlePos.LEFT_CENTER:
             return QRect(QPoint(pos.x(), rect.top()), rect.bottomRight())
-        if self.side == "right":
+        if self.anchor == HandlePos.RIGHT_CENTER:
             return QRect(rect.left(), rect.top(), pos.x() - rect.left(), rect.height())
-        return rect
 
 
 class PanStrategy(CropStrategy):
