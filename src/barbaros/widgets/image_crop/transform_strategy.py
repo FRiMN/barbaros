@@ -34,7 +34,16 @@ class CornerStrategy(CropStrategy):
     следует за курсором.
     """
 
+    valid_handle_pos = {
+        HandlePos.TOP_LEFT,
+        HandlePos.TOP_RIGHT,
+        HandlePos.BOTTOM_LEFT,
+        HandlePos.BOTTOM_RIGHT
+    }
+
     def __init__(self, anchor: HandlePos):
+        if anchor not in self.valid_handle_pos:
+            raise ValueError(f"CornerStrategy requires a corner anchor, got {anchor}")
         self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
@@ -47,8 +56,6 @@ class CornerStrategy(CropStrategy):
                 return QRect(QPoint(pos.x(), rect.top()), QPoint(rect.right(), pos.y()))
             case HandlePos.BOTTOM_RIGHT:
                 return QRect(rect.topLeft(), pos)
-            case _:
-                return rect
 
 
 class SideStrategy(CropStrategy):
@@ -56,7 +63,16 @@ class SideStrategy(CropStrategy):
     размер меняется по одной оси.
     """
 
+    valid_handle_pos = {
+        HandlePos.TOP_CENTER,
+        HandlePos.BOTTOM_CENTER,
+        HandlePos.LEFT_CENTER,
+        HandlePos.RIGHT_CENTER
+    }
+
     def __init__(self, anchor: HandlePos):
+        if anchor not in self.valid_handle_pos:
+            raise ValueError(f"SideStrategy requires a side anchor, got {anchor}")
         self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
@@ -69,8 +85,6 @@ class SideStrategy(CropStrategy):
                 return QRect(QPoint(pos.x(), rect.top()), rect.bottomRight())
             case HandlePos.RIGHT_CENTER:
                 return QRect(rect.left(), rect.top(), pos.x() - rect.left(), rect.height())
-            case _:
-                return rect
 
 
 class PanStrategy(CropStrategy):
