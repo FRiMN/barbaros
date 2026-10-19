@@ -43,7 +43,7 @@ class CornerStrategy(CropStrategy):
 
     def __init__(self, anchor: HandlePos):
         if anchor not in self.valid_handle_pos:
-            raise ValueError(f"CornerStrategy requires a corner anchor, got {anchor}")
+            raise ValueError(f"CornerStrategy requires a corner anchor ({self.valid_handle_pos}), got {anchor}")
         self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
@@ -72,7 +72,7 @@ class SideStrategy(CropStrategy):
 
     def __init__(self, anchor: HandlePos):
         if anchor not in self.valid_handle_pos:
-            raise ValueError(f"SideStrategy requires a side anchor, got {anchor}")
+            raise ValueError(f"SideStrategy requires a side anchor ({self.valid_handle_pos}), got {anchor}")
         self.anchor = anchor
 
     def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
