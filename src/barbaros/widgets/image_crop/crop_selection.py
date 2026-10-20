@@ -9,7 +9,7 @@ from barbaros.widgets.image_crop.transform_strategy import CornerStrategy, SideS
 from enum import IntEnum
 
 class HandlePos(IntEnum):
-    NONE = 0
+    NONE = 0    # outside
     TOP_LEFT = 1
     TOP_RIGHT = 2
     BOTTOM_LEFT = 3
