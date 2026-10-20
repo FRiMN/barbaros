@@ -1,4 +1,4 @@
-"""Тесты для PanStrategy из exmpl_image_crop.py.
+"""Тесты для PanStrategy из barbaros.widgets.image_crop.transform_strategy.
 
 PanStrategy — это стратегия «ператащить выделение» (drag-to-pan): при движении
 мышь всё выделение сдвигается на тот же вектор, не меняя своего размера.
@@ -8,23 +8,10 @@ PanStrategy — это стратегия «ператащить выделен�
 накапливается за серию ходов (см. test_pan_multiple_moves_preserve_size и
 test_pan_no_accumulation_single_move_equals_sequence).
 """
-import importlib.util
-import os
-
 import pytest
 from PySide6.QtCore import QRect, QPoint, QSize
 
-
-# --- Загрузка модуля-образца по пути (он не является частью barbaros) ---
-
-HERE = os.path.dirname(os.path.abspath(__file__))
-MODULE_PATH = os.path.join(HERE, os.pardir, "exmpl_image_crop.py")
-
-_spec = importlib.util.spec_from_file_location("exmpl_image_crop", MODULE_PATH)
-exmpl = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(exmpl)
-
-PanStrategy = exmpl.PanStrategy
+from barbaros.widgets.image_crop.transform_strategy import PanStrategy
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -87,8 +74,7 @@ def test_pan_multiple_moves_preserve_size():
     # шаге, а позиция — зависеть только от конечной точки мыши, а не от числа
     # шагов (иначе перемещение «накапливается»/ускоряется). Дельта считается из
     # точки нажатия (drag_start) и применяется к прямоугольнику, запомненному
-    # на нажатии (rect_on_press), а не к уже сдвинутому текущему rect
-    # (см. on_mouse_move в exmpl_image_crop.py).
+    # на нажатии (rect_on_press), а не к уже сдвинутому текущему rect.
     strat = PanStrategy()
     rect = QRect(0, 0, 200, 100)
     strat.on_mouse_press(QPoint(0, 0), rect)

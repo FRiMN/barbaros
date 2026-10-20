@@ -3,22 +3,13 @@ from PySide6.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QBrush
 from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QLabel, QMessageBox
 
 from barbaros.widgets.image_crop.policy import MinSizePolicy, BoundaryPolicy
-from barbaros.widgets.image_crop.transform_strategy import CornerStrategy, SideStrategy, PanStrategy, CreateStrategy
-
-
-from enum import IntEnum
-
-class HandlePos(IntEnum):
-    NONE = 0    # outside
-    TOP_LEFT = 1
-    TOP_RIGHT = 2
-    BOTTOM_LEFT = 3
-    BOTTOM_RIGHT = 4
-    TOP_CENTER = 5
-    BOTTOM_CENTER = 6
-    LEFT_CENTER = 7
-    RIGHT_CENTER = 8
-    INSIDE = 9
+from barbaros.widgets.image_crop.transform_strategy import (
+    CornerStrategy,
+    SideStrategy,
+    PanStrategy,
+    CreateStrategy,
+    HandlePos,
+)
 
 
 class GimpStyleCropSelection(QWidget):

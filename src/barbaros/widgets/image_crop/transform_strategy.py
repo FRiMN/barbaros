@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from enum import IntEnum
 
 from PySide6.QtCore import QPoint, QRect
 
@@ -27,7 +28,21 @@ class CropStrategy(ABC):
         pass
 
 
-from barbaros.widgets.image_crop.crop_selection import HandlePos
+class HandlePos(IntEnum):
+    """Кнопка/ручка выделения в виджете обрезки — ключ диспетчеризации к
+    соответствующей CropStrategy."""
+
+    NONE = 0    # outside
+    TOP_LEFT = 1
+    TOP_RIGHT = 2
+    BOTTOM_LEFT = 3
+    BOTTOM_RIGHT = 4
+    TOP_CENTER = 5
+    BOTTOM_CENTER = 6
+    LEFT_CENTER = 7
+    RIGHT_CENTER = 8
+    INSIDE = 9
+
 
 class CornerStrategy(CropStrategy):
     """Изменение размера за угол: угол-якорь неподвижен, противоположный угол
