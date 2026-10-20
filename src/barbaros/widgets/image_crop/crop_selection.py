@@ -50,6 +50,10 @@ class GimpStyleCropSelection(QWidget):
         self.selection_rect: QRect | None = None
         self.handle_size = 8
         self.active_handle = HandlePos.NONE
+        # Флаг активного перетаскивания (нажата кнопка мыши). Разделяет два
+        # режима в mouseMoveEvent: без зажатия — только смена курсора (hover),
+        # с зажатием — реальный ресайз/панорамирование выделения. Без него
+        # движение мыши над виджетом запускало бы изменение выделения.
         self.is_selecting = False
 
         self.strategies = {
