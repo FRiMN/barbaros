@@ -3,7 +3,16 @@
 [project]
 name = "barbaros"
 description = "AI Translation app"
-keywords = ["AI", "Translation"]
+keywords = ["translation", "ai", "qt", "gui", "pyside6", "machine-translation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
+    "Framework :: PySide",
+    "Intended Audience :: End Users/Desktop",
+]
 readme = "README.md"
 authors = [{ name = "Nik Volkov", email = "freezemandix@ya.ru" }]
 license = "MIT"
