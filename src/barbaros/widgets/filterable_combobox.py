@@ -73,7 +73,7 @@ class FilterableComboBox(QWidget):
         self.hide_popup()
         self.selectionChanged.emit(self.selected_item)
 
-    def addItems(self, items: List[str]):
+    def addItems(self, items: list[str]):
         self.items.extend(items)
         self.filterable_popup.items = self.items
         self.filterable_popup.update_items()
@@ -87,7 +87,7 @@ class FilterableComboBox(QWidget):
 class FilterablePopup(QWidget):
     selectionChanged = Signal(str)
 
-    def __init__(self, parent=None, items: Optional[List[str]] = None):
+    def __init__(self, parent=None, items: list[str] | None = None):
         super().__init__(parent)
         self.items = items or []
         self.initUI()
@@ -306,7 +306,7 @@ class ProviderModelComboBox(QWidget):
     """ComboBox for selecting provider/model from ModelManager."""
     selectionChanged = Signal(object)  # emits ModelSelection
 
-    selected_item: Optional[ModelSelection] = None
+    selected_item: ModelSelection | None = None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -375,7 +375,7 @@ class ProviderModelComboBox(QWidget):
         self.hide_popup()
         self.selectionChanged.emit(self.selected_item)
 
-    def get_first_item(self) -> Optional[ModelSelection]:
+    def get_first_item(self) -> ModelSelection | None:
         """Return the first available model as ModelSelection."""
         if not self.model_manager:
             print("Model manager not set in ProviderModelComboBox")
