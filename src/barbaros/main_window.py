@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
     def refresh_target_language_select(self):
         self.target_language_select.clear()
         self.target_language_select.addItems(self.target_language_list)
-        
+
     def update_fetching_workers(self, workers: list[str]):
         """Update the fetching workers label with the current count of workers in self.model_manager"""
         count = len(workers)
@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
             tab_widget.addTab(tab, f.tab_name)
 
         main_layout = QVBoxLayout()
-        
+
         top_panel = QHBoxLayout()
         top_panel.addWidget(self.model)
         top_panel.addStretch()
