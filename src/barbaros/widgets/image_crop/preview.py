@@ -1,5 +1,5 @@
-from PySide6.QtCore import Signal, QRect, Qt, QPoint
-from PySide6.QtGui import QImage, QPainter, QPen, QColor
+from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 

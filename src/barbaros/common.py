@@ -1,6 +1,6 @@
 import json
-import typing
 import re
+import typing
 
 from PySide6.QtCore import QSettings
 

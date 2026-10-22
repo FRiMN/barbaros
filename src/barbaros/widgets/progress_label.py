@@ -1,6 +1,6 @@
+from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPaintEvent
 from PySide6.QtWidgets import QLabel
-from PySide6.QtCore import QPropertyAnimation, QEasingCurve, Property, Qt
-from PySide6.QtGui import QColor, QPainter, QLinearGradient, QBrush, QPaintEvent
 
 
 class GradientRainbowLabel(QLabel):

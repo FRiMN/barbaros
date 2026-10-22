@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QVBoxLayout, QGroupBox, QComboBox, QLabel
 from PySide6.QtCore import Qt
-from .base import AbstractFeature
+from PySide6.QtWidgets import QComboBox, QGroupBox, QLabel, QVBoxLayout
 
 from barbaros.widgets.providers_card import ProvidersCard
-from ..widgets.target_language_list_edit import LanguageListEdit
+
 from ..i18n import available_languages, language_display_name
+from ..widgets.target_language_list_edit import LanguageListEdit
+from .base import AbstractFeature
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow

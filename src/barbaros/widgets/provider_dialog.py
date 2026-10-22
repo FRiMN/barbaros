@@ -1,11 +1,19 @@
+from any_llm import LLMProvider
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLineEdit, QComboBox, QMessageBox, QHeaderView, QFormLayout
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
 )
 
-from any_llm import LLMProvider
 from barbaros.common import is_valid_url, truncate_key
-
 from barbaros.model_manager import ModelManager, ProviderMeta
 
 

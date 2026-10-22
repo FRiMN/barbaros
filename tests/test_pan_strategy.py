@@ -9,7 +9,7 @@ PanStrategy — это стратегия «перетащить выделен�
 test_pan_no_accumulation_single_move_equals_sequence).
 """
 import pytest
-from PySide6.QtCore import QRect, QPoint, QSize
+from PySide6.QtCore import QPoint, QRect, QSize
 
 from barbaros.widgets.image_crop.transform_strategy import PanStrategy
 

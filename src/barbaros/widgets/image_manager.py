@@ -1,16 +1,16 @@
 import time
 
+from PySide6.QtCore import QBuffer, QIODevice, QRect, Qt, Signal
+from PySide6.QtGui import QImage, QScreen
 from PySide6.QtWidgets import (
     QApplication,
-    QWidget,
-    QVBoxLayout,
+    QDialog,
+    QFileDialog,
     QHBoxLayout,
     QPushButton,
-    QFileDialog,
-    QDialog,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QRect, Signal, QBuffer, QIODevice
-from PySide6.QtGui import QImage, QScreen
 
 from barbaros.widgets.image_crop.crop_selection import CropDialog
 from barbaros.widgets.image_crop.preview import CropPreviewWidget

@@ -1,7 +1,8 @@
 import keyring
 from keyring.errors import PasswordDeleteError
 
-class KeySecurityManager(object):
+
+class KeySecurityManager:
     SERVICE_NAME = "barbaros:providers_api_keys"
 
     def __init__(self, provider_name: str):

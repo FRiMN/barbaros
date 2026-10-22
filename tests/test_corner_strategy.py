@@ -12,7 +12,7 @@ CornerStrategy меняет размер выделения за угол: тя�
 повторяет курсор и как меняется размер.
 """
 import pytest
-from PySide6.QtCore import QRect, QPoint
+from PySide6.QtCore import QPoint, QRect
 
 from barbaros.widgets.image_crop.transform_strategy import CornerStrategy, HandlePos
 

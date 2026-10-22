@@ -1,22 +1,21 @@
-from typing import Optional, List
 from dataclasses import dataclass
 
+from any_llm.types.model import Model
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
-    QVBoxLayout,
-    QWidget,
-    QLineEdit,
-    QListWidget,
     QAbstractItemView,
     QFrame,
+    QLineEdit,
+    QListWidget,
     QTreeWidget,
     QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Signal, Qt, QPoint
-from PySide6.QtGui import QFontMetrics
-from any_llm.types.model import Model
 
+from ..model_manager import ModelManager, ProviderClient
 from .link_label import LinkLabel
-from ..model_manager import ProviderClient, ModelManager
 
 
 class FilterableComboBox(QWidget):

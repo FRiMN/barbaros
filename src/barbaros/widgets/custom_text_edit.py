@@ -1,9 +1,10 @@
-import warnings
 import typing
+import warnings
 
-from PySide6.QtWidgets import QTextEdit, QMenu
-from PySide6.QtGui import QAction, QShortcut, QKeySequence
-from PySide6.QtCore import Qt, QMimeData
+from PySide6.QtCore import QMimeData, Qt
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtWidgets import QMenu, QTextEdit
+
 
 class CustomTextEdit(QTextEdit):
     font_size_step = 1  # Define the step for font size adjustment

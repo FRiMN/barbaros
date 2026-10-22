@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QScrollArea, QLabel, QPushButton, QHBoxLayout, QStyle
-)
 from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QStyle,
+    QVBoxLayout,
+)
 
-from barbaros.widgets.provider_dialog import ProviderDialog
-from barbaros.model_manager import ProviderClient, ModelManager
 from barbaros.common import truncate_key
+from barbaros.model_manager import ModelManager, ProviderClient
+from barbaros.widgets.provider_dialog import ProviderDialog
 
 if TYPE_CHECKING:
     from barbaros.main_window import MainWindow

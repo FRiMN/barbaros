@@ -6,14 +6,13 @@ import signal
 import socket
 import typing
 
-from PySide6.QtCore import QObject, Slot, Signal, QSocketNotifier, QTimer
+from PySide6.QtCore import QObject, QSocketNotifier, QTimer, Signal, Slot
 from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusReply
-
 
 SERVICE_NAME = "io.github.frimn.barbaros"
 
 
-class IPCAdapterInterface(object):
+class IPCAdapterInterface:
     """Interface for IPC adapter classes. Unified for different IPC mechanisms.
 
     Argument `ipc_calls`: a instance of service class of IPC calls to be handled by the adapter.

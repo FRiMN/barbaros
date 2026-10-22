@@ -1,14 +1,23 @@
-from PySide6.QtCore import Signal, QRect, QPoint, Qt
-from PySide6.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QBrush
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QLabel, QMessageBox
+from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
 
-from barbaros.widgets.image_crop.policy import MinSizePolicy, BoundaryPolicy
+from barbaros.widgets.image_crop.policy import BoundaryPolicy, MinSizePolicy
 from barbaros.widgets.image_crop.transform_strategy import (
     CornerStrategy,
-    SideStrategy,
-    PanStrategy,
     CreateStrategy,
     HandlePos,
+    PanStrategy,
+    SideStrategy,
 )
 
 

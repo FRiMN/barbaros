@@ -54,7 +54,12 @@ barbaros = ["i18n/*.qm", "i18n/*.ts"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ruff]
+target-version = "py311"
+
 [tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
 ignore = [
     "E741", # Ambiguous variable name
+    "E501", # Line too long
 ]

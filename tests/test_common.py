@@ -1,5 +1,7 @@
-from barbaros.common import is_valid_url
 import pytest
+
+from barbaros.common import is_valid_url
+
 
 @pytest.mark.parametrize("url", [
     "http://google.com",

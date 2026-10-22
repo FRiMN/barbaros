@@ -1,15 +1,15 @@
-import sys
 import signal
+import sys
 
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import QCoreApplication, QSettings
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from .main_window import MainWindow
-from .about_window import AboutWindow
-from .ipc import IPCService
 from .__version__ import version
-from .i18n import resolve_language, load_translator
+from .about_window import AboutWindow
+from .i18n import load_translator, resolve_language
+from .ipc import IPCService
+from .main_window import MainWindow
 
 
 class App(QApplication):

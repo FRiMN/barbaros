@@ -1,15 +1,14 @@
 import re
 
 from any_llm.types.completion import ChatCompletion, Choice
-
-from PySide6.QtWidgets import (
-    QVBoxLayout,
-    QPushButton,
-    QHBoxLayout,
-    QBoxLayout,
-    QMessageBox,
-)
 from PySide6.QtCore import QThread
+from PySide6.QtWidgets import (
+    QBoxLayout,
+    QHBoxLayout,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
 
 from barbaros.features.base import AbstractFeature
 from barbaros.widgets.custom_text_edit import CustomTextEdit

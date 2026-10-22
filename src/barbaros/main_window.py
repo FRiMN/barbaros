@@ -1,24 +1,26 @@
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QVBoxLayout,
-    QHBoxLayout,
-    QWidget,
-    QPushButton,
-    QComboBox,
-    QMessageBox,
-    QTabWidget, QLabel, QSizePolicy,
-    QStyle
-)
-from PySide6.QtGui import QCloseEvent
 from PySide6.QtCore import Q_ARG, QMetaObject, Qt, Slot
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QStyle,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-from .features.ocr import OCRFeature
-from .features.text import TextFeature
-from .features.settings import SettingsFeature
+from .common import TARGET_LANGUAGES, SettingsProxy, url_to_html_links
 from .features.base import AbstractFeature
-from .common import SettingsProxy, TARGET_LANGUAGES, url_to_html_links
-from .model_manager import ModelManager, default_providers, ProviderMeta
-from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
+from .features.ocr import OCRFeature
+from .features.settings import SettingsFeature
+from .features.text import TextFeature
+from .model_manager import ModelManager, ProviderMeta, default_providers
+from .widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 
 
 class MainWindow(QMainWindow):

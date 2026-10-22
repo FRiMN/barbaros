@@ -8,7 +8,7 @@ mousePressEvent через .normalized()); здесь тестируется п�
 стратегии.
 """
 import pytest
-from PySide6.QtCore import QRect, QPoint
+from PySide6.QtCore import QPoint, QRect
 
 from barbaros.widgets.image_crop.transform_strategy import CreateStrategy
 

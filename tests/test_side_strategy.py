@@ -10,9 +10,9 @@ valid_handle_pos — это ручки, которые можно перетас
 размер.
 """
 import pytest
-from PySide6.QtCore import QRect, QPoint, QSize
+from PySide6.QtCore import QPoint, QRect, QSize
 
-from barbaros.widgets.image_crop.transform_strategy import SideStrategy, HandlePos
+from barbaros.widgets.image_crop.transform_strategy import HandlePos, SideStrategy
 
 
 @pytest.fixture(autouse=True, scope="session")
