@@ -125,8 +125,9 @@ class SignalAdapter(IPCAdapterInterface):
         return self._send_signal_to_process(sig)
 
     def _send_signal_to_process(self, sig: signal.Signals) -> bool:
-        import psutil
         import os
+
+        import psutil
 
         app_name = "Barbaros"
         current_pid = os.getpid()
