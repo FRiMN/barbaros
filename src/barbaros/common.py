@@ -80,7 +80,7 @@ def is_valid_url(url: str) -> bool:
 def truncate_key(key: str) -> str:
     """Truncate API key to show only last 15% of key, but 4 chars max."""
     key_len = len(key)
-    if 4 <= key_len * 0.15:
+    if key_len * 0.15 >= 4:
         return f"****{key[-4:]}"
     truncate_len = max(1, int(key_len * 0.15))
     return f"****{key[-truncate_len:]}"

@@ -67,7 +67,7 @@ testpaths = ["tests"]
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 ignore = [
     "E741", # Ambiguous variable name
     "E501", # Line too long

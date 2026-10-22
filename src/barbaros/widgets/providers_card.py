@@ -55,7 +55,7 @@ class ProvidersCard(QFrame):
 
     def _truncate_url(self, url: str) -> str:
         url_len = len(url)
-        if 15 <= url_len:
+        if url_len >= 15:
             return f"...{url[-15:]}"
         return url
 
