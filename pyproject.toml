@@ -2,13 +2,13 @@
 
 [project]
 name = "barbaros"
-description = "AI Translation app"
+description = "AI-powered machine translation application with PySide6 GUI"
 keywords = ["translation", "ai", "qt", "gui", "pyside6", "machine-translation"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Operating System :: OS Independent",
+#    "Operating System :: OS Independent",
     "Operating System :: POSIX :: Linux",
     "Framework :: PySide",
     "Intended Audience :: End Users/Desktop",
@@ -42,6 +42,7 @@ barbaros = "barbaros.main:main"
 [project.urls]
 Homepage = "https://github.com/FRiMN/barbaros"
 Issues = "https://github.com/FRiMN/barbaros/issues"
+Repository = "https://github.com/FRiMN/barbaros"
 
 [build-system]
 requires = ["setuptools>=61", "setuptools-scm"]
