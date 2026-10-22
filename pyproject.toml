@@ -20,6 +20,7 @@ license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.11"
 dynamic = ["version"]
 dependencies = [
+    # Full pyside6 in dev group for language tools; main deps use pyside6-essentials for lighter footprint.
     "pyside6-essentials",
     "psutil",
     "any-llm-sdk[all]",
@@ -45,11 +46,13 @@ Issues = "https://github.com/FRiMN/barbaros/issues"
 Repository = "https://github.com/FRiMN/barbaros"
 
 [build-system]
-requires = ["setuptools>=61", "setuptools-scm"]
+# Requires setuptools >= 77.0.0 (PEP 639 license string syntax)
+requires = ["setuptools>=77.0.1", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 write_to = "src/barbaros/__version__.py"
+fallback_version = "0.0.0"
 
 [tool.setuptools.packages.find]
 where = ["src"]
