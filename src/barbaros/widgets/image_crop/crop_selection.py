@@ -1,11 +1,13 @@
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, Qt, Signal, QTimer
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -24,7 +26,7 @@ from barbaros.widgets.image_crop.transform_strategy import (
 class GimpStyleCropSelection(QWidget):
     """Виджет обрезки в стиле GIMP с использованием стратегий и политик.
 
-    Принимает QImage, вписывает его в виджет и поддерживает зум/панорамирование.
+    Принимает QImage, вписывает его в виджет и поддерживает зум.
     Выделение области управляется диспетчеризацией по типу кнопки мыши
     (HandlePos) через соответствующие CropStrategy и фильтруется CropPolicy
     (границы изображения + минимальный размер). Координаты выделения хранятся
@@ -103,10 +105,8 @@ class GimpStyleCropSelection(QWidget):
             BoundaryPolicy(),
         ]
 
-        # Состояние зума/панорамирования.
+        # Состояние зума.
         self.zoom_level: float = 1.0
-        self.pan_x: int = 0
-        self.pan_y: int = 0
         self.fit_scale: float = 1.0
         self.scale_factor: float = 1.0
         self.display_rect: QRect | None = None
@@ -114,46 +114,50 @@ class GimpStyleCropSelection(QWidget):
 
         self._update_layout()
 
-    # --- Конвертация координат и расчёт макета ---
+    def update_fit_scale(self, view_w: int, view_h: int):
+        """Вычисляет базовый масштаб для вписывания изображения в указанную область."""
+        if self.image.isNull():
+            return
+
+        iw, ih = self.image.width(), self.image.height()
+        if iw <= 0 or ih <= 0:
+            return
+
+        self.fit_scale = min(view_w / iw, view_h / ih)
+        # После изменения базового масштаба нужно обновить размер виджета
+        self._update_layout()
 
     def _update_layout(self):
-        """Пересчитывает масштаб и смещение под текущий размер виджета и зум."""
+        """Устанавливает размер виджета на основе текущего зума и fit_scale."""
         if self.image.isNull():
             self.scale_factor = 1.0
-            self.fit_scale = 1.0
-            self.display_rect = None
-            self.image_offset = None
             return
 
-        w = self.width()
-        h = self.height()
-        iw = self.image.width()
-        ih = self.image.height()
-        if w <= 0 or h <= 0 or iw <= 0 or ih <= 0:
-            return
-
-        self.fit_scale = min(w / iw, h / ih)
+        iw, ih = self.image.width(), self.image.height()
         self.scale_factor = self.fit_scale * self.zoom_level
+        
         scaled_w = int(iw * self.scale_factor)
         scaled_h = int(ih * self.scale_factor)
-
-        ox = (w - scaled_w) // 2 + self.pan_x
-        oy = (h - scaled_h) // 2 + self.pan_y
-        self.display_rect = QRect(ox, oy, scaled_w, scaled_h)
-        self.image_offset = QPoint(ox, oy)
+        
+        self.display_rect = QRect(0, 0, scaled_w, scaled_h)
+        self.image_offset = QPoint(0, 0)
+        self.setFixedSize(scaled_w, scaled_h)
 
     def _to_widget_point(self, img_point: QPoint) -> QPoint:
+        """Конвертирует координаты изображения в координаты виджета."""
         return QPoint(
-            int(self.image_offset.x() + img_point.x() * self.scale_factor),
-            int(self.image_offset.y() + img_point.y() * self.scale_factor),
+            int(img_point.x() * self.scale_factor),
+            int(img_point.y() * self.scale_factor),
         )
 
     def _to_image_point(self, widget_point: QPoint) -> QPoint:
-        if self.image_offset is None or self.scale_factor == 0:
+        """Конвертирует координаты виджета в координаты изображения."""
+        if self.scale_factor == 0:
             return widget_point
+
         return QPoint(
-            int((widget_point.x() - self.image_offset.x()) / self.scale_factor),
-            int((widget_point.y() - self.image_offset.y()) / self.scale_factor),
+            int(widget_point.x() / self.scale_factor),
+            int(widget_point.y() / self.scale_factor),
         )
 
     def _widget_rect_from_image(self, img_rect: QRect) -> QRect:
@@ -161,12 +165,9 @@ class GimpStyleCropSelection(QWidget):
         br = self._to_widget_point(img_rect.bottomRight())
         return QRect(tl, br).normalized()
 
-    # --- Отрисовка ---
-
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self._update_layout()
 
         if self.image.isNull():
             painter.fillRect(self.rect(), Qt.GlobalColor.lightGray)
@@ -176,8 +177,7 @@ class GimpStyleCropSelection(QWidget):
             )
             return
 
-        if self.display_rect is not None:
-            painter.drawPixmap(self.display_rect, self.pixmap)
+        painter.drawPixmap(self.display_rect, self.pixmap)
 
         if self.selection_rect is None or self.selection_rect.isNull():
             return
@@ -214,9 +214,7 @@ class GimpStyleCropSelection(QWidget):
         for h_id, func in self.handle_map.items():
             painter.drawRect(func(disp, s))
 
-    # --- Определение кнопок выделения ---
-
-    def get_handle_at(self, pos: QPoint) -> int:
+    def get_handle_at(self, pos: QPoint) -> HandlePos:
         """Возвращает id кнопки выделения в точке (или HandlePos.NONE)."""
         if self.selection_rect is None or self.selection_rect.isNull():
             return HandlePos.NONE
@@ -232,7 +230,7 @@ class GimpStyleCropSelection(QWidget):
         return HandlePos.NONE
 
     def _update_cursor(self, pos: QPoint):
-        h = self.get_handle_at(pos)
+        h: HandlePos = self.get_handle_at(pos)
         cursors = {
             HandlePos.TOP_LEFT: Qt.CursorShape.SizeFDiagCursor,
             HandlePos.BOTTOM_RIGHT: Qt.CursorShape.SizeFDiagCursor,
@@ -245,8 +243,6 @@ class GimpStyleCropSelection(QWidget):
             HandlePos.INSIDE: Qt.CursorShape.SizeAllCursor,
         }
         self.setCursor(cursors.get(h, Qt.CursorShape.ArrowCursor))
-
-    # --- Обработчики мыши ---
 
     def mousePressEvent(self, event):
         if self.image.isNull():
@@ -299,6 +295,17 @@ class GimpStyleCropSelection(QWidget):
         self.active_handle = HandlePos.NONE
         self.update()
 
+    def wheelEvent(self, event):
+        """Колесо мыши: изменение масштаба (зум). Панорамирование — полосы прокрутки."""
+        delta = event.angleDelta().y()
+        if delta == 0:
+            event.ignore()
+            return
+
+        factor = 1.1 if delta > 0 else 1 / 1.1
+        self.set_zoom(self.zoom_level * factor)
+        event.accept()
+
     # --- Публичный API ---
 
     def get_crop_rect(self) -> QRect | None:
@@ -310,61 +317,13 @@ class GimpStyleCropSelection(QWidget):
         self.selection_rect = rect
         self.update()
 
-    # --- Зум/панорамирование ---
-
     def set_zoom(self, zoom: float):
         """Установить уровень зума (1.0 = вписано в виджет)."""
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
         if zoom != self.zoom_level:
             self.zoom_level = zoom
-            self._clamp_pan()
             self._update_layout()
             self.zoomChanged.emit(self.zoom_level)
-            self.update()
-
-    def _clamp_pan(self):
-        """Ограничивает смещение панорамирования пределами изображения."""
-        if self.image.isNull() or self.fit_scale <= 0:
-            return
-
-        total_scale = self.fit_scale * self.zoom_level
-        scaled_w = int(self.image.width() * total_scale)
-        scaled_h = int(self.image.height() * total_scale)
-        ww = self.width()
-        wh = self.height()
-
-        if scaled_w > ww:
-            max_pan = (scaled_w - ww) // 2 + 50
-            self.pan_x = max(-max_pan, min(max_pan, self.pan_x))
-        else:
-            self.pan_x = 0
-
-        if scaled_h > wh:
-            max_pan = (scaled_h - wh) // 2 + 50
-            self.pan_y = max(-max_pan, min(max_pan, self.pan_y))
-        else:
-            self.pan_y = 0
-
-    def wheelEvent(self, event):
-        """Колесо мыши: зум (Ctrl), панорамирование по вертикали/горизонтали."""
-        delta = event.angleDelta().y()
-
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            factor = 1.1 if delta > 0 else 1 / 1.1
-            new_zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, self.zoom_level * factor))
-            if new_zoom != self.zoom_level:
-                self.zoom_level = new_zoom
-                self._clamp_pan()
-                self._update_layout()
-                self.zoomChanged.emit(self.zoom_level)
-                self.update()
-        elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            self.pan_x += delta // 2
-            self._clamp_pan()
-            self.update()
-        else:
-            self.pan_y += delta // 2
-            self._clamp_pan()
             self.update()
 
 
@@ -386,8 +345,20 @@ class CropDialog(QDialog):
         )
         self.crop_widget.set_crop_rect(initial_crop_rect)
 
+        # Обёртка для полос прокрутки.
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidget(self.crop_widget)
+        self.scroll_area.setWidgetResizable(False)
+        self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scroll_area.setFrameStyle(
+            QFrame.Shape.NoFrame | QFrame.Shape.StyledPanel
+        )
+
+        # Отложенный расчет начального масштаба, чтобы вьюпорт успел инициализироваться
+        QTimer.singleShot(0, self._initial_fit)
+
         layout = QVBoxLayout()
-        layout.addWidget(self.crop_widget)
+        layout.addWidget(self.scroll_area)
         layout.addLayout(self._build_zoom_bar())
         self.setLayout(layout)
 
@@ -445,6 +416,29 @@ class CropDialog(QDialog):
         self.zoom_slider.blockSignals(True)
         self.zoom_slider.setValue(pct)
         self.zoom_slider.blockSignals(False)
+        self.scroll_area.updateGeometry()
+
+    def _initial_fit(self):
+        if self.scroll_area and self.crop_widget:
+            view_w = self.scroll_area.viewport().width()
+            view_h = self.scroll_area.viewport().height()
+            self.crop_widget.update_fit_scale(view_w, view_h)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # После показа окна вьюпорт получает реальный размер
+        if self.scroll_area and self.crop_widget:
+            view_w = self.scroll_area.viewport().width()
+            view_h = self.scroll_area.viewport().height()
+            self.crop_widget.update_fit_scale(view_w, view_h)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Обновляем базовый масштаб вписывания при изменении размера окна
+        if self.scroll_area and self.crop_widget:
+            view_w = self.scroll_area.viewport().width()
+            view_h = self.scroll_area.viewport().height()
+            self.crop_widget.update_fit_scale(view_w, view_h)
 
     def _zoom_in(self):
         new_zoom = self.crop_widget.zoom_level * 1.25
@@ -464,9 +458,7 @@ class CropDialog(QDialog):
             self.tr("Crop Controls"),
             "<table>"
             "<tr><td><b>Action</b></td><td><b>Control</b></td></tr>"
-            "<tr><td>Zoom in/out</td><td>Ctrl + Scroll Wheel</td></tr>"
-            "<tr><td>Pan vertically</td><td>Scroll Wheel</td></tr>"
-            "<tr><td>Pan horizontally</td><td>Shift + Scroll Wheel</td></tr>"
+            "<tr><td>Zoom in/out</td><td>Scroll Wheel</td></tr>"
             "<tr><td>Resize crop area</td><td>Drag crop handles</td></tr>"
             "<tr><td>Move crop area</td><td>Drag inside crop</td></tr>"
             "<tr><td>Create new crop</td><td>Click outside crop</td></tr>"
