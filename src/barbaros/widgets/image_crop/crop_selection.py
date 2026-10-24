@@ -452,20 +452,21 @@ class CropDialog(QDialog):
         self.crop_widget.set_zoom(1.0)
 
     def _show_help(self):
-        # TODO: translate
         QMessageBox.information(
             self,
             self.tr("Crop Controls"),
-            "<table>"
-            "<tr><td><b>Action</b></td><td><b>Control</b></td></tr>"
-            "<tr><td>Zoom in/out</td><td>Scroll Wheel</td></tr>"
-            "<tr><td>Resize crop area</td><td>Drag crop handles</td></tr>"
-            "<tr><td>Move crop area</td><td>Drag inside crop</td></tr>"
-            "<tr><td>Create new crop</td><td>Click outside crop</td></tr>"
-            "<tr><td>Zoom in/out</td><td>- / + buttons</td></tr>"
-            "<tr><td>Set zoom level</td><td>Slider</td></tr>"
-            "<tr><td>Fit image to window</td><td>Reset</td></tr>"
-            "</table>",
+            self.tr(
+                "<table>"
+                "<tr><td><b>Action</b></td><td><b>Control</b></td></tr>"
+                "<tr><td>Zoom in/out</td><td>Scroll Wheel</td></tr>"
+                "<tr><td>Resize crop area</td><td>Drag crop handles</td></tr>"
+                "<tr><td>Move crop area</td><td>Drag inside crop</td></tr>"
+                "<tr><td>Create new crop</td><td>Click outside crop</td></tr>"
+                "<tr><td>Zoom in/out</td><td>- / + buttons</td></tr>"
+                "<tr><td>Set zoom level</td><td>Slider</td></tr>"
+                "<tr><td>Fit image to window</td><td>Reset</td></tr>"
+                "</table>"
+            ),
         )
 
     def get_cropped_image(self) -> QImage | None:
