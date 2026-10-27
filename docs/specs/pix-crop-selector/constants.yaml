@@ -1,6 +1,10 @@
-# Machine-readable constants for the Pix crop selector.
+# Machine-readable constants for the Pix crop selection frame.
 # Source of truth: linuxmint/pix @ tag 3.4.10 (crop files unchanged in 3.4.11).
 # Human-readable spec: README.md in this directory.
+#
+# Scope: the selection frame only (overlay, hit zones, drag/resize, clamps,
+# autoscroll). Panel, dialogs, grids, settings, headerbar and accept/cancel
+# are intentionally out of scope.
 
 meta:
   application: Pix
@@ -17,31 +21,12 @@ overlay:
     color: [0, 0, 0]
     alpha: 0.5
     coverage: image_rect_only        # not the whole viewer widget
+    hidden_while_dragging: true
   border:
     width_device_px: 1
     color: [255, 255, 255]
     blend_operator: difference       # out = |src - dst| compositing; on opaque bg ≈ 255-dst
     pixel_alignment: 0.5             # stroke at x+0.5, y+0.5
-  grid:
-    width_device_px: 1
-    color: [255, 255, 255]
-    blend_operator: difference
-    pixel_alignment: 0.5
-    clip: selection_rect_expanded_by_1px
-    inset_from_selection_border_px: 1
-    types:
-      none:    { lines: [] }
-      thirds:  { strong: 0.60, weak: 0.10, strong_fractions: [1/3, 2/3], weak_fractions: [1/9, 2/9, 4/9, 5/9, 7/9, 8/9] }
-      golden:  { alpha: 0.60, fraction: 0.382033, golden_ratio: 1.6180339887,
-                 formula: "d = fraction * dimension; lines at d and dimension-d (second only if d < dimension/2)" }
-      center:  { strong: 0.60, weak: 0.10, strong_fraction: 0.5, weak_fractions: [0.25, 0.75] }
-      uniform:
-        steps:
-          - { step_px: 100, alpha: 0.40, skip_multiples_of: null }
-          - { step_px: 50,  alpha: 0.20, skip_multiples_of: 100 }
-          - { step_px: 10,  alpha: 0.10, skip_multiples_of: 50 }
-        max_lines_per_layer: 50
-        max_lines_axis_checked: width_only   # original checks only width
   handle_feedback:
     visible_handles: false
     style: "1px bracket (Difference) on the inner boundary of the hovered hit zone"
@@ -51,13 +36,9 @@ overlay:
 
 viewer:
   background_gray: 0.2            # #333333
-  fit_mode_on_tool_activate: fit_if_larger
-  zoom_quality_on_tool_activate: low
-  restore_on_tool_deactivate: user_settings
 
 selection:
   initial_fraction: 0.6666666667  # width and height = image_dim * 2/3, centered, floor
-  initial_ratio_adjust: "h = round(w/ratio); fallback: w = round(h*ratio)"
   center_rounding: floor
   min_visible_size: 1
   interior_hit_expand_px: 1
@@ -100,85 +81,11 @@ interaction:
     step_divisor: 2               # each tick scrolls and extends selection by (pointer_distance_outside / 2)
 
 constraints:
-  no_ratio: "clamp all changes to [0,W]x[0,H]; opposite edge fixed for side/corner resize"
-  with_ratio:
-    ratio_value: "w/h (or h/w when invert is on)"
-    side_handles: "resize both axes preserving ratio; anchored corner stays fixed"
-    corner_handles: "dominant axis chosen by pointer position relative to the opposite-corner diagonal (semiplane test)"
-    out_of_bounds: "shrink preserving ratio; if still invalid, reject the update"
-    ratio_change: "keep width, h = round(w/ratio); invert uses natural swap (new w = old h)"
-    image_ratio: "W/H"
-    screen_ratio: "screen size at tool activation"
-  bind_dimensions:
-    formula: "round each of w,h to nearest multiple of factor (ties away from zero/up)"
-    applies_to: [mouse, spinboxes]
-
-aspect_ratios:
-  order: [none, square, image, display, "5:4", "4:3", "7:5", "3:2", "16:10", "16:9", "1.85:1", "2.39:1", custom]
-  labels_en:
-    none: "None"
-    square: "Square"
-    image: "%d × %d (Image)"
-    display: "%d × %d (Screen)"
-    custom: "Other…"
-  labels_ru:
-    none: "Отсутствует"
-    square: "Квадрат"
-    image: "%d × %d (Изображение)"
-    display: "%d × %d (Экран)"
-    custom: "Другой…"
-
-settings:
-  schema: org.x.pix.crop
-  saved_when: tool_deactivate            # both accept and cancel
-  defaults:
-    grid-type: thirds
-    aspect-ratio: none
-    aspect-ratio-invert: false
-    aspect-ratio-width: 1
-    aspect-ratio-height: 1
-    bind-dimensions: false
-    bind-factor: 8
-
-crop_actions:
-  accept:
-    precondition: "sel.w > 0 && sel.h > 0"
-    operation: "copy_subsurface(full_res_current_image, sel)"
-    result: "in-memory modified image + history entry; NOT saved to disk"
-    ui_after: "tool deactivates; viewer controls restored"
-  cancel:
-    operation: "viewer_page.reset() -> last history image"
-    ui_after: "tool deactivates; modified flag may clear if there were no prior unsaved edits"
-  source_image: "full-resolution current image, including unsaved in-memory edits"
-
-keyboard:
-  activate_crop: "Shift+C"
-  toggle_edit_toolbox: "E"
-  cancel: ["Escape", "BackSpace"]
-  zoom_viewer: ["+", "-", "1", "x", "Shift+X", "w", "Shift+W", "h", "Shift+H"]
-
-layout:
-  sidebar_min_width_px: 365
-  headerbar_height_px: 48              # observed
-  statusbar_height_px: 36              # observed
-  panel:
-    container_padding_px: 12
-    section_spacing_px: 24
-    row_spacing_px: 6
-    heading: bold
-  options_dialog:
-    width_request_px: 300
-    resizable: false
-    border_px: 6
-    modal: false
-    content: [grid_combo, close_button]
+  edges: "clamp all changes to [0,W]x[0,H]; opposite edge fixed for side/corner resize"
+  size: "w >= 0, h >= 0; negative sizes appear only via handle flip"
 
 quirks:
   - "hit-zone size: height/3 rule overrides width/3 rule in the original"
-  - "ratio out-of-bounds correction has duplicated blocks and x-vs-y comparison typos"
   - "drag threshold declared but unused; dimming turns off on press"
-  - "Options dialog is non-modal and may stay open after cancelling the tool via Escape"
-  - "tool activation marks document modified until cancel"
-  - "screen ratio is frozen at activation time"
   - "selection stored in image pixels, screen rect re-derived with independent rounding (1px drift possible)"
   - "empty selection hides the whole overlay; a click without drag outside leaves a 1x1 selection"

@@ -5,7 +5,7 @@
 
 | Спецификация | Что описывает | Откуда снято |
 |---|---|---|
-| [pix-crop-selector/](pix-crop-selector/README.md) | crop-селектор: оверлей, ручки, сетки, пропорции, Accept/Cancel | Pix 3.4.10 (Linux Mint) |
+| [pix-crop-selector/](pix-crop-selector/README.md) | crop-селектор: рамка выделения, оверлей, зоны ручек, драг/ресайз | Pix 3.4.10 (Linux Mint) |
 
 Формат: `README.md` — человекочитаемая спецификация; `constants.yaml` — машиночитаемые
 константы; `*.png` — скриншоты, снятые при разборе.
