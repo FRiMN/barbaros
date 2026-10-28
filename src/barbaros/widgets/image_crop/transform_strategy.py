@@ -7,23 +7,31 @@ from PySide6.QtCore import QPoint, QRect
 class CropStrategy(ABC):
     """Базовый класс для стратегий изменения выделения при drag-and-drop.
 
-    Методы переопределяются в подклассах:
-        on_mouse_press — вызывается в момент нажатия кнопки мыши;
-        on_mouse_move — вызывается при каждом перемещении курсора и
-            возвращает новое выделение.
+    Выделение хранится в пикселях изображения. На нажатии стратегия запоминает
+    точку нажатия (drag_start) и выделение в этот момент (rect_on_press), а
+    on_mouse_move получает сдвиг курсора относительно точки нажатия.
+
+    Абсолютная позиция курсора намеренно не используется: ручки невидимы и
+    занимают зону в десятки пикселей, поэтому «ручка = курсор» приводила бы к
+    скачку выделения при нажатии внутри зоны. Расчёт всегда идёт от
+    rect_on_press, поэтому клампы одного хода не накапливаются между ходами.
     """
 
+    def __init__(self):
+        self.drag_start = QPoint()
+        self.rect_on_press = QRect()
+
     def on_mouse_press(self, pos: QPoint, rect: QRect):
-        """Метод для подготовки состояния перед началом drag-and-drop."""
-        pass
+        """Запоминает точку нажатия и выделение на момент нажатия."""
+        self.drag_start = pos
+        self.rect_on_press = rect
 
     @abstractmethod
-    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+    def on_mouse_move(self, delta: QPoint) -> QRect:
         """
-        Метод для расчета трансформации rect при drag-and-drop.
+        Выделение после сдвига курсора на delta от точки нажатия.
 
-        rect - выделение
-        pos - позиция курсора
+        delta - сдвиг курсора в пикселях изображения
         """
         pass
 
@@ -46,7 +54,7 @@ class HandlePos(IntEnum):
 
 class CornerStrategy(CropStrategy):
     """Изменение размера за угол: угол-якорь неподвижен, противоположный угол
-    следует за курсором.
+    смещается на сдвиг мыши (а не в позицию курсора).
     """
 
     valid_handle_pos = {
@@ -57,25 +65,34 @@ class CornerStrategy(CropStrategy):
     }
 
     def __init__(self, anchor: HandlePos):
+        super().__init__()
         if anchor not in self.valid_handle_pos:
             raise ValueError(f"CornerStrategy requires a corner anchor ({self.valid_handle_pos}), got {anchor}")
         self.anchor = anchor
 
-    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+    def on_mouse_move(self, delta: QPoint) -> QRect:
+        rect = self.rect_on_press
+        dx, dy = delta.x(), delta.y()
         match self.anchor:
             case HandlePos.TOP_LEFT:
-                return QRect(pos, rect.bottomRight())
+                return QRect(rect.topLeft() + QPoint(dx, dy), rect.bottomRight())
             case HandlePos.TOP_RIGHT:
-                return QRect(QPoint(rect.left(), pos.y()), QPoint(pos.x(), rect.bottom()))
+                return QRect(
+                    QPoint(rect.left(), rect.top() + dy),
+                    QPoint(rect.right() + dx, rect.bottom()),
+                )
             case HandlePos.BOTTOM_LEFT:
-                return QRect(QPoint(pos.x(), rect.top()), QPoint(rect.right(), pos.y()))
+                return QRect(
+                    QPoint(rect.left() + dx, rect.top()),
+                    QPoint(rect.right(), rect.bottom() + dy),
+                )
             case HandlePos.BOTTOM_RIGHT:
-                return QRect(rect.topLeft(), pos)
+                return QRect(rect.topLeft(), rect.bottomRight() + QPoint(dx, dy))
 
 
 class SideStrategy(CropStrategy):
     """Изменение размера за сторону: противоположная сторона неподвижна,
-    размер меняется по одной оси.
+    сторона под курсором смещается на сдвиг мыши по своей оси.
     """
 
     valid_handle_pos = {
@@ -86,55 +103,39 @@ class SideStrategy(CropStrategy):
     }
 
     def __init__(self, anchor: HandlePos):
+        super().__init__()
         if anchor not in self.valid_handle_pos:
             raise ValueError(f"SideStrategy requires a side anchor ({self.valid_handle_pos}), got {anchor}")
         self.anchor = anchor
 
-    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
+    def on_mouse_move(self, delta: QPoint) -> QRect:
+        rect = self.rect_on_press
+        dx, dy = delta.x(), delta.y()
         match self.anchor:
             case HandlePos.TOP_CENTER:
-                return QRect(QPoint(rect.left(), pos.y()), rect.bottomRight())
+                return QRect(QPoint(rect.left(), rect.top() + dy), rect.bottomRight())
             case HandlePos.BOTTOM_CENTER:
-                return QRect(rect.left(), rect.top(), rect.width(), pos.y() - rect.top())
+                return QRect(rect.topLeft(), QPoint(rect.right(), rect.bottom() + dy))
             case HandlePos.LEFT_CENTER:
-                return QRect(QPoint(pos.x(), rect.top()), rect.bottomRight())
+                return QRect(QPoint(rect.left() + dx, rect.top()), rect.bottomRight())
             case HandlePos.RIGHT_CENTER:
-                return QRect(rect.left(), rect.top(), pos.x() - rect.left(), rect.height())
+                return QRect(rect.topLeft(), QPoint(rect.right() + dx, rect.bottom()))
 
 
 class PanStrategy(CropStrategy):
-    """Перемещение выделения без изменения размера."""
+    """Перемещение выделения без изменения размера: весь прямоугольник
+    смещается на сдвиг мыши.
+    """
 
-    def __init__(self):
-        self.drag_start = QPoint()
-        self.rect_on_press = QRect()
-
-    def on_mouse_press(self, pos: QPoint, rect: QRect):
-        self.drag_start = pos
-        self.rect_on_press = rect
-
-    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
-        # Всё выделение сдвигается на вектор движения мыши относительно точки
-        # нажатия, не меняя размера. Сдвиг относительно drag_start применяется
-        # к прямоугольнику, запомненному на нажатии (rect_on_press), а не к уже
-        # сдвинутому текущему rect, поэтому перемещение не накапливается в
-        # цепочке mouse-move.
-        delta = pos - self.drag_start
-        new_tl = self.rect_on_press.topLeft() + delta
-        new_br = self.rect_on_press.bottomRight() + delta
-        return QRect(new_tl, new_br)
+    def on_mouse_move(self, delta: QPoint) -> QRect:
+        return self.rect_on_press.translated(delta)
 
 
 class CreateStrategy(CropStrategy):
-    """Создание нового выделения: начальная точка фиксируется на нажатии,
-    прямоугольник растёт из неё до курсора.
+    """Создание нового выделения: прямоугольник строится от точки нажатия до
+    текущего положения курсора, поэтому здесь сдвиг прибавляется к точке
+    нажатия.
     """
 
-    def __init__(self):
-        self.begin = QPoint()
-
-    def on_mouse_press(self, pos: QPoint, rect: QRect):
-        self.begin = pos
-
-    def on_mouse_move(self, rect: QRect, pos: QPoint) -> QRect:
-        return QRect(self.begin, pos)
+    def on_mouse_move(self, delta: QPoint) -> QRect:
+        return QRect(self.drag_start, self.drag_start + delta)

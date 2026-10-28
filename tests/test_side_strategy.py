@@ -1,16 +1,16 @@
 """Тесты для SideStrategy из barbaros.widgets.image_crop.transform_strategy.
 
 SideStrategy меняет размер выделения за сторону (ручку в середине края):
-противоположная сторона неподвижна, размер меняется только по одной оси.
+противоположная сторона неподвижна, сторона под курсором смещается на сдвиг
+мыши по своей оси.
   TOP_CENTER / BOTTOM_CENTER — двигается верх/низ, ширина (X) фиксирована.
   LEFT_CENTER / RIGHT_CENTER — двигается лево/право, высота (Y) фиксирована.
 
-valid_handle_pos — это ручки, которые можно перетаскивать. Тесты проверяют
-фактическое поведение: какая сторона зафиксирована и по какой оси меняется
-размер.
+Контракт: on_mouse_move получает СДВИГ курсора от точки нажатия, а не его
+абсолютную позицию, поэтому нажатие внутри зоны ручки (до 40 px) не даёт скачка.
 """
 import pytest
-from PySide6.QtCore import QPoint, QRect, QSize
+from PySide6.QtCore import QPoint, QRect
 
 from barbaros.widgets.image_crop.transform_strategy import HandlePos, SideStrategy
 
@@ -26,11 +26,11 @@ def _qapp():
     return app
 
 
-def _press_move(anchor, pos, rect):
-    """Симулируем полный цикл: нажали за сторону -> передвинули мышь."""
+def _drag(anchor, press, delta, rect):
+    """Симулируем полный цикл: нажали за сторону -> сдвинули мышь на delta."""
     strat = SideStrategy(anchor)
-    strat.on_mouse_press(QPoint(0, 0), rect)
-    return strat.on_mouse_move(rect, pos)
+    strat.on_mouse_press(press, rect)
+    return strat.on_mouse_move(delta)
 
 
 RECT = QRect(50, 40, 200, 150)
@@ -48,60 +48,70 @@ def test_invalid_anchor_raises(anchor):
         SideStrategy(anchor)
 
 
-def test_top_center_changes_height_only_top_moves():
-    # Тянем за верхнюю сторону вниз? нет — в (100,10) вверх: высота растёт,
-    # лево/право/низ на месте.
-    result = _press_move(HandlePos.TOP_CENTER, QPoint(100, 10), RECT)
-    assert result.left() == LEFT
-    assert result.right() == LEFT + WIDTH - 1
-    assert result.bottom() == TOP + HEIGHT - 1
-    assert result.top() == 10
-    assert result.width() == WIDTH
-    assert result.height() == 180  # 189 - 10 + 1 (QRect включительный)
+@pytest.mark.parametrize("anchor", sorted(SideStrategy.valid_handle_pos))
+def test_no_delta_keeps_rect(anchor):
+    # Нажали внутри зоны ручки и не сдвинули мышь — размер и положение те же
+    # (регрессия: раньше сторона прыгала в координату курсора).
+    for press in (QPoint(0, 0), QPoint(150, 115), QPoint(249, 189)):
+        assert _drag(anchor, press, QPoint(0, 0), RECT) == RECT
 
 
-def test_bottom_center_changes_height_only_bottom_moves():
-    # Тянем за нижнюю сторону вниз в (150,260): низ уходит, верх/лево/право на месте.
-    result = _press_move(HandlePos.BOTTOM_CENTER, QPoint(150, 260), RECT)
-    assert result.top() == TOP
-    assert result.left() == LEFT
-    assert result.right() == LEFT + WIDTH - 1
-    assert result.width() == WIDTH
-    assert result.height() == 260 - TOP  # 220
+@pytest.mark.parametrize(
+    ("anchor", "delta", "expected"),
+    [
+        # Двигается только сторона под курсором; остальное — неподвижно.
+        (HandlePos.TOP_CENTER, QPoint(0, -10), QRect(50, 30, 200, 160)),
+        (HandlePos.BOTTOM_CENTER, QPoint(0, 10), QRect(50, 40, 200, 160)),
+        (HandlePos.LEFT_CENTER, QPoint(-10, 0), QRect(40, 40, 210, 150)),
+        (HandlePos.RIGHT_CENTER, QPoint(10, 0), QRect(50, 40, 210, 150)),
+    ],
+)
+def test_dragged_side_moves_by_delta(anchor, delta, expected):
+    # Нажатие внутри зоны, не точно в сторону: на результат не влияет.
+    press = QPoint(112, 108)
+    assert _drag(anchor, press, delta, RECT) == expected
 
 
-def test_left_center_changes_width_only_left_moves():
-    # Тянем за левую сторону влево в (10,100): лево уходит, верх/низ/право на месте.
-    result = _press_move(HandlePos.LEFT_CENTER, QPoint(10, 100), RECT)
-    assert result.top() == TOP
-    assert result.bottom() == TOP + HEIGHT - 1
-    assert result.right() == LEFT + WIDTH - 1
-    assert result.left() == 10
-    assert result.height() == HEIGHT
-    assert result.width() == 240  # 249 - 10 + 1
-
-
-def test_right_center_changes_width_only_right_moves():
-    # Тянем за правую сторону вправо в (320,100): право уходит, лево/верх/низ на месте.
-    result = _press_move(HandlePos.RIGHT_CENTER, QPoint(320, 100), RECT)
-    assert result.left() == LEFT
-    assert result.top() == TOP
-    assert result.bottom() == TOP + HEIGHT - 1
-    assert result.height() == HEIGHT
-    assert result.width() == 320 - LEFT  # 270
-
-
-def test_side_no_move_preserves_size():
-    # Курсор в середине стороны без сдвига — размер не меняется.
-    result = _press_move(HandlePos.TOP_CENTER, QPoint(150, TOP), RECT)
-    assert result.size() == RECT.size() == QSize(WIDTH, HEIGHT)
+@pytest.mark.parametrize(
+    ("anchor", "delta", "on_axis"),
+    [
+        # Сторона двигается только по своей оси: сдвиг по второй оси ни на что не влияет.
+        (HandlePos.TOP_CENTER, QPoint(100, -10), QPoint(0, -10)),
+        (HandlePos.BOTTOM_CENTER, QPoint(100, 10), QPoint(0, 10)),
+        (HandlePos.LEFT_CENTER, QPoint(-10, 100), QPoint(-10, 0)),
+        (HandlePos.RIGHT_CENTER, QPoint(10, 100), QPoint(10, 0)),
+    ],
+)
+def test_cross_axis_delta_is_ignored(anchor, delta, on_axis):
+    press = QPoint(112, 108)
+    assert _drag(anchor, press, delta, RECT) == _drag(anchor, press, on_axis, RECT)
 
 
 def test_side_resize_shrinks_and_grows_per_axis():
-    grow = _press_move(HandlePos.LEFT_CENTER, QPoint(-30, 100), RECT)
-    shrink = _press_move(HandlePos.LEFT_CENTER, QPoint(120, 100), RECT)
+    grow = _drag(HandlePos.LEFT_CENTER, QPoint(50, 100), QPoint(-30, 0), RECT)
+    shrink = _drag(HandlePos.LEFT_CENTER, QPoint(50, 100), QPoint(120, 0), RECT)
     assert grow.width() > WIDTH
     assert shrink.width() < WIDTH
     # По оси Y размер не меняется ни при каком ходе.
     assert grow.height() == HEIGHT
     assert shrink.height() == HEIGHT
+    # Правая сторона (якорь) неподвижна в обоих случаях.
+    assert grow.right() == shrink.right() == LEFT + WIDTH - 1
+
+
+def test_opposite_side_stays_fixed():
+    # Верхняя сторона тянется вверх: низ не двигается.
+    top = _drag(HandlePos.TOP_CENTER, QPoint(112, 108), QPoint(0, -10), RECT)
+    assert (top.left(), top.right(), top.bottom()) == (LEFT, LEFT + WIDTH - 1, TOP + HEIGHT - 1)
+
+    # Нижняя сторона тянется вниз: верх не двигается.
+    bottom = _drag(HandlePos.BOTTOM_CENTER, QPoint(112, 108), QPoint(0, 10), RECT)
+    assert (bottom.left(), bottom.right(), bottom.top()) == (LEFT, LEFT + WIDTH - 1, TOP)
+
+    # Левая сторона тянется влево: правая не двигается.
+    left = _drag(HandlePos.LEFT_CENTER, QPoint(112, 108), QPoint(-10, 0), RECT)
+    assert (left.top(), left.bottom(), left.right()) == (TOP, TOP + HEIGHT - 1, LEFT + WIDTH - 1)
+
+    # Правая сторона тянется вправо: левая не двигается.
+    right = _drag(HandlePos.RIGHT_CENTER, QPoint(112, 108), QPoint(10, 0), RECT)
+    assert (right.top(), right.bottom(), right.left()) == (TOP, TOP + HEIGHT - 1, LEFT)

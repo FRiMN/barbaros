@@ -1,5 +1,7 @@
-from PySide6.QtCore import QPoint, QRect, Qt, Signal, QTimer
-from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
+from math import floor
+
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -22,16 +24,116 @@ from barbaros.widgets.image_crop.transform_strategy import (
     SideStrategy,
 )
 
+# Геометрия рамки выделения — docs/specs/pix-crop-selector/constants.yaml.
+DEFAULT_HIT_BORDER = 40
+MIN_HIT_BORDER = 3
+HIT_BORDER_THRESHOLD = DEFAULT_HIT_BORDER * 3  # 120
+MASK_ALPHA = 128  # 0.5 * 255
+
+SIDE_TOP = 1
+SIDE_RIGHT = 2
+SIDE_BOTTOM = 4
+SIDE_LEFT = 8
+
+# Какие внутренние стороны зоны подсвечиваются (event_area_paint в Pix).
+BRACKET_SIDES = {
+    HandlePos.TOP_CENTER: SIDE_RIGHT | SIDE_BOTTOM | SIDE_LEFT,
+    HandlePos.BOTTOM_CENTER: SIDE_TOP | SIDE_RIGHT | SIDE_LEFT,
+    HandlePos.LEFT_CENTER: SIDE_TOP | SIDE_RIGHT | SIDE_BOTTOM,
+    HandlePos.RIGHT_CENTER: SIDE_TOP | SIDE_BOTTOM | SIDE_LEFT,
+    HandlePos.TOP_LEFT: SIDE_RIGHT | SIDE_BOTTOM,
+    HandlePos.TOP_RIGHT: SIDE_BOTTOM | SIDE_LEFT,
+    HandlePos.BOTTOM_LEFT: SIDE_TOP | SIDE_RIGHT,
+    HandlePos.BOTTOM_RIGHT: SIDE_TOP | SIDE_LEFT,
+}
+
+CURSOR_BY_HANDLE = {
+    HandlePos.TOP_LEFT: Qt.CursorShape.SizeFDiagCursor,
+    HandlePos.BOTTOM_RIGHT: Qt.CursorShape.SizeFDiagCursor,
+    HandlePos.TOP_RIGHT: Qt.CursorShape.SizeBDiagCursor,
+    HandlePos.BOTTOM_LEFT: Qt.CursorShape.SizeBDiagCursor,
+    HandlePos.TOP_CENTER: Qt.CursorShape.SizeVerCursor,
+    HandlePos.BOTTOM_CENTER: Qt.CursorShape.SizeVerCursor,
+    HandlePos.LEFT_CENTER: Qt.CursorShape.SizeHorCursor,
+    HandlePos.RIGHT_CENTER: Qt.CursorShape.SizeHorCursor,
+    HandlePos.INSIDE: Qt.CursorShape.SizeAllCursor,
+}
+
+
+def round_half_away_from_zero(value: float) -> int:
+    """round() из C: половина округляется от нуля. Нужно для сдвигов, у которых
+    есть знак: иначе +0.5 и -0.5 давали бы разный по модулю результат и ручка
+    дёргалась бы только в одну сторону.
+    """
+    if value >= 0:
+        return floor(value + 0.5)
+    return -floor(-value + 0.5)
+
+
+def point_in_zone(x: float, y: float, zone: tuple[int, int, int, int]) -> bool:
+    """point_in_rectangle из Pix: правая/нижняя граница включительно."""
+    zx, zy, zw, zh = zone
+    return zx <= x <= zx + zw and zy <= y <= zy + zh
+
+
+def hit_border(selection_w: int, selection_h: int) -> int:
+    """Размер невидимой зоны ручки в selector-пикселях."""
+    border = DEFAULT_HIT_BORDER
+    if selection_w < HIT_BORDER_THRESHOLD:
+        border = selection_w // 3
+    if selection_h < HIT_BORDER_THRESHOLD:  # в Pix второе условие перекрывает первое
+        border = selection_h // 3
+    return max(border, MIN_HIT_BORDER)
+
+
+def handle_zones(sx: int, sy: int, sw: int, sh: int):
+    """Зоны хит-теста в порядке приоритета (как get_event_area_from_position в Pix)."""
+    border = hit_border(sw, sh)
+    x, y = sx - 1, sy - 1
+    width, height = sw + 1, sh + 1
+    b = border
+    return [
+        (HandlePos.BOTTOM_RIGHT, (x + width - b, y + height - b, b, b)),
+        (HandlePos.BOTTOM_LEFT, (x, y + height - b, b, b)),
+        (HandlePos.TOP_RIGHT, (x + width - b, y, b, b)),
+        (HandlePos.TOP_LEFT, (x, y, b, b)),
+        (HandlePos.RIGHT_CENTER, (x + width - b, y + b, b, max(height - 2 * b, 0))),
+        (HandlePos.LEFT_CENTER, (x, y + b, b, max(height - 2 * b, 0))),
+        (HandlePos.BOTTOM_CENTER, (x + b, y + height - b, max(width - 2 * b, 0), b)),
+        (HandlePos.TOP_CENTER, (x + b, y, max(width - 2 * b, 0), b)),
+        (HandlePos.INSIDE, (x, y, width, height)),
+    ]
+
+
+def bracket_segments(zone, handle: HandlePos) -> list[tuple[QPointF, QPointF]]:
+    """Отрезки hover-скобки по внутренней границе зоны."""
+    sides = BRACKET_SIDES.get(handle)
+    if sides is None:
+        return []
+    zx, zy, zw, zh = zone
+    x, y = zx + 0.5, zy + 0.5
+    w, h = zw - 1.0, zh - 1.0
+    segments = []
+    if sides & SIDE_TOP:
+        segments.append((QPointF(x, y), QPointF(x + w, y)))
+    if sides & SIDE_RIGHT:
+        segments.append((QPointF(x + w, y), QPointF(x + w, y + h)))
+    if sides & SIDE_BOTTOM:
+        segments.append((QPointF(x, y + h), QPointF(x + w, y + h)))
+    if sides & SIDE_LEFT:
+        segments.append((QPointF(x, y), QPointF(x, y + h)))
+    return segments
+
 
 class GimpStyleCropSelection(QWidget):
-    """Виджет обрезки в стиле GIMP с использованием стратегий и политик.
+    """Виджет обрезки: рамка выделения в стиле Pix.
 
     Принимает QImage, вписывает его в виджет и поддерживает зум.
-    Выделение области управляется диспетчеризацией по типу кнопки мыши
-    (HandlePos) через соответствующие CropStrategy и фильтруется CropPolicy
-    (границы изображения + минимальный размер). Координаты выделения хранятся
-    в системе координат изображения; конвертация в координаты виджета
-    выполняется при отрисовке и определении кнопок.
+    Отрисовка (затемнение 0.5, рамка 1 device px в режиме Difference, hover-скобка)
+    повторяет docs/specs/pix-crop-selector. Координаты выделения хранятся
+    в пикселях изображения, в координаты виджета пересчитываются при отрисовке
+    и hit-test. Изменение выделения управляется стратегиями и политиками;
+    драг считается относительно точки нажатия (как dragStart/dragStartSel в Pix).
     """
 
     zoomChanged = Signal(float)
@@ -50,8 +152,13 @@ class GimpStyleCropSelection(QWidget):
         self.setMouseTracking(True)
 
         self.selection_rect: QRect | None = None
-        self.handle_size = 8
         self.active_handle = HandlePos.NONE
+        # Зона под курсором без зажатой кнопки (для hover-скобки и курсора).
+        self.hovered_handle: HandlePos = HandlePos.NONE
+        # Точка нажатия в координатах виджета. От неё считается сдвиг мыши при
+        # драге: абсолютная позиция курсора не используется, иначе ручка
+        # «прыгает» к курсору в момент нажатия (зона ручки — до 40 px).
+        self.press_widget_pos = QPoint()
         # Флаг активного перетаскивания (нажата кнопка мыши). Разделяет два
         # режима в mouseMoveEvent: без зажатия — только смена курсора (hover),
         # с зажатием — реальный ресайз/панорамирование выделения. Без него
@@ -69,33 +176,6 @@ class GimpStyleCropSelection(QWidget):
             HandlePos.RIGHT_CENTER: SideStrategy(HandlePos.RIGHT_CENTER),
             HandlePos.INSIDE: PanStrategy(),
             HandlePos.NONE: CreateStrategy(),
-        }
-
-        self.handle_map = {
-            HandlePos.TOP_LEFT: lambda r, s: QRect(
-                r.topLeft().x() - s, r.topLeft().y() - s, 2 * s, 2 * s
-            ),
-            HandlePos.TOP_RIGHT: lambda r, s: QRect(
-                r.topRight().x() - s, r.topRight().y() - s, 2 * s, 2 * s
-            ),
-            HandlePos.BOTTOM_LEFT: lambda r, s: QRect(
-                r.bottomLeft().x() - s, r.bottomLeft().y() - s, 2 * s, 2 * s
-            ),
-            HandlePos.BOTTOM_RIGHT: lambda r, s: QRect(
-                r.bottomRight().x() - s, r.bottomRight().y() - s, 2 * s, 2 * s
-            ),
-            HandlePos.TOP_CENTER: lambda r, s: QRect(
-                r.center().x() - s, r.top() - s, 2 * s, 2 * s
-            ),
-            HandlePos.BOTTOM_CENTER: lambda r, s: QRect(
-                r.center().x() - s, r.bottom() - s, 2 * s, 2 * s
-            ),
-            HandlePos.LEFT_CENTER: lambda r, s: QRect(
-                r.left() - s, r.center().y() - s, 2 * s, 2 * s
-            ),
-            HandlePos.RIGHT_CENTER: lambda r, s: QRect(
-                r.right() - s, r.center().y() - s, 2 * s, 2 * s
-            ),
         }
 
         # Список активных политик: сначала минимальный размер, затем границы
@@ -126,6 +206,9 @@ class GimpStyleCropSelection(QWidget):
         self.fit_scale = min(view_w / iw, view_h / ih)
         # После изменения базового масштаба нужно обновить размер виджета
         self._update_layout()
+        # Геометрия виджета изменилась — сбросить hover, чтобы скобка не «зависла».
+        self.hovered_handle = HandlePos.NONE
+        self.update()
 
     def _update_layout(self):
         """Устанавливает размер виджета на основе текущего зума и fit_scale."""
@@ -135,20 +218,13 @@ class GimpStyleCropSelection(QWidget):
 
         iw, ih = self.image.width(), self.image.height()
         self.scale_factor = self.fit_scale * self.zoom_level
-        
+
         scaled_w = int(iw * self.scale_factor)
         scaled_h = int(ih * self.scale_factor)
-        
+
         self.display_rect = QRect(0, 0, scaled_w, scaled_h)
         self.image_offset = QPoint(0, 0)
         self.setFixedSize(scaled_w, scaled_h)
-
-    def _to_widget_point(self, img_point: QPoint) -> QPoint:
-        """Конвертирует координаты изображения в координаты виджета."""
-        return QPoint(
-            int(img_point.x() * self.scale_factor),
-            int(img_point.y() * self.scale_factor),
-        )
 
     def _to_image_point(self, widget_point: QPoint) -> QPoint:
         """Конвертирует координаты виджета в координаты изображения."""
@@ -160,10 +236,40 @@ class GimpStyleCropSelection(QWidget):
             int(widget_point.y() / self.scale_factor),
         )
 
-    def _widget_rect_from_image(self, img_rect: QRect) -> QRect:
-        tl = self._to_widget_point(img_rect.topLeft())
-        br = self._to_widget_point(img_rect.bottomRight())
-        return QRect(tl, br).normalized()
+    def _to_image_delta(self, widget_delta: QPoint) -> QPoint:
+        """Сдвиг в координатах виджета -> сдвиг в пикселях изображения.
+
+        Округляется именно сдвиг, а не две абсолютные позиции: иначе на нецелом
+        масштабе разность двух округлений даёт разный шаг в плюс и в минус.
+        """
+        if self.scale_factor == 0:
+            return widget_delta
+
+        return QPoint(
+            round_half_away_from_zero(widget_delta.x() / self.scale_factor),
+            round_half_away_from_zero(widget_delta.y() / self.scale_factor),
+        )
+
+    def _selection_screen_rect(self) -> QRect:
+        """sel в пикселях изображения -> прямоугольник в координатах виджета."""
+        rect = self.selection_rect
+        scale = self.scale_factor
+        return QRect(
+            round_half_away_from_zero(rect.x() * scale),
+            round_half_away_from_zero(rect.y() * scale),
+            round_half_away_from_zero(rect.width() * scale),
+            round_half_away_from_zero(rect.height() * scale),
+        )
+
+    def _selection_is_empty(self) -> bool:
+        rect = self.selection_rect
+        return rect is None or rect.width() <= 0 or rect.height() <= 0
+
+    def _handle_zones(self):
+        if self._selection_is_empty():
+            return []
+        disp = self._selection_screen_rect()
+        return handle_zones(disp.x(), disp.y(), disp.width(), disp.height())
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -179,83 +285,76 @@ class GimpStyleCropSelection(QWidget):
 
         painter.drawPixmap(self.display_rect, self.pixmap)
 
-        if self.selection_rect is None or self.selection_rect.isNull():
+        if self._selection_is_empty():
             return
 
-        disp = self._widget_rect_from_image(self.selection_rect)
+        disp = self._selection_screen_rect()
+        image_rect = self.display_rect
 
-        overlay_color = QColor(0, 0, 0, 100)
-        painter.fillRect(QRect(0, 0, self.width(), disp.top()), overlay_color)
-        painter.fillRect(
-            QRect(0, disp.bottom(), self.width(), self.height() - disp.bottom()),
-            overlay_color,
-        )
-        painter.fillRect(
-            QRect(0, disp.top(), disp.left(), disp.height()), overlay_color
-        )
-        painter.fillRect(
-            QRect(
-                disp.right(),
-                disp.top(),
-                self.width() - disp.right(),
-                disp.height(),
-            ),
-            overlay_color,
-        )
+        # 1. Затемнение снаружи выделения; во время драга его нет.
+        if not self.is_selecting:
+            painter.fillRect(image_rect, QColor(0, 0, 0, MASK_ALPHA))
+            painter.save()
+            painter.setClipRect(disp.intersected(image_rect))
+            painter.drawPixmap(image_rect, self.pixmap)
+            painter.restore()
 
-        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        # 2. Рамка и hover-скобка — Difference, 1 device px.
+        highlight = self.active_handle if self.is_selecting else self.hovered_handle
+        zones = dict(self._handle_zones())
+
+        painter.save()
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Difference)
+        painter.setClipRect(
+            QRect(disp.x(), disp.y(), disp.width() + 1, disp.height() + 1)
+        )
+        pen = QPen(QColor(255, 255, 255))
+        pen.setWidthF(1.0 / self.devicePixelRatioF())
+        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+        painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(disp)
+        painter.drawRect(
+            QRectF(
+                disp.x() + 0.5,
+                disp.y() + 0.5,
+                max(disp.width() - 1, 0),
+                max(disp.height() - 1, 0),
+            )
+        )
 
-        handle_color = QColor(255, 165, 0)
-        painter.setBrush(QBrush(handle_color))
-        painter.setPen(QPen(handle_color.darker(115), 1))
-        s = self.handle_size
-        for h_id, func in self.handle_map.items():
-            painter.drawRect(func(disp, s))
+        if highlight in BRACKET_SIDES and highlight in zones:
+            path = QPainterPath()
+            for start, end in bracket_segments(zones[highlight], highlight):
+                path.moveTo(start)
+                path.lineTo(end)
+            painter.drawPath(path)
+
+        painter.restore()
 
     def get_handle_at(self, pos: QPoint) -> HandlePos:
-        """Возвращает id кнопки выделения в точке (или HandlePos.NONE)."""
-        if self.selection_rect is None or self.selection_rect.isNull():
-            return HandlePos.NONE
-
-        img_pos = self._to_image_point(pos)
-        s = self.handle_size
-        for h_id, func in self.handle_map.items():
-            if func(self.selection_rect, s).contains(img_pos):
-                return h_id
-
-        if self.selection_rect.contains(img_pos):
-            return HandlePos.INSIDE
+        """Возвращает зону под точкой виджета (или HandlePos.NONE)."""
+        for handle, zone in self._handle_zones():
+            if point_in_zone(pos.x(), pos.y(), zone):
+                return handle
         return HandlePos.NONE
 
     def _update_cursor(self, pos: QPoint):
-        h: HandlePos = self.get_handle_at(pos)
-        cursors = {
-            HandlePos.TOP_LEFT: Qt.CursorShape.SizeFDiagCursor,
-            HandlePos.BOTTOM_RIGHT: Qt.CursorShape.SizeFDiagCursor,
-            HandlePos.TOP_RIGHT: Qt.CursorShape.SizeBDiagCursor,
-            HandlePos.BOTTOM_LEFT: Qt.CursorShape.SizeBDiagCursor,
-            HandlePos.TOP_CENTER: Qt.CursorShape.SizeVerCursor,
-            HandlePos.BOTTOM_CENTER: Qt.CursorShape.SizeVerCursor,
-            HandlePos.LEFT_CENTER: Qt.CursorShape.SizeHorCursor,
-            HandlePos.RIGHT_CENTER: Qt.CursorShape.SizeHorCursor,
-            HandlePos.INSIDE: Qt.CursorShape.SizeAllCursor,
-        }
-        self.setCursor(cursors.get(h, Qt.CursorShape.ArrowCursor))
+        handle = self.get_handle_at(pos)
+        self.setCursor(CURSOR_BY_HANDLE.get(handle, Qt.CursorShape.CrossCursor))
 
     def mousePressEvent(self, event):
         if self.image.isNull():
             return
 
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+
         pos = event.position().toPoint()
         img_pos = self._to_image_point(pos)
+        self.press_widget_pos = pos
 
         self.active_handle = self.get_handle_at(pos)
         self.is_selecting = True
-
-        # Стратегия готовится к перемещению/изменению выделения.
-        self.strategies[self.active_handle].on_mouse_press(img_pos, self.selection_rect)
 
         if self.active_handle == HandlePos.NONE:
             # Создание нового выделения из текущей точки.
@@ -264,6 +363,9 @@ class GimpStyleCropSelection(QWidget):
                 QRect(img_pos, img_pos).normalized().intersected(bounds)
             )
 
+        # Стратегия запоминает точку нажатия и выделение на момент нажатия.
+        self.strategies[self.active_handle].on_mouse_press(img_pos, self.selection_rect)
+
         self.update()
 
     def mouseMoveEvent(self, event):
@@ -271,16 +373,20 @@ class GimpStyleCropSelection(QWidget):
         pos = event.position().toPoint()
 
         if not self.is_selecting:
+            handle = self.get_handle_at(pos)
+            if handle != self.hovered_handle:
+                self.hovered_handle = handle
+                self.update()
             self._update_cursor(pos)
             return
 
-        img_pos = self._to_image_point(pos)
+        img_delta = self._to_image_delta(pos - self.press_widget_pos)
 
-        # 1. Стратегия рассчитывает «желаемый» результат.
+        # 1. Стратегия рассчитывает «желаемый» результат: выделение на момент
+        #    нажатия, изменённое на сдвиг мыши. Абсолютная позиция курсора не
+        #    используется — иначе ручка прыгает к курсору.
         strategy = self.strategies[self.active_handle]
-        proposed_rect = strategy.on_mouse_move(
-            self.selection_rect, img_pos
-        ).normalized()
+        proposed_rect = strategy.on_mouse_move(img_delta).normalized()
 
         # 2. Политики фильтруют и корректируют результат.
         final_rect = proposed_rect
@@ -293,7 +399,15 @@ class GimpStyleCropSelection(QWidget):
     def mouseReleaseEvent(self, event):
         self.is_selecting = False
         self.active_handle = HandlePos.NONE
+        pos = event.position().toPoint()
+        self.hovered_handle = self.get_handle_at(pos)
+        self._update_cursor(pos)
         self.update()
+
+    def leaveEvent(self, event):
+        self.hovered_handle = HandlePos.NONE
+        self.update()
+        super().leaveEvent(event)
 
     def wheelEvent(self, event):
         """Колесо мыши: изменение масштаба (зум). Панорамирование — полосы прокрутки."""
@@ -315,6 +429,8 @@ class GimpStyleCropSelection(QWidget):
     def set_crop_rect(self, rect: QRect | None):
         """Устанавливает начальную область обрезки (в координатах изображения)."""
         self.selection_rect = rect
+        # Выделение изменилось — сбросить hover, чтобы скобка не «зависла».
+        self.hovered_handle = HandlePos.NONE
         self.update()
 
     def set_zoom(self, zoom: float):
@@ -323,6 +439,8 @@ class GimpStyleCropSelection(QWidget):
         if zoom != self.zoom_level:
             self.zoom_level = zoom
             self._update_layout()
+            # Зум меняет геометрию — сбросить hover, чтобы скобка не «зависла».
+            self.hovered_handle = HandlePos.NONE
             self.zoomChanged.emit(self.zoom_level)
             self.update()
 

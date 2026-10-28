@@ -1,15 +1,13 @@
 """Тесты для CornerStrategy из barbaros.widgets.image_crop.transform_strategy.
 
-CornerStrategy меняет размер выделения за угол: тянем за угол — этот угол
-следует за курсором, а противоположный (диагонально противоположный) угол
-остаётся неподвижным. Остальные два угла смещаются по одной оси каждый.
-
-Именно так работает код, а не дословно так, как сформулировано в docstring
-базового класса: например, при захвате TOP_LEFT угол-курор (top-left) уходит в
-позицию мыши, а bottom-right остаётся на месте (QRect(pos, rect.bottomRight())).
-Здесь valid_handle_pos — это ручки, которые можно перетаскивать, а не фиксированные
-точки. Тесты проверяют фактическое поведение: какой угол зафиксирован, который
-повторяет курсор и как меняется размер.
+CornerStrategy меняет размер выделения за угол. Контракт стратегии:
+  * on_mouse_press запоминает точку нажатия и выделение на момент нажатия;
+  * on_mouse_move получает СДВИГ курсора от точки нажатия и возвращает
+    выделение, построенное от выделения на момент нажатия.
+Поэтому угол, за который взялись, смещается ровно на сдвиг мыши, а
+противоположный (якорь) остаётся неподвижным. Абсолютная позиция курсора не
+используется: ручки невидимы и нажимать на них можно с точностью до зоны в
+десятки пикселей, иначе выделение «прыгало» бы к курсору.
 """
 import pytest
 from PySide6.QtCore import QPoint, QRect
@@ -28,11 +26,11 @@ def _qapp():
     return app
 
 
-def _press_move(anchor, pos, rect):
-    """Симулируем полный цикл: нажали за угол -> передвинули мышь."""
+def _drag(anchor, press, delta, rect):
+    """Симулируем полный цикл: нажали за угол -> сдвинули мышь на delta."""
     strat = CornerStrategy(anchor)
-    strat.on_mouse_press(QPoint(0, 0), rect)
-    return strat.on_mouse_move(rect, pos)
+    strat.on_mouse_press(press, rect)
+    return strat.on_mouse_move(delta)
 
 
 # 50,40,200,150 → left=50, top=40, right=249, bottom=189, bottomRight=(249,189)
@@ -53,58 +51,66 @@ def test_invalid_anchor_raises(anchor):
         CornerStrategy(anchor)
 
 
-def test_top_left_moves_top_left_bottom_right_fixed():
-    # Тянем за top-left в (20,10): левый-верхний идёт за курсором,
-    # правый-нижний (якорь) на месте.
-    result = _press_move(HandlePos.TOP_LEFT, QPoint(20, 10), RECT)
-    assert result.topLeft() == QPoint(20, 10)
-    assert result.bottomRight() == BR
-    assert result.width() == 230  # 249 - 20 + 1 (QRect включительный)
-    assert result.height() == 180  # 189 - 10 + 1
+@pytest.mark.parametrize("anchor", sorted(CornerStrategy.valid_handle_pos))
+def test_no_delta_keeps_rect(anchor):
+    # Нажали в любом месте зоны ручки и не сдвинули мышь — выделение не должно
+    # измениться (регрессия: раньше угол прыгал в точку нажатия).
+    for press in (QPoint(0, 0), QPoint(200, 150), QPoint(249, 189)):
+        assert _drag(anchor, press, QPoint(0, 0), RECT) == RECT
 
 
-def test_top_right_moves_top_right_bottom_left_fixed():
-    # Тянем за top-right в (320,10): правый-верхний идёт за курсором,
-    # левый-нижний (якорь) на месте.
-    result = _press_move(HandlePos.TOP_RIGHT, QPoint(320, 10), RECT)
-    assert result.topRight() == QPoint(320, 10)
-    assert result.left() == 50
-    assert result.bottom() == 189
-    assert result.width() == 271  # 320 - 50 + 1
-    assert result.height() == 180  # 189 - 10 + 1
+@pytest.mark.parametrize(
+    ("anchor", "delta", "expected"),
+    [
+        # Сдвиг применяется к тому углу, за который тянут; якорь неподвижен.
+        (HandlePos.TOP_LEFT, QPoint(-10, -5), QRect(40, 35, 210, 155)),
+        (HandlePos.TOP_RIGHT, QPoint(10, -5), QRect(50, 35, 210, 155)),
+        (HandlePos.BOTTOM_LEFT, QPoint(-10, 5), QRect(40, 40, 210, 155)),
+        (HandlePos.BOTTOM_RIGHT, QPoint(10, 5), QRect(50, 40, 210, 155)),
+    ],
+)
+def test_dragged_corner_moves_by_delta(anchor, delta, expected):
+    # Нажатие внутри зоны ручки, не точно в угол: это не должно влиять на
+    # результат — важна только величина сдвига.
+    press = QPoint(220, 170)
+    assert _drag(anchor, press, delta, RECT) == expected
 
 
-def test_bottom_left_moves_bottom_left_top_right_fixed():
-    # Тянем за bottom-left в (20,260): левый-нижний идёт за курсором,
-    # правый-верхний (якорь) на месте.
-    result = _press_move(HandlePos.BOTTOM_LEFT, QPoint(20, 260), RECT)
-    assert result.bottomLeft() == QPoint(20, 260)
-    assert result.right() == 249
-    assert result.top() == 40
-    assert result.width() == 230  # 249 - 20 + 1
-    assert result.height() == 221  # 260 - 40 + 1
+@pytest.mark.parametrize(
+    ("anchor", "anchor_point"),
+    [
+        (HandlePos.TOP_LEFT, BR),
+        (HandlePos.TOP_RIGHT, QPoint(50, 189)),
+        (HandlePos.BOTTOM_LEFT, QPoint(249, 40)),
+        (HandlePos.BOTTOM_RIGHT, TL),
+    ],
+)
+def test_opposite_corner_stays_fixed(anchor, anchor_point):
+    result = _drag(anchor, QPoint(120, 120), QPoint(17, -9), RECT)
+    corners = {result.topLeft(), result.topRight(), result.bottomLeft(), result.bottomRight()}
+    assert anchor_point in corners
 
 
-def test_bottom_right_moves_bottom_right_top_left_fixed():
-    # Тянем за bottom-right в (320,260): правый-нижний идёт за курсором,
-    # левый-верхний (якорь) на месте.
-    result = _press_move(HandlePos.BOTTOM_RIGHT, QPoint(320, 260), RECT)
-    assert result.bottomRight() == QPoint(320, 260)
-    assert result.topLeft() == TL
-    assert result.width() == 271  # 320 - 50 + 1
-    assert result.height() == 221  # 260 - 40 + 1
-
-
-def test_corner_no_move_preserves_size():
-    # Курсор в исходной точке угла — размер не меняется.
-    result = _press_move(HandlePos.BOTTOM_RIGHT, BR, RECT)
-    assert result.width() == RECT.width() == 200
-    assert result.height() == RECT.height() == 150
+@pytest.mark.parametrize("anchor", sorted(CornerStrategy.valid_handle_pos))
+def test_result_is_rect(anchor):
+    # Один угол следует за сдвигом независимо от того, где именно внутри зоны
+    # произошло нажатие: сдвиг (0,0) от любой точки даёт исходный прямоугольник.
+    for press in (QPoint(0, 0), QPoint(200, 150), QPoint(249, 189)):
+        assert _drag(anchor, press, QPoint(0, 0), RECT) == RECT
 
 
 def test_corner_resize_can_shrink_and_grow():
     # Перетягивание угла внутрь (уменьшение) и наружу (увеличение) меняет размер.
-    shrink = _press_move(HandlePos.TOP_LEFT, QPoint(120, 90), RECT)
-    grow = _press_move(HandlePos.TOP_LEFT, QPoint(-30, -30), RECT)
+    shrink = _drag(HandlePos.TOP_LEFT, QPoint(120, 90), QPoint(70, 50), RECT)
+    grow = _drag(HandlePos.TOP_LEFT, QPoint(50, 40), QPoint(-80, -70), RECT)
     assert shrink.width() < RECT.width() and shrink.height() < RECT.height()
     assert grow.width() > RECT.width() and grow.height() > RECT.height()
+
+
+def test_delta_is_relative_to_press_not_to_cursor():
+    # Два нажатия в разных точках одной зоны с одинаковым сдвигом дают
+    # одинаковый результат: абсолютная позиция курсора не участвует.
+    near_corner = _drag(HandlePos.BOTTOM_RIGHT, BR, QPoint(20, 10), RECT)
+    inside_zone = _drag(HandlePos.BOTTOM_RIGHT, QPoint(200, 150), QPoint(20, 10), RECT)
+    assert near_corner == inside_zone
+    assert near_corner.bottomRight() == BR + QPoint(20, 10)
