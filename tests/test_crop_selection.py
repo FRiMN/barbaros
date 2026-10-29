@@ -13,7 +13,6 @@ from barbaros.widgets.image_crop.crop_selection import (
     hit_border,
     point_in_zone,
     round_half_away_from_zero,
-    round_half_up,
 )
 from barbaros.widgets.image_crop.transform_strategy import HandlePos
 
@@ -63,10 +62,12 @@ def pixel(image: QImage, x: int, y: int) -> tuple[int, int, int]:
 # ---------- чистая геометрия ----------
 
 
-def test_round_half_up_like_pix_iround():
-    assert round_half_up(10.5) == 11
-    assert round_half_up(10.4) == 10
-    assert round_half_up(0.5) == 1
+def test_round_half_away_from_zero_like_pix_iround():
+    # round_half_up переименован в round_half_away_from_zero; половина всё так же
+    # округляется от нуля (как iround в Pix).
+    assert round_half_away_from_zero(10.5) == 11
+    assert round_half_away_from_zero(10.4) == 10
+    assert round_half_away_from_zero(0.5) == 1
 
 
 @pytest.mark.parametrize(
