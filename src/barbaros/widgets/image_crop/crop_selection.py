@@ -129,7 +129,7 @@ class GimpStyleCropSelection(QWidget):
     """Виджет обрезки: рамка выделения в стиле Pix.
 
     Принимает QImage, вписывает его в виджет и поддерживает зум.
-    Отрисовка (затемнение 0.5, рамка 1 device px в режиме Difference, hover-скобка)
+    Отрисовка (затемнение 0.5, рамка 1 логический px в режиме Difference, hover-скобка)
     повторяет docs/specs/pix-crop-selector. Координаты выделения хранятся
     в пикселях изображения, в координаты виджета пересчитываются при отрисовке
     и hit-test. Изменение выделения управляется стратегиями и политиками;
@@ -299,7 +299,7 @@ class GimpStyleCropSelection(QWidget):
             painter.drawPixmap(image_rect, self.pixmap)
             painter.restore()
 
-        # 2. Рамка и hover-скобка — Difference, 1 device px.
+        # 2. Рамка и hover-скобка — Difference, 1 логический px.
         highlight = self.active_handle if self.is_selecting else self.hovered_handle
         zones = dict(self._handle_zones())
 
@@ -309,7 +309,10 @@ class GimpStyleCropSelection(QWidget):
             QRect(disp.x(), disp.y(), disp.width() + 1, disp.height() + 1)
         )
         pen = QPen(QColor(255, 255, 255))
-        pen.setWidthF(1.0 / self.devicePixelRatioF())
+        # 1 логический px: на HiDPI Qt сам масштабирует линию до целого числа
+        # device px, поэтому она остаётся чёткой. Деление на devicePixelRatio
+        # давало субпиксельный «волосок», который антиалиасинг размывал в смесь.
+        pen.setWidthF(1.0)
         pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
