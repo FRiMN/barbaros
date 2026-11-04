@@ -110,9 +110,11 @@ def bracket_segments(zone, handle: HandlePos) -> list[tuple[QPointF, QPointF]]:
     sides = BRACKET_SIDES.get(handle)
     if sides is None:
         return []
+
     zx, zy, zw, zh = zone
     x, y = zx + 0.5, zy + 0.5
     w, h = zw - 1.0, zh - 1.0
+
     segments = []
     if sides & SIDE_TOP:
         segments.append((QPointF(x, y), QPointF(x + w, y)))
@@ -122,6 +124,7 @@ def bracket_segments(zone, handle: HandlePos) -> list[tuple[QPointF, QPointF]]:
         segments.append((QPointF(x, y + h), QPointF(x + w, y + h)))
     if sides & SIDE_LEFT:
         segments.append((QPointF(x, y), QPointF(x, y + h)))
+
     return segments
 
 
@@ -440,13 +443,15 @@ class GimpStyleCropSelection(QWidget):
     def set_zoom(self, zoom: float):
         """Установить уровень зума (1.0 = вписано в виджет)."""
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
-        if zoom != self.zoom_level:
-            self.zoom_level = zoom
-            self._update_layout()
-            # Зум меняет геометрию — сбросить hover, чтобы скобка не «зависла».
-            self.hovered_handle = HandlePos.NONE
-            self.zoomChanged.emit(self.zoom_level)
-            self.update()
+        if zoom == self.zoom_level:
+            return
+
+        self.zoom_level = zoom
+        self._update_layout()
+        # Зум меняет геометрию — сбросить hover, чтобы скобка не «зависла».
+        self.hovered_handle = HandlePos.NONE
+        self.zoomChanged.emit(self.zoom_level)
+        self.update()
 
 
 class CropDialog(QDialog):
