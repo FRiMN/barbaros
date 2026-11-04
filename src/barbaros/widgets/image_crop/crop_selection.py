@@ -140,6 +140,7 @@ class GimpStyleCropSelection(QWidget):
 
     ZOOM_MIN = 0.1
     ZOOM_MAX = 8.0
+    ZOOM_FACTOR = 1.01
 
     def __init__(self, image: QImage, parent=None):
         super().__init__(parent)
@@ -419,7 +420,7 @@ class GimpStyleCropSelection(QWidget):
             event.ignore()
             return
 
-        factor = 1.1 if delta > 0 else 1 / 1.1
+        factor = self.ZOOM_FACTOR if delta > 0 else 1 / self.ZOOM_FACTOR
         self.set_zoom(self.zoom_level * factor)
         event.accept()
 
