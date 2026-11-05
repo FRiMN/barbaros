@@ -15,7 +15,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from barbaros.widgets.image_crop.policy import BoundaryPolicy, MinSizePolicy
+from barbaros.widgets.image_crop.policy import (
+    BoundaryPolicy,
+    CropPolicy,
+    MinSizePolicy,
+    PanBoundaryPolicy,
+)
 from barbaros.widgets.image_crop.transform_strategy import (
     CornerStrategy,
     CreateStrategy,
@@ -183,9 +188,14 @@ class CropSelection(QWidget):
 
         # List of active policies: minimum size first, then boundaries
         # (boundaries are applied last — they finally clip the selection).
-        self.policies = [
+        self.policies: list[CropPolicy] = [
             MinSizePolicy(50, 50),
             BoundaryPolicy(),
+        ]
+        # Panning has its own boundary rule: moving the selection against an
+        # image edge must translate it, not clip (and so shrink) it.
+        self.pan_policies: list[CropPolicy] = [
+            PanBoundaryPolicy(),
         ]
 
         # Zoom state.
@@ -253,6 +263,11 @@ class CropSelection(QWidget):
             round_half_away_from_zero(widget_delta.x() / self.scale_factor),
             round_half_away_from_zero(widget_delta.y() / self.scale_factor),
         )
+
+    def _apply_policies(self, rect: QRect, policies: list[CropPolicy]) -> QRect:
+        for policy in policies:
+            rect = policy.apply(rect, self.image.size())
+        return rect
 
     def _selection_screen_rect(self) -> QRect:
         """Selection in image pixels -> rectangle in widget coordinates."""
@@ -364,11 +379,12 @@ class CropSelection(QWidget):
         self.is_selecting = True
 
         if self.active_handle == HandlePos.NONE:
-            # Create a new selection from the current point.
+            # Create a new selection from the current point. Policies are
+            # applied here too: a click without a drag leaves a 1x1 rect,
+            # which would be cropped and sent to OCR.
             bounds = QRect(0, 0, self.image.width(), self.image.height())
-            self.selection_rect = (
-                QRect(img_pos, img_pos).normalized().intersected(bounds)
-            )
+            new_rect = QRect(img_pos, img_pos).normalized().intersected(bounds)
+            self.selection_rect = self._apply_policies(new_rect, self.policies)
 
         # The strategy records the press point and the selection at the moment of press.
         self.strategies[self.active_handle].on_mouse_press(img_pos, self.selection_rect)
@@ -395,12 +411,14 @@ class CropSelection(QWidget):
         strategy = self.strategies[self.active_handle]
         proposed_rect = strategy.on_mouse_move(img_delta).normalized()
 
-        # 2. Policies filter and correct the result.
-        final_rect = proposed_rect
-        for policy in self.policies:
-            final_rect = policy.apply(final_rect, self.image.size())
-
-        self.selection_rect = final_rect
+        # 2. Policies filter and correct the result. Panning uses its own
+        #    boundary rule, otherwise clipping would shrink the selection.
+        policies = (
+            self.pan_policies
+            if self.active_handle == HandlePos.INSIDE
+            else self.policies
+        )
+        self.selection_rect = self._apply_policies(proposed_rect, policies)
         self.update()
 
     def mouseReleaseEvent(self, event):
@@ -477,9 +495,7 @@ class CropDialog(QDialog):
         self.scroll_area.setWidget(self.crop_widget)
         self.scroll_area.setWidgetResizable(False)
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.scroll_area.setFrameStyle(
-            QFrame.Shape.NoFrame | QFrame.Shape.StyledPanel
-        )
+        self.scroll_area.setFrameStyle(QFrame.Shape.StyledPanel)
 
         # Deferred initial scale calculation so the viewport has time to initialize
         QTimer.singleShot(0, self._initial_fit)

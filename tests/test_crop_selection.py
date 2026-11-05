@@ -168,13 +168,13 @@ def test_selection_screen_rect_independent_rounding():
 def test_plain_render_mask_border_no_handles():
     widget = make_widget()
     image = render(widget)
-    assert pixel(image, 50, 50) == (70, 120, 160), "внутри выделения яркость исходная"
-    assert pixel(image, 5, 50) == MASKED, "снаружи выделения затемнение 0.5"
+    assert pixel(image, 50, 50) == (70, 120, 160), "inside the selection the image color is unchanged"
+    assert pixel(image, 5, 50) == MASKED, "outside the selection it is dimmed by 0.5"
     assert pixel(image, 50, 5) == MASKED
-    assert pixel(image, 20, 50) == DIFFERENCE, "левая рамка = инверсия"
-    assert pixel(image, 50, 20) == DIFFERENCE, "верхняя рамка = инверсия"
-    assert pixel(image, 79, 50) == DIFFERENCE, "правая рамка = инверсия"
-    assert pixel(image, 50, 79) == DIFFERENCE, "нижняя рамка = инверсия"
+    assert pixel(image, 20, 50) == DIFFERENCE, "left frame = difference blend"
+    assert pixel(image, 50, 20) == DIFFERENCE, "top frame = difference blend"
+    assert pixel(image, 79, 50) == DIFFERENCE, "right frame = difference blend"
+    assert pixel(image, 50, 79) == DIFFERENCE, "bottom frame = difference blend"
 
     # the old orange handles must not be drawn
     for x in range(image.width()):
@@ -186,8 +186,8 @@ def test_mask_hidden_while_dragging():
     widget = make_widget()
     widget.is_selecting = True
     image = render(widget)
-    assert pixel(image, 5, 50) == (70, 120, 160), "при драге затемнения нет"
-    assert pixel(image, 20, 50) == DIFFERENCE, "рамка остаётся"
+    assert pixel(image, 5, 50) == (70, 120, 160), "no dimming while dragging"
+    assert pixel(image, 20, 50) == DIFFERENCE, "the frame remains"
 
 
 def test_empty_selection_hides_overlay():
@@ -201,8 +201,8 @@ def test_hover_corner_bracket():
     widget = make_widget()
     widget.hovered_handle = HandlePos.TOP_LEFT
     image = render(widget)
-    assert pixel(image, 38, 30) == DIFFERENCE, "вертикаль скобки"
-    assert pixel(image, 30, 38) == DIFFERENCE, "горизонталь скобки"
+    assert pixel(image, 38, 30) == DIFFERENCE, "bracket vertical"
+    assert pixel(image, 30, 38) == DIFFERENCE, "bracket horizontal"
     assert pixel(image, 30, 30) == (70, 120, 160)
 
 
@@ -210,9 +210,9 @@ def test_hover_side_bracket():
     widget = make_widget()
     widget.hovered_handle = HandlePos.TOP_CENTER
     image = render(widget)
-    assert pixel(image, 39, 25) == DIFFERENCE, "левая вертикаль"
-    assert pixel(image, 59, 25) == DIFFERENCE, "правая вертикаль"
-    assert pixel(image, 50, 38) == DIFFERENCE, "нижняя горизонталь"
+    assert pixel(image, 39, 25) == DIFFERENCE, "left vertical"
+    assert pixel(image, 59, 25) == DIFFERENCE, "right vertical"
+    assert pixel(image, 50, 38) == DIFFERENCE, "bottom horizontal"
 
 
 def test_hover_interior_has_no_bracket():
@@ -271,6 +271,20 @@ def move(widget: CropSelection, pos: QPoint):
     )
 
 
+def release(widget: CropSelection, pos: QPoint):
+    point = QPointF(pos)
+    widget.mouseReleaseEvent(
+        QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            point,
+            point,
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+    )
+
+
 def test_press_inside_handle_does_not_jump():
     # A press at (70,70) is the bottom-right zone, while the selection edge runs
     # along x/y = 79. Without a mouse delta the selection must stay unchanged.
@@ -313,12 +327,49 @@ def test_interior_drag_pans_selection():
     assert widget.get_crop_rect() == QRect(30, 25, 60, 60)
 
 
+def test_interior_drag_is_clamped_at_image_edge():
+    # Panning must translate the selection, not clip it: clipping would shrink
+    # the crop and silently cut off image edges.
+    widget = make_widget()
+    press(widget, QPoint(50, 50))
+    move(widget, QPoint(100, 100))
+    assert widget.get_crop_rect() == QRect(40, 40, 60, 60)
+
+
+def test_interior_drag_is_clamped_at_top_left_edge():
+    widget = make_widget()
+    press(widget, QPoint(50, 50))
+    move(widget, QPoint(0, 0))
+    assert widget.get_crop_rect() == QRect(0, 0, 60, 60)
+
+
+def test_corner_resize_is_clipped_at_image_edge():
+    # Resizing (unlike panning) is clipped: the selection cannot leave the image.
+    widget = make_widget()
+    press(widget, QPoint(20, 20))
+    assert widget.active_handle == HandlePos.TOP_LEFT
+    move(widget, QPoint(0, 0))
+    assert widget.get_crop_rect() == QRect(0, 0, 80, 80)
+
+
 def test_create_from_outside_uses_press_point():
     widget = make_widget()
     press(widget, QPoint(5, 5))  # outside the selection — creation mode
     assert widget.active_handle == HandlePos.NONE
     move(widget, QPoint(60, 60))
     assert widget.get_crop_rect() == QRect(5, 5, 56, 56)
+
+
+def test_click_outside_does_not_leave_degenerate_selection():
+    # A click without a drag must not leave a 1x1 crop: it would be accepted on
+    # dialog close and sent to OCR as a one-pixel image.
+    widget = make_widget()
+    press(widget, QPoint(5, 5))
+    release(widget, QPoint(5, 5))
+    rect = widget.get_crop_rect()
+    assert rect.width() >= 50
+    assert rect.height() >= 50
+    assert rect.contains(QPoint(5, 5))
 
 
 def test_drag_delta_is_converted_to_image_pixels():
@@ -334,16 +385,6 @@ def test_drag_delta_is_converted_to_image_pixels():
 def test_release_resets_drag_state():
     widget = make_widget()
     press(widget, QPoint(70, 70))
-    point = QPointF(QPoint(70, 70))
-    widget.mouseReleaseEvent(
-        QMouseEvent(
-            QEvent.Type.MouseButtonRelease,
-            point,
-            point,
-            Qt.MouseButton.LeftButton,
-            Qt.MouseButton.NoButton,
-            Qt.KeyboardModifier.NoModifier,
-        )
-    )
+    release(widget, QPoint(70, 70))
     assert widget.is_selecting is False
     assert widget.active_handle == HandlePos.NONE
