@@ -31,9 +31,9 @@ class FilterableComboBox(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
 
-        # Создаем виджет для отображения текущего выбора
+        # Create a widget to display the current selection
         self.display_label = LinkLabel(self.tr("Select an item"), self)
-        self.display_label.setMouseTracking(True)  # Включаем мониторинг мыши
+        self.display_label.setMouseTracking(True)
         self.display_label.mousePressEvent = self.show_filterable_popup
         layout.addWidget(self.display_label)
 
@@ -62,7 +62,7 @@ class FilterableComboBox(QWidget):
 
         self.selected_item = item
 
-        # Обрезаем текст с многоточием
+        # Truncate the text with an ellipsis
         fm = QFontMetrics(self.display_label.font())
         elided_text = fm.elidedText(
             item, Qt.TextElideMode.ElideLeft, self.display_label.width()
@@ -103,13 +103,13 @@ class FilterablePopup(QWidget):
         frame_layout = QVBoxLayout(self.frame)
         frame_layout.setContentsMargins(4, 4, 4, 4)
 
-        # Создаем поле ввода для фильтра
+        # Create an input field for the filter
         self.filter_edit = QLineEdit(self.frame)
         self.filter_edit.setPlaceholderText(self.tr("Filter items"))
         self.filter_edit.textChanged.connect(self.apply_filter)
         frame_layout.addWidget(self.filter_edit)
 
-        # Создаем виджет для отображения списка вариантов
+        # Create a widget to display the list of options
         self.list_widget = QListWidget(self.frame)
         self.list_widget.setSelectionMode(
             QAbstractItemView.SelectionMode.SingleSelection
@@ -133,10 +133,10 @@ class FilterablePopup(QWidget):
         font_metrics = QFontMetrics(self.filter_edit.font())
         text_widths = []
 
-        # Заполняем список элементами
+        # Populate the list with items
         for item in self.items:
             self.list_widget.addItem(item)
-            # Расчет ширины строки
+            # String width calculation
             text_width = font_metrics.horizontalAdvance(item)
             text_widths.append(text_width)
 

@@ -18,7 +18,7 @@ class App(QApplication):
         self.setQuitOnLastWindowClosed(False)
 
         self.setApplicationDisplayName("Barbaros")
-        # OrganizationName конфликтует с OrganizationDomain
+        # OrganizationName conflicts with OrganizationDomain
         self.setOrganizationDomain("io.github.frimn")
         self.setApplicationVersion(version)
         self.setApplicationName("barbaros")
@@ -124,12 +124,12 @@ class TrayIcon:
 
     def on_tray_icon_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """
-        Обработка клика по иконке в трее.
+        Handle a click on the tray icon.
         """
         ar = QSystemTrayIcon.ActivationReason
 
         if reason == ar.Trigger:
-            # Левый клик
+            # Left click
             self.app.switch_window()
 
     def on_about_activated(self):
@@ -150,7 +150,7 @@ def open_window():
 
 
 def main():
-    # Позволяет остановить приложение из командной строки.
+    # Allows stopping the application from the command line.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     if "--popup" in sys.argv:

@@ -24,7 +24,7 @@ from barbaros.widgets.image_crop.transform_strategy import (
     SideStrategy,
 )
 
-# Геометрия рамки выделения
+# Selection frame geometry
 DEFAULT_HIT_BORDER = 40
 MIN_HIT_BORDER = 3
 HIT_BORDER_THRESHOLD = DEFAULT_HIT_BORDER * 3  # 120
@@ -35,7 +35,7 @@ SIDE_RIGHT = 2
 SIDE_BOTTOM = 4
 SIDE_LEFT = 8
 
-# Какие внутренние стороны зоны подсвечиваются (event_area_paint в Pix).
+# Which inner sides of the zone are highlighted (event_area_paint in Pix).
 BRACKET_SIDES = {
     HandlePos.TOP_CENTER: SIDE_RIGHT | SIDE_BOTTOM | SIDE_LEFT,
     HandlePos.BOTTOM_CENTER: SIDE_TOP | SIDE_RIGHT | SIDE_LEFT,
@@ -61,9 +61,9 @@ CURSOR_BY_HANDLE = {
 
 
 def round_half_away_from_zero(value: float) -> int:
-    """round() из C: половина округляется от нуля. Нужно для сдвигов, у которых
-    есть знак: иначе +0.5 и -0.5 давали бы разный по модулю результат. Ручка
-    дёргалась бы только в одну сторону.
+    """C-style round(): halves are rounded away from zero. Needed for signed
+    deltas: otherwise +0.5 and -0.5 would give results of different magnitude.
+    The handle would then jump in one direction only.
     """
     if value >= 0:
         return floor(value + 0.5)
@@ -71,23 +71,23 @@ def round_half_away_from_zero(value: float) -> int:
 
 
 def point_in_zone(x: float, y: float, zone: tuple[int, int, int, int]) -> bool:
-    """point_in_rectangle из Pix: правая/нижняя граница включительно."""
+    """point_in_rectangle from Pix: the right/bottom edge is inclusive."""
     zx, zy, zw, zh = zone
     return zx <= x <= zx + zw and zy <= y <= zy + zh
 
 
 def hit_border(selection_w: int, selection_h: int) -> int:
-    """Размер невидимой зоны ручки в selector-пикселях."""
+    """Size of the invisible handle zone in selector pixels."""
     border = DEFAULT_HIT_BORDER
     if selection_w < HIT_BORDER_THRESHOLD:
         border = selection_w // 3
-    if selection_h < HIT_BORDER_THRESHOLD:  # в Pix второе условие перекрывает первое
+    if selection_h < HIT_BORDER_THRESHOLD:  # in Pix the second condition overrides the first
         border = selection_h // 3
     return max(border, MIN_HIT_BORDER)
 
 
 def handle_zones(sx: int, sy: int, sw: int, sh: int):
-    """Зоны хит-теста в порядке приоритета (как get_event_area_from_position в Pix)."""
+    """Hit-test zones in priority order (same as get_event_area_from_position in Pix)."""
     border = hit_border(sw, sh)
     x, y = sx - 1, sy - 1
     width, height = sw + 1, sh + 1
@@ -106,7 +106,7 @@ def handle_zones(sx: int, sy: int, sw: int, sh: int):
 
 
 def bracket_segments(zone, handle: HandlePos) -> list[tuple[QPointF, QPointF]]:
-    """Отрезки hover-скобки по внутренней границе зоны."""
+    """Hover bracket segments along the inner border of the zone."""
     sides = BRACKET_SIDES.get(handle)
     if sides is None:
         return []
@@ -129,13 +129,13 @@ def bracket_segments(zone, handle: HandlePos) -> list[tuple[QPointF, QPointF]]:
 
 
 class CropSelection(QWidget):
-    """Виджет обрезки: рамка выделения в стиле [Pix](https://github.com/linuxmint/pix).
+    """Crop widget: selection framing in the style of [Pix](https://github.com/linuxmint/pix).
 
-    Принимает QImage, вписывает его в виджет и поддерживает зум.
-    Отрисовка повторяет реализацию Pix. Координаты выделения хранятся
-    в пикселях изображения, в координаты виджета пересчитываются при отрисовке
-    и hit-test. Изменение выделения управляется стратегиями и политиками;
-    драг считается относительно точки нажатия (как dragStart/dragStartSel в Pix).
+    Accepts a QImage, fits it into the widget and supports zoom.
+    Painting follows the Pix implementation. Selection coordinates are stored
+    in image pixels and converted to widget coordinates when painting
+    and hit-testing. Selection changes are driven by strategies and policies;
+    drags are computed relative to the press point (like dragStart/dragStartSel in Pix).
     """
 
     zoomChanged = Signal(float)
@@ -156,16 +156,16 @@ class CropSelection(QWidget):
 
         self.selection_rect: QRect | None = None
         self.active_handle = HandlePos.NONE
-        # Зона под курсором без зажатой кнопки (для hover-скобки и курсора).
+        # Zone under the cursor with no button held (for the hover bracket and cursor).
         self.hovered_handle: HandlePos = HandlePos.NONE
-        # Точка нажатия в координатах виджета. От неё считается сдвиг мыши при
-        # драге: абсолютная позиция курсора не используется, иначе ручка
-        # «прыгает» к курсору в момент нажатия (зона ручки — до 40 px).
+        # Press point in widget coordinates. Mouse delta during a drag is computed
+        # from it: the absolute cursor position is not used, otherwise the handle
+        # would "jump" to the cursor at the moment of press (the handle zone is up to 40 px).
         self.press_widget_pos = QPoint()
-        # Флаг активного перетаскивания (нажата кнопка мыши). Разделяет два
-        # режима в mouseMoveEvent: без зажатия — только смена курсора (hover),
-        # с зажатием — реальный ресайз/панорамирование выделения. Без него
-        # движение мыши над виджетом запускало бы изменение выделения.
+        # Active drag flag (mouse button held). Splits mouseMoveEvent into two
+        # modes: with no button held — only the cursor changes (hover), with the
+        # button held — actual resize/pan of the selection. Without it, mouse
+        # movement over the widget would trigger selection changes.
         self.is_selecting = False
 
         self.strategies = {
@@ -181,14 +181,14 @@ class CropSelection(QWidget):
             HandlePos.NONE: CreateStrategy(),
         }
 
-        # Список активных политик: сначала минимальный размер, затем границы
-        # (границы применяются последними — финально обрезают выделение).
+        # List of active policies: minimum size first, then boundaries
+        # (boundaries are applied last — they finally clip the selection).
         self.policies = [
             MinSizePolicy(50, 50),
             BoundaryPolicy(),
         ]
 
-        # Состояние зума.
+        # Zoom state.
         self.zoom_level: float = 1.0
         self.fit_scale: float = 1.0
         self.scale_factor: float = 1.0
@@ -198,7 +198,7 @@ class CropSelection(QWidget):
         self._update_layout()
 
     def update_fit_scale(self, view_w: int, view_h: int):
-        """Вычисляет базовый масштаб для вписывания изображения в указанную область."""
+        """Computes the base scale for fitting the image into the given area."""
         if self.image.isNull():
             return
 
@@ -207,14 +207,14 @@ class CropSelection(QWidget):
             return
 
         self.fit_scale = min(view_w / iw, view_h / ih)
-        # После изменения базового масштаба нужно обновить размер виджета
+        # After the base scale changes, the widget size must be updated
         self._update_layout()
-        # Геометрия виджета изменилась — сбросить hover, чтобы скобка не «зависла».
+        # Widget geometry changed — reset hover so the bracket does not "stick".
         self.hovered_handle = HandlePos.NONE
         self.update()
 
     def _update_layout(self):
-        """Устанавливает размер виджета на основе текущего зума и fit_scale."""
+        """Sets the widget size based on the current zoom and fit_scale."""
         if self.image.isNull():
             self.scale_factor = 1.0
             return
@@ -230,7 +230,7 @@ class CropSelection(QWidget):
         self.setFixedSize(scaled_w, scaled_h)
 
     def _to_image_point(self, widget_point: QPoint) -> QPoint:
-        """Конвертирует координаты виджета в координаты изображения."""
+        """Converts widget coordinates to image coordinates."""
         if self.scale_factor == 0:
             return widget_point
 
@@ -240,10 +240,11 @@ class CropSelection(QWidget):
         )
 
     def _to_image_delta(self, widget_delta: QPoint) -> QPoint:
-        """Сдвиг в координатах виджета -> сдвиг в пикселях изображения.
+        """Widget-coordinate delta -> delta in image pixels.
 
-        Округляется именно сдвиг, а не две абсолютные позиции: иначе на нецелом
-        масштабе разность двух округлений даёт разный шаг в плюс и в минус.
+        The delta itself is rounded, not two absolute positions: otherwise at a
+        fractional scale the difference of two roundings gives a different step
+        in the positive and in the negative direction.
         """
         if self.scale_factor == 0:
             return widget_delta
@@ -254,7 +255,7 @@ class CropSelection(QWidget):
         )
 
     def _selection_screen_rect(self) -> QRect:
-        """sel в пикселях изображения -> прямоугольник в координатах виджета."""
+        """Selection in image pixels -> rectangle in widget coordinates."""
         rect = self.selection_rect
         scale = self.scale_factor
         return QRect(
@@ -294,7 +295,7 @@ class CropSelection(QWidget):
         disp = self._selection_screen_rect()
         image_rect = self.display_rect
 
-        # 1. Затемнение снаружи выделения; во время драга его нет.
+        # 1. Dimming outside the selection; it is absent during a drag.
         if not self.is_selecting:
             painter.fillRect(image_rect, QColor(0, 0, 0, MASK_ALPHA))
             painter.save()
@@ -302,7 +303,7 @@ class CropSelection(QWidget):
             painter.drawPixmap(image_rect, self.pixmap)
             painter.restore()
 
-        # 2. Рамка и hover-скобка — Difference, 1 логический px.
+        # 2. Frame and hover bracket — Difference, 1 logical px.
         highlight = self.active_handle if self.is_selecting else self.hovered_handle
         zones = dict(self._handle_zones())
 
@@ -312,9 +313,9 @@ class CropSelection(QWidget):
             QRect(disp.x(), disp.y(), disp.width() + 1, disp.height() + 1)
         )
         pen = QPen(QColor(255, 255, 255))
-        # 1 логический px: на HiDPI Qt сам масштабирует линию до целого числа
-        # device px, поэтому она остаётся чёткой. Деление на devicePixelRatio
-        # давало субпиксельный «волосок», который антиалиасинг размывал в смесь.
+        # 1 logical px: on HiDPI Qt scales the line itself to a whole number of
+        # device px, so it stays crisp. Dividing by devicePixelRatio produced a
+        # subpixel "hairline" that antialiasing blurred into a smear.
         pen.setWidthF(1.0)
         pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
@@ -338,7 +339,7 @@ class CropSelection(QWidget):
         painter.restore()
 
     def get_handle_at(self, pos: QPoint) -> HandlePos:
-        """Возвращает зону под точкой виджета (или HandlePos.NONE)."""
+        """Returns the zone under a widget point (or HandlePos.NONE)."""
         for handle, zone in self._handle_zones():
             if point_in_zone(pos.x(), pos.y(), zone):
                 return handle
@@ -363,13 +364,13 @@ class CropSelection(QWidget):
         self.is_selecting = True
 
         if self.active_handle == HandlePos.NONE:
-            # Создание нового выделения из текущей точки.
+            # Create a new selection from the current point.
             bounds = QRect(0, 0, self.image.width(), self.image.height())
             self.selection_rect = (
                 QRect(img_pos, img_pos).normalized().intersected(bounds)
             )
 
-        # Стратегия запоминает точку нажатия и выделение на момент нажатия.
+        # The strategy records the press point and the selection at the moment of press.
         self.strategies[self.active_handle].on_mouse_press(img_pos, self.selection_rect)
 
         self.update()
@@ -388,13 +389,13 @@ class CropSelection(QWidget):
 
         img_delta = self._to_image_delta(pos - self.press_widget_pos)
 
-        # 1. Стратегия рассчитывает «желаемый» результат: выделение на момент
-        #    нажатия, изменённое на сдвиг мыши. Абсолютная позиция курсора не
-        #    используется — иначе ручка прыгает к курсору.
+        # 1. The strategy computes the "desired" result: the selection at the moment
+        #    of press, changed by the mouse delta. The absolute cursor position is
+        #    not used — otherwise the handle jumps to the cursor.
         strategy = self.strategies[self.active_handle]
         proposed_rect = strategy.on_mouse_move(img_delta).normalized()
 
-        # 2. Политики фильтруют и корректируют результат.
+        # 2. Policies filter and correct the result.
         final_rect = proposed_rect
         for policy in self.policies:
             final_rect = policy.apply(final_rect, self.image.size())
@@ -416,7 +417,7 @@ class CropSelection(QWidget):
         super().leaveEvent(event)
 
     def wheelEvent(self, event):
-        """Колесо мыши: изменение масштаба (зум). Панорамирование — полосы прокрутки."""
+        """Mouse wheel: change the scale (zoom). Panning is done via the scrollbars."""
         delta = event.angleDelta().y()
         if delta == 0:
             event.ignore()
@@ -426,28 +427,28 @@ class CropSelection(QWidget):
         self.set_zoom(self.zoom_level * factor)
         event.accept()
 
-    # --- Публичный API ---
+    # --- Public API ---
 
     def get_crop_rect(self) -> QRect | None:
-        """Текущая область обрезки в координатах изображения."""
+        """Current crop area in image coordinates."""
         return self.selection_rect
 
     def set_crop_rect(self, rect: QRect | None):
-        """Устанавливает начальную область обрезки (в координатах изображения)."""
+        """Sets the initial crop area (in image coordinates)."""
         self.selection_rect = rect
-        # Выделение изменилось — сбросить hover, чтобы скобка не «зависла».
+        # Selection changed — reset hover so the bracket does not "stick".
         self.hovered_handle = HandlePos.NONE
         self.update()
 
     def set_zoom(self, zoom: float):
-        """Установить уровень зума (1.0 = вписано в виджет)."""
+        """Set the zoom level (1.0 = fitted to the widget)."""
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
         if zoom == self.zoom_level:
             return
 
         self.zoom_level = zoom
         self._update_layout()
-        # Зум меняет геометрию — сбросить hover, чтобы скобка не «зависла».
+        # Zoom changes geometry — reset hover so the bracket does not "stick".
         self.hovered_handle = HandlePos.NONE
         self.zoomChanged.emit(self.zoom_level)
         self.update()
@@ -471,7 +472,7 @@ class CropDialog(QDialog):
         )
         self.crop_widget.set_crop_rect(initial_crop_rect)
 
-        # Обёртка для полос прокрутки.
+        # Wrapper for the scrollbars.
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidget(self.crop_widget)
         self.scroll_area.setWidgetResizable(False)
@@ -480,7 +481,7 @@ class CropDialog(QDialog):
             QFrame.Shape.NoFrame | QFrame.Shape.StyledPanel
         )
 
-        # Отложенный расчет начального масштаба, чтобы вьюпорт успел инициализироваться
+        # Deferred initial scale calculation so the viewport has time to initialize
         QTimer.singleShot(0, self._initial_fit)
 
         layout = QVBoxLayout()
@@ -552,7 +553,7 @@ class CropDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # После показа окна вьюпорт получает реальный размер
+        # After the window is shown, the viewport gets its real size
         if self.scroll_area and self.crop_widget:
             view_w = self.scroll_area.viewport().width()
             view_h = self.scroll_area.viewport().height()
@@ -560,7 +561,7 @@ class CropDialog(QDialog):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Обновляем базовый масштаб вписывания при изменении размера окна
+        # Update the base fit scale when the window size changes
         if self.scroll_area and self.crop_widget:
             view_w = self.scroll_area.viewport().width()
             view_h = self.scroll_area.viewport().height()

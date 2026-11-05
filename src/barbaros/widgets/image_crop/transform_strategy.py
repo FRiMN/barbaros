@@ -5,16 +5,16 @@ from PySide6.QtCore import QPoint, QRect
 
 
 class CropStrategy(ABC):
-    """Базовый класс для стратегий изменения выделения при drag-and-drop.
+    """Base class for selection-change strategies on drag-and-drop.
 
-    Выделение хранится в пикселях изображения. На нажатии стратегия запоминает
-    точку нажатия (drag_start) и выделение в этот момент (rect_on_press), а
-    on_mouse_move получает сдвиг курсора относительно точки нажатия.
+    The selection is stored in image pixels. On press the strategy records the
+    press point (drag_start) and the selection at that moment (rect_on_press),
+    while on_mouse_move receives the cursor delta relative to the press point.
 
-    Абсолютная позиция курсора намеренно не используется: ручки невидимы и
-    занимают зону в десятки пикселей, поэтому «ручка = курсор» приводила бы к
-    скачку выделения при нажатии внутри зоны. Расчёт всегда идёт от
-    rect_on_press, поэтому клампы одного хода не накапливаются между ходами.
+    The absolute cursor position is deliberately not used: handles are invisible
+    and occupy a zone of tens of pixels, so "handle = cursor" would make the
+    selection jump when pressing inside the zone. The calculation always starts
+    from rect_on_press, so clamps from one move do not accumulate between moves.
     """
 
     def __init__(self):
@@ -22,23 +22,23 @@ class CropStrategy(ABC):
         self.rect_on_press = QRect()
 
     def on_mouse_press(self, pos: QPoint, rect: QRect):
-        """Запоминает точку нажатия и выделение на момент нажатия."""
+        """Records the press point and the selection at the moment of press."""
         self.drag_start = pos
         self.rect_on_press = rect
 
     @abstractmethod
     def on_mouse_move(self, delta: QPoint) -> QRect:
         """
-        Выделение после сдвига курсора на delta от точки нажатия.
+        The selection after the cursor has moved by delta from the press point.
 
-        delta - сдвиг курсора в пикселях изображения
+        delta - cursor delta in image pixels
         """
         pass
 
 
 class HandlePos(IntEnum):
-    """Кнопка/ручка выделения в виджете обрезки — ключ диспетчеризации к
-    соответствующей CropStrategy."""
+    """Selection button/handle in the crop widget — the dispatch key to the
+    corresponding CropStrategy."""
 
     NONE = 0    # outside
     TOP_LEFT = 1
@@ -53,8 +53,8 @@ class HandlePos(IntEnum):
 
 
 class CornerStrategy(CropStrategy):
-    """Изменение размера за угол: угол-якорь неподвижен, противоположный угол
-    смещается на сдвиг мыши (а не в позицию курсора).
+    """Resizing by a corner: the anchor corner stays fixed, the opposite corner
+    moves by the mouse delta (not to the cursor position).
     """
 
     valid_handle_pos = {
@@ -91,8 +91,8 @@ class CornerStrategy(CropStrategy):
 
 
 class SideStrategy(CropStrategy):
-    """Изменение размера за сторону: противоположная сторона неподвижна,
-    сторона под курсором смещается на сдвиг мыши по своей оси.
+    """Resizing by a side: the opposite side stays fixed, the side under the
+    cursor moves by the mouse delta along its own axis.
     """
 
     valid_handle_pos = {
@@ -123,8 +123,8 @@ class SideStrategy(CropStrategy):
 
 
 class PanStrategy(CropStrategy):
-    """Перемещение выделения без изменения размера: весь прямоугольник
-    смещается на сдвиг мыши.
+    """Moving the selection without resizing: the whole rectangle is shifted
+    by the mouse delta.
     """
 
     def on_mouse_move(self, delta: QPoint) -> QRect:
@@ -132,9 +132,8 @@ class PanStrategy(CropStrategy):
 
 
 class CreateStrategy(CropStrategy):
-    """Создание нового выделения: прямоугольник строится от точки нажатия до
-    текущего положения курсора, поэтому здесь сдвиг прибавляется к точке
-    нажатия.
+    """Creating a new selection: the rectangle is built from the press point to
+    the current cursor position, so here the delta is added to the press point.
     """
 
     def on_mouse_move(self, delta: QPoint) -> QRect:

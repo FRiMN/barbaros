@@ -6,8 +6,8 @@ class LinkLabel(QLabel):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
 
-        # Начальный стиль, который выглядит как ссылка
+        # Initial style that looks like a link
         self.setStyleSheet("QLabel { color: lightblue; text-decoration: underline; }")
 
-        # Событие наведения курсора мыши
+        # Mouse cursor hover event
         self.setCursor(Qt.CursorShape.PointingHandCursor)

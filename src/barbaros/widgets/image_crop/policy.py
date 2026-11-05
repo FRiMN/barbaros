@@ -4,7 +4,7 @@ from PySide6.QtCore import QRect, QSize
 
 
 class CropPolicy(ABC):
-    """Базовый класс для правил ограничения обрезки"""
+    """Base class for crop constraint rules"""
 
     @abstractmethod
     def apply(self, rect: QRect, image_size: QSize) -> QRect:
@@ -12,14 +12,14 @@ class CropPolicy(ABC):
 
 
 class BoundaryPolicy(CropPolicy):
-    """Политика: запрещает выходить за границы изображения"""
+    """Policy: forbids going outside the image boundaries"""
 
     def apply(self, rect: QRect, image_size: QSize) -> QRect:
         return rect.intersected(QRect(0, 0, image_size.width(), image_size.height()))
 
 
 class MinSizePolicy(CropPolicy):
-    """Политика: минимальный размер области (по умолчанию 50x50)"""
+    """Policy: minimum area size (50x50 by default)"""
 
     def __init__(self, min_w: int = 50, min_h: int = 50):
         self.min_w = min_w

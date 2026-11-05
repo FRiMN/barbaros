@@ -1,4 +1,4 @@
-"""Тесты для policy: BoundaryPolicy и MinSizePolicy."""
+"""Tests for policy: BoundaryPolicy and MinSizePolicy."""
 import pytest
 from PySide6.QtCore import QRect, QSize
 
@@ -23,7 +23,7 @@ def _qapp():
 
 
 def test_crop_policy_is_abstract():
-    """CropPolicy нельзя инстанциировать напрямую — это ABC."""
+    """CropPolicy cannot be instantiated directly — it is an ABC."""
     with pytest.raises(TypeError):
         CropPolicy()  # noqa: B018
 
@@ -36,17 +36,17 @@ BOUNDARY = BoundaryPolicy()
 @pytest.mark.parametrize(
     "rect, img_size, expected",
     [
-        # Полностью внутри — без изменений
+        # Fully inside — no changes
         (QRect(20, 20, 30, 30), QSize(100, 100), QRect(20, 20, 30, 30)),
-        # ЛЕВАЯ выходит за 0: rect(-10,20,40,30) → left=-10,right=30
+        # LEFT goes beyond 0: rect(-10,20,40,30) → left=-10,right=30
         (QRect(-10, 20, 40, 30), QSize(100, 100), QRect(0, 20, 30, 30)),
-        # ВЕРХняя выходит за 0: rect(20,-10,30,40) → top=-10,bot=29
+        # TOP goes beyond 0: rect(20,-10,30,40) → top=-10,bot=29
         (QRect(20, -10, 30, 40), QSize(100, 100), QRect(20, 0, 30, 30)),
-        # ПРАВАЯ выходит за width: rect(70,20,50,30) → right=119
+        # RIGHT goes beyond width: rect(70,20,50,30) → right=119
         (QRect(70, 20, 50, 30), QSize(100, 100), QRect(70, 20, 30, 30)),
-        # НИЖНЯЯ выходит за height: rect(20,70,30,50) → bottom=119
+        # BOTTOM goes beyond height: rect(20,70,30,50) → bottom=119
         (QRect(20, 70, 30, 50), QSize(100, 100), QRect(20, 70, 30, 30)),
-        # Все четыре стороны выходят за границы
+        # All four sides go beyond the bounds
         (QRect(-20, -20, 150, 150), QSize(100, 100), QRect(0, 0, 100, 100)),
     ],
 )
@@ -56,7 +56,7 @@ def test_boundary_clamps(rect, img_size, expected):
 
 
 def test_boundary_rect_completely_outside():
-    """Полностью вне изображения → intersected возвращает пустой QRect."""
+    """Completely outside the image → intersected returns an empty QRect."""
     result = BOUNDARY.apply(QRect(200, 200, 50, 50), QSize(100, 100))
     assert result.isEmpty()
 
@@ -68,7 +68,7 @@ def test_boundary_rect_zero_size_inside():
 
 
 def test_boundary_image_size_zero():
-    """Пустое изображение — любой rect обрезается в пустой."""
+    """Empty image — any rect is clipped to an empty one."""
     result = BOUNDARY.apply(QRect(0, 0, 50, 50), QSize(0, 0))
     assert result.isEmpty()
 
@@ -80,13 +80,13 @@ IMG_200 = QSize(200, 200)
 
 
 class TestMinSizeDefault:
-    """min_w=50, min_h=50 (по умолчанию).
+    """min_w=50, min_h=50 (default).
 
-    MinSizePolicy нормализует rect, затем расширяет ширину/высоту, если они
-    меньше минимума. Расширение идёт: new_right = min(max_w, rect.right() + extra),
-    new_left = max(0, new_right - min_w). max_w берётся как image_size.width(),
-    а не width()-1 — это известное ограничение: при расширении слева или
-    сверху результат может быть на 1 меньше min (см. test_min_at_left_edge_gaps).
+    MinSizePolicy normalizes the rect, then expands the width/height if they are
+    below the minimum. Expansion works as: new_right = min(max_w, rect.right() + extra),
+    new_left = max(0, new_right - min_w). max_w is taken as image_size.width(),
+    not width()-1 — this is a known limitation: when expanding to the left or
+    upward the result may be 1 less than min (see test_min_at_left_edge_gaps).
     """
 
     @pytest.fixture
@@ -126,7 +126,8 @@ class TestMinSizeDefault:
 
     def test_at_left_edge_gaps_off_by_one(self, policy):
         # rect(0,0,10,10): right=9, extra=40, new_right=min(100,9+40)=49
-        # new_left=max(0,49-50)=0, w=49 (не 50 — из-за max_w=image_width vs right coord)
+        # new_left=max(0,49-50)=0, w=49
+        # (not 50 — because max_w=image_width vs right coord)
         result = policy.apply(QRect(0, 0, 10, 10), IMG_100)
         assert result.width() == 49
         assert result.height() == 49
@@ -140,7 +141,7 @@ class TestMinSizeDefault:
         assert result.height() == 50
 
     def test_expands_only_width(self, policy):
-        # rect(0,0,10,60): w=10<50, h=60>=50 → только ширина
+        # rect(0,0,10,60): w=10<50, h=60>=50 → width only
         result = policy.apply(QRect(0, 0, 10, 60), IMG_100)
         assert result.width() == 49  # see gap logic above
         assert result.height() == 60
@@ -188,7 +189,7 @@ class TestMinSizeCustom:
 
 
 class TestMinSizeBoundary:
-    """MinSizePolicy не выходит за границы изображения (в сторону увеличения)."""
+    """MinSizePolicy does not go beyond the image bounds (when growing)."""
 
     @pytest.fixture
     def policy(self):
