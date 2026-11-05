@@ -1,4 +1,4 @@
-"""Тесты отрисовки crop-рамки по спеке docs/specs/pix-crop-selector."""
+"""Тесты отрисовки crop-рамки"""
 
 import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt

@@ -24,7 +24,7 @@ from barbaros.widgets.image_crop.transform_strategy import (
     SideStrategy,
 )
 
-# Геометрия рамки выделения — docs/specs/pix-crop-selector/constants.yaml.
+# Геометрия рамки выделения
 DEFAULT_HIT_BORDER = 40
 MIN_HIT_BORDER = 3
 HIT_BORDER_THRESHOLD = DEFAULT_HIT_BORDER * 3  # 120
@@ -129,11 +129,10 @@ def bracket_segments(zone, handle: HandlePos) -> list[tuple[QPointF, QPointF]]:
 
 
 class GimpStyleCropSelection(QWidget):
-    """Виджет обрезки: рамка выделения в стиле Pix.
+    """Виджет обрезки: рамка выделения в стиле [Pix](https://github.com/linuxmint/pix).
 
     Принимает QImage, вписывает его в виджет и поддерживает зум.
-    Отрисовка (затемнение 0.5, рамка 1 логический px в режиме Difference, hover-скобка)
-    повторяет docs/specs/pix-crop-selector. Координаты выделения хранятся
+    Отрисовка повторяет реализацию Pix. Координаты выделения хранятся
     в пикселях изображения, в координаты виджета пересчитываются при отрисовке
     и hit-test. Изменение выделения управляется стратегиями и политиками;
     драг считается относительно точки нажатия (как dragStart/dragStartSel в Pix).
