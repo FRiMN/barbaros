@@ -83,10 +83,9 @@ class TestMinSizeDefault:
     """min_w=50, min_h=50 (default).
 
     MinSizePolicy normalizes the rect, then expands the width/height if they are
-    below the minimum. Expansion works as: new_right = min(max_w, rect.right() + extra),
-    new_left = max(0, new_right - min_w). max_w is taken as image_size.width(),
-    not width()-1 — this is a known limitation: when expanding to the left or
-    upward the result may be 1 less than min (see test_min_at_left_edge_gaps).
+    below the minimum. Expansion works as: new_right = min(max_w-1, rect.right() + extra),
+    new_left = max(0, new_right - min_w + 1), width = new_right - new_left + 1.
+    The result is exactly the minimum whenever the image is large enough.
     """
 
     @pytest.fixture
@@ -95,13 +94,13 @@ class TestMinSizeDefault:
 
     def test_expands_width_and_height(self, policy):
         # rect(30,30,10,10): w=10<50, h=10<50
-        # width: extra=40, new_right=min(100,39+40)=79, new_left=79-50=29, w=50
-        # height: extra=40, new_bottom=min(100,39+40)=79, new_top=79-50=29, h=50
+        # width: extra=40, new_right=min(99,39+40)=79, new_left=79-50+1=30, w=50
+        # height: extra=40, new_bottom=min(99,39+40)=79, new_top=79-50+1=30, h=50
         result = policy.apply(QRect(30, 30, 10, 10), IMG_100)
         assert result.width() == 50
         assert result.height() == 50
-        assert result.x() == 29
-        assert result.y() == 29
+        assert result.x() == 30
+        assert result.y() == 30
 
     def test_already_satisfied(self, policy):
         result = policy.apply(QRect(10, 10, 60, 60), IMG_100)
@@ -117,20 +116,19 @@ class TestMinSizeDefault:
 
     def test_at_right_edge_cannot_expand_right(self, policy):
         # rect(90,90,10,10): right=99, max_w=100, extra=40
-        # new_right=min(100,99+40)=100, new_left=100-50=50, w=50
+        # new_right=min(99,99+40)=99, new_left=99-50+1=50, w=50
         result = policy.apply(QRect(90, 90, 10, 10), IMG_100)
         assert result.width() == 50
         assert result.height() == 50
         assert result.x() == 50
         assert result.right() == 99
 
-    def test_at_left_edge_gaps_off_by_one(self, policy):
-        # rect(0,0,10,10): right=9, extra=40, new_right=min(100,9+40)=49
-        # new_left=max(0,49-50)=0, w=49
-        # (not 50 — because max_w=image_width vs right coord)
+    def test_at_left_edge_keeps_exact_min_size(self, policy):
+        # rect(0,0,10,10): right=9, extra=40, new_right=min(99,9+40)=49
+        # new_left=max(0,49-50+1)=0, w=49-0+1=50
         result = policy.apply(QRect(0, 0, 10, 10), IMG_100)
-        assert result.width() == 49
-        assert result.height() == 49
+        assert result.width() == 50
+        assert result.height() == 50
         assert result.x() == 0
         assert result.y() == 0
 
@@ -143,13 +141,13 @@ class TestMinSizeDefault:
     def test_expands_only_width(self, policy):
         # rect(0,0,10,60): w=10<50, h=60>=50 → width only
         result = policy.apply(QRect(0, 0, 10, 60), IMG_100)
-        assert result.width() == 49  # see gap logic above
+        assert result.width() == 50
         assert result.height() == 60
 
     def test_expands_only_height(self, policy):
         result = policy.apply(QRect(0, 0, 60, 10), IMG_100)
         assert result.width() == 60
-        assert result.height() == 49
+        assert result.height() == 50
 
 
 class TestMinSizeCustom:
@@ -166,21 +164,21 @@ class TestMinSizeCustom:
 
     def test_at_left_edge_expands_right(self, policy):
         # rect(0,0,10,10) inside 200x200: right=9, extra=190
-        # new_right=min(200,9+190)=199, new_left=max(0,199-200)=0, w=199
+        # new_right=min(199,9+190)=199, new_left=max(0,199-200+1)=0, w=200
         result = policy.apply(QRect(0, 0, 10, 10), IMG_200)
-        assert result.width() == 199
-        assert result.height() == 199
+        assert result.width() == 200
+        assert result.height() == 200
         assert result.x() == 0
         assert result.y() == 0
 
     def test_at_right_edge_expands_left(self, policy):
-        # rect(190,0,10,10): right=199, extra=190, new_right=min(200,389)=200
-        # new_left=200-200=0, w=200
-        # height: bottom=9, extra=190, new_bottom=min(200,199)=199 → h=199
+        # rect(190,0,10,10): right=199, extra=190, new_right=min(199,389)=199
+        # new_left=199-200+1=0, w=200
+        # height: bottom=9, extra=190, new_bottom=min(199,199)=199, h=200
         result = policy.apply(QRect(190, 0, 10, 10), IMG_200)
         assert result.x() == 0
         assert result.width() == 200
-        assert result.height() == 199
+        assert result.height() == 200
 
     def test_bottom_edge_expands_up(self, policy):
         result = policy.apply(QRect(0, 190, 10, 10), IMG_200)
@@ -208,10 +206,10 @@ class TestMinSizeBoundary:
 
     def test_rect_near_left_expands_more(self, policy):
         # rect(0,0,10,10) inside 200x200: right=9, extra=90
-        # new_right=min(200,9+90)=99, new_left=99-100=-1→0, w=99
+        # new_right=min(199,9+90)=99, new_left=99-100+1=0, w=100
         result = policy.apply(QRect(0, 0, 10, 10), IMG_200)
-        assert result.width() == 99
-        assert result.height() == 99
+        assert result.width() == 100
+        assert result.height() == 100
 
     def test_expansion_respects_left_boundary(self, policy):
         # new_left = max(0, new_right - min_w), never goes negative
