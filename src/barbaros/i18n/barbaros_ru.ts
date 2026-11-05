@@ -117,22 +117,22 @@
 <context>
     <name>CropDialog</name>
     <message>
-        <location filename="../widgets/image_crop/crop_selection.py" line="337"/>
+        <location filename="../widgets/image_crop/crop_selection.py" line="482"/>
         <source>Crop Image</source>
         <translation>Обрезать изображение</translation>
     </message>
     <message>
-        <location filename="../widgets/image_crop/crop_selection.py" line="391"/>
+        <location filename="../widgets/image_crop/crop_selection.py" line="534"/>
         <source>Reset</source>
         <translation>Сброс</translation>
     </message>
     <message>
-        <location filename="../widgets/image_crop/crop_selection.py" line="457"/>
+        <location filename="../widgets/image_crop/crop_selection.py" line="600"/>
         <source>Crop Controls</source>
         <translation>Управление обрезкой</translation>
     </message>
     <message>
-        <location filename="../widgets/image_crop/crop_selection.py" line="459"/>
+        <location filename="../widgets/image_crop/crop_selection.py" line="602"/>
         <source>&lt;table&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Action&lt;/b&gt;&lt;/td&gt;&lt;td&gt;&lt;b&gt;Control&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Zoom in/out&lt;/td&gt;&lt;td&gt;Scroll Wheel&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Resize crop area&lt;/td&gt;&lt;td&gt;Drag crop handles&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Move crop area&lt;/td&gt;&lt;td&gt;Drag inside crop&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Create new crop&lt;/td&gt;&lt;td&gt;Click outside crop&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Zoom in/out&lt;/td&gt;&lt;td&gt;- / + buttons&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Set zoom level&lt;/td&gt;&lt;td&gt;Slider&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Fit image to window&lt;/td&gt;&lt;td&gt;Reset&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</source>
         <translation>&lt;table&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Действие&lt;/b&gt;&lt;/td&gt;&lt;td&gt;&lt;b&gt;Управление&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Увеличить / уменьшить масштаб&lt;/td&gt;&lt;td&gt;Колёсико мыши&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Изменить размер области&lt;/td&gt;&lt;td&gt;Перетаскивание угловых маркеров&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Переместить область&lt;/td&gt;&lt;td&gt;Перетаскивание внутри области&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Создать новую область&lt;/td&gt;&lt;td&gt;Клик вне области&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Увеличить / уменьшить масштаб&lt;/td&gt;&lt;td&gt;кнопки «−» и «+»&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Установить масштаб&lt;/td&gt;&lt;td&gt;Ползунок&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Вписать по окну&lt;/td&gt;&lt;td&gt;Сброс&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</translation>
     </message>
@@ -143,6 +143,14 @@
         <location filename="../widgets/image_crop/preview.py" line="38"/>
         <source>Click to crop</source>
         <translation>Нажмите, чтобы обрезать</translation>
+    </message>
+</context>
+<context>
+    <name>CropSelection</name>
+    <message>
+        <location filename="../widgets/image_crop/crop_selection.py" line="301"/>
+        <source>No image loaded</source>
+        <translation>Изображение не загружено</translation>
     </message>
 </context>
 <context>
@@ -177,14 +185,6 @@
         <location filename="../widgets/filterable_combobox.py" line="108"/>
         <source>Filter items</source>
         <translation>Фильтровать элементы</translation>
-    </message>
-</context>
-<context>
-    <name>GimpStyleCropSelection</name>
-    <message>
-        <location filename="../widgets/image_crop/crop_selection.py" line="176"/>
-        <source>No image loaded</source>
-        <translation>Изображение не загружено</translation>
     </message>
 </context>
 <context>
