@@ -128,7 +128,7 @@ def bracket_segments(zone, handle: HandlePos) -> list[tuple[QPointF, QPointF]]:
     return segments
 
 
-class GimpStyleCropSelection(QWidget):
+class CropSelection(QWidget):
     """Виджет обрезки: рамка выделения в стиле [Pix](https://github.com/linuxmint/pix).
 
     Принимает QImage, вписывает его в виджет и поддерживает зум.
@@ -454,7 +454,7 @@ class GimpStyleCropSelection(QWidget):
 
 
 class CropDialog(QDialog):
-    """Modal dialog for cropping images with GIMP-like interface"""
+    """Modal dialog for cropping images with GIMP-like/Pix-like interface"""
 
     def __init__(
         self, image: QImage, parent=None, initial_crop_rect: QRect | None = None
@@ -465,7 +465,7 @@ class CropDialog(QDialog):
         self.resize(800, 600)
 
         self.original_image = image
-        self.crop_widget = GimpStyleCropSelection(image, self)
+        self.crop_widget = CropSelection(image, self)
         initial_crop_rect = initial_crop_rect or QRect(
             0, 0, image.width(), image.height()
         )
@@ -498,8 +498,8 @@ class CropDialog(QDialog):
         btn_minus.clicked.connect(self._zoom_out)
 
         self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
-        self.zoom_slider.setMinimum(int(GimpStyleCropSelection.ZOOM_MIN * 100))
-        self.zoom_slider.setMaximum(int(GimpStyleCropSelection.ZOOM_MAX * 100))
+        self.zoom_slider.setMinimum(int(CropSelection.ZOOM_MIN * 100))
+        self.zoom_slider.setMaximum(int(CropSelection.ZOOM_MAX * 100))
         self.zoom_slider.setValue(100)
         self.zoom_slider.setTickPosition(QSlider.TickPosition.NoTicks)
         self.zoom_slider.valueChanged.connect(self._on_slider_changed)

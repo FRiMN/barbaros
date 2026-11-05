@@ -7,7 +7,7 @@ from PySide6.QtGui import QColor, QImage, QMouseEvent
 from barbaros.widgets.image_crop.crop_selection import (
     BRACKET_SIDES,
     MASK_ALPHA,
-    GimpStyleCropSelection,
+    CropSelection,
     bracket_segments,
     handle_zones,
     hit_border,
@@ -41,7 +41,7 @@ def make_widget(
 ):
     image = QImage(image_size[0], image_size[1], QImage.Format.Format_RGB32)
     image.fill(IMAGE_COLOR)
-    widget = GimpStyleCropSelection(image)
+    widget = CropSelection(image)
     widget.update_fit_scale(view[0], view[1])
     widget.set_crop_rect(selection)
     return widget
@@ -242,7 +242,7 @@ def test_cursor_changes_with_zone():
 # расстояние от курсора до края сохраняется.
 
 
-def press(widget: GimpStyleCropSelection, pos: QPoint):
+def press(widget: CropSelection, pos: QPoint):
     point = QPointF(pos)
     widget.mousePressEvent(
         QMouseEvent(
@@ -256,7 +256,7 @@ def press(widget: GimpStyleCropSelection, pos: QPoint):
     )
 
 
-def move(widget: GimpStyleCropSelection, pos: QPoint):
+def move(widget: CropSelection, pos: QPoint):
     point = QPointF(pos)
     widget.mouseMoveEvent(
         QMouseEvent(
