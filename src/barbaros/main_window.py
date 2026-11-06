@@ -19,14 +19,16 @@ from .features.base import AbstractFeature
 from .features.ocr import OCRFeature
 from .features.settings import SettingsFeature
 from .features.text import TextFeature
-from .model_manager import ModelManager, ProviderMeta, default_providers
+from .model_cache import ModelCacheStore
+from .model_manager import CachePolicy, ModelManager, ProviderMeta
 from .widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 
 
 class MainWindow(QMainWindow):
     settings_key_prefix = "main_window"
     settings_llm_providers_key = "llm_providers"
-    settings_llm_by_providers_key = "llm_by_providers"
+    # Legacy JSON cache key, only removed on startup.  See _drop_legacy_model_cache.
+    settings_legacy_llm_by_providers_key = "llm_by_providers"
     settings_target_language_list_key = "target_language_list"
     settings_target_language_key = "target_language"
 
@@ -38,17 +40,19 @@ class MainWindow(QMainWindow):
         self.target_language_list = []
         self.restore_target_languages()
 
-        self.model_manager = ModelManager()
+        self.model_manager = ModelManager(cache=ModelCacheStore())
         self.model_manager.error.connect(self._show_provider_error)
-        self.model_manager.loaded_list_models.connect(self.save_models_list)
         past_providers = self.settings.valueFromJson(
-            self.settings_llm_providers_key, default=default_providers
+            self.settings_llm_providers_key, default=None
+        )
+        past_providers = (
+            past_providers if past_providers is not None else ModelManager.default_providers()
         )
         for provider in past_providers:
             p = ProviderMeta.from_dict(provider)
-            self.model_manager.add(p)
+            self.model_manager.add(p, cache_policy=CachePolicy.RESTORE)
 
-        self._restore_models_lists()
+        self._drop_legacy_model_cache()
 
         # Feature Tabs
         self.features: list[AbstractFeature] = [
@@ -86,17 +90,16 @@ class MainWindow(QMainWindow):
         msg = url_to_html_links(msg)
         QMessageBox.critical(self, self.tr("Provider Error"), msg)
 
-    def _restore_models_lists(self):
-        from .model_manager import Model
+    def _drop_legacy_model_cache(self):
+        """Remove the pre-refactoring model cache from QSettings, without migration.
 
-        past_models_lists = self.settings.valueFromJson(self.settings_llm_by_providers_key, default={})
-        for provider, models_list in past_models_lists.items():
-            if provider not in self.model_manager:
-                print(f"Provider `{provider}` not found in Model Manager. Skip model list cache.")
-                continue
-
-            models = [Model.model_validate(d) for d in models_list]
-            self.model_manager.set_models(provider, models)
+        Hygiene, not a BAR-01 fix: the value itself is plain JSON (no pickle), and
+        the pickle keys of the ``main_window`` group are left untouched.  By this
+        point the group has already been read for providers/language, so this
+        ``remove()`` adds no new unpickle risk.  Remove this method once BAR-01
+        sanitizes the raw INI before the first QSettings access.
+        """
+        self.settings.remove(self.settings_legacy_llm_by_providers_key)
 
     def closeEvent(self, event: QCloseEvent):
         self.settings.setValue("geometry", self.saveGeometry())
@@ -117,10 +120,6 @@ class MainWindow(QMainWindow):
             # while load providers after `past_providers = self.settings.value`.
             # Empty list set like `@Invalid()` in settings.
             self.settings.remove(self.settings_llm_providers_key)
-
-    def save_models_list(self):
-        models = self.model_manager.to_models_dict()
-        self.settings.setValueAsJson(self.settings_llm_by_providers_key, models)
 
     def set_widgets(self):
         self.clear_button = QPushButton()
