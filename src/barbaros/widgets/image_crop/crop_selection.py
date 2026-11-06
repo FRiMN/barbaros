@@ -205,6 +205,16 @@ class CropSelection(QWidget):
         self.display_rect: QRect | None = None
         self.image_offset: QPoint | None = None
 
+        # Zoom anchor correction: (point in viewport coordinates, image point
+        # under it) that must stay under the cursor after the widget is resized.
+        self._pending_zoom_anchor: tuple[QPointF, QPointF] | None = None
+        # Owned by the widget, so a pending correction dies with it instead of
+        # firing into a deleted dialog.
+        self._zoom_anchor_timer = QTimer(self)
+        self._zoom_anchor_timer.setSingleShot(True)
+        self._zoom_anchor_timer.setInterval(0)
+        self._zoom_anchor_timer.timeout.connect(self._apply_pending_zoom_anchor)
+
         self._update_layout()
 
     def update_fit_scale(self, view_w: int, view_h: int):
@@ -435,14 +445,14 @@ class CropSelection(QWidget):
         super().leaveEvent(event)
 
     def wheelEvent(self, event):
-        """Mouse wheel: change the scale (zoom). Panning is done via the scrollbars."""
+        """Mouse wheel: zoom around the cursor. Panning is done via the scrollbars."""
         delta = event.angleDelta().y()
         if delta == 0:
             event.ignore()
             return
 
         factor = self.ZOOM_FACTOR if delta > 0 else 1 / self.ZOOM_FACTOR
-        self.set_zoom(self.zoom_level * factor)
+        self.set_zoom_at(event.position(), self.zoom_level * factor)
         event.accept()
 
     # --- Public API ---
@@ -470,6 +480,66 @@ class CropSelection(QWidget):
         self.hovered_handle = HandlePos.NONE
         self.zoomChanged.emit(self.zoom_level)
         self.update()
+
+    def set_zoom_at(self, anchor: QPointF, zoom: float):
+        """Zooms keeping the image point under `anchor` fixed on screen.
+
+        `anchor` is in widget coordinates. The widget only decides its own size;
+        where the image sits inside the viewport is controlled by the enclosing
+        QScrollArea, so after the resize the scrollbars are shifted to bring the
+        anchor point back under the cursor.
+        """
+        scroll_area = self._enclosing_scroll_area()
+        if scroll_area is None or self.scale_factor == 0:
+            self.set_zoom(zoom)
+            return
+
+        viewport = scroll_area.viewport()
+        # Point on screen and the image point that must stay under it.
+        viewport_anchor = QPointF(self.mapTo(viewport, QPoint(0, 0))) + anchor
+        image_anchor = QPointF(
+            anchor.x() / self.scale_factor, anchor.y() / self.scale_factor
+        )
+
+        self.set_zoom(zoom)
+        self._scroll_anchor_into_place(scroll_area, viewport_anchor, image_anchor)
+
+        # The scrollbar range depends on whether the scrollbars are visible, and
+        # Qt updates the viewport size only on the next layout pass. Until then
+        # the shift above may be clipped by a stale maximum (a scrollbar that has
+        # just appeared), so it is repeated once the layout has settled.
+        self._pending_zoom_anchor = (viewport_anchor, image_anchor)
+        self._zoom_anchor_timer.start()
+
+    def _enclosing_scroll_area(self) -> QScrollArea | None:
+        """The scroll area that displays this widget, if any."""
+        parent = self.parentWidget()
+        while parent is not None:
+            if isinstance(parent, QScrollArea):
+                return parent
+            parent = parent.parentWidget()
+        return None
+
+    def _scroll_anchor_into_place(
+        self, scroll_area: QScrollArea, viewport_anchor: QPointF, image_anchor: QPointF
+    ):
+        """Scrolls the viewport so the image anchor is at the given viewport point."""
+        scale = self.scale_factor
+        scroll_area.horizontalScrollBar().setValue(
+            round_half_away_from_zero(image_anchor.x() * scale - viewport_anchor.x())
+        )
+        scroll_area.verticalScrollBar().setValue(
+            round_half_away_from_zero(image_anchor.y() * scale - viewport_anchor.y())
+        )
+
+    def _apply_pending_zoom_anchor(self):
+        pending = self._pending_zoom_anchor
+        scroll_area = self._enclosing_scroll_area()
+        if pending is None or scroll_area is None:
+            return
+
+        self._pending_zoom_anchor = None
+        self._scroll_anchor_into_place(scroll_area, *pending)
 
 
 class CropDialog(QDialog):

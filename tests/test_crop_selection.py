@@ -2,7 +2,7 @@
 
 import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
-from PySide6.QtGui import QColor, QImage, QMouseEvent
+from PySide6.QtGui import QColor, QImage, QMouseEvent, QWheelEvent
 
 from barbaros.widgets.image_crop.crop_selection import (
     BRACKET_SIDES,
@@ -388,3 +388,32 @@ def test_release_resets_drag_state():
     release(widget, QPoint(70, 70))
     assert widget.is_selecting is False
     assert widget.active_handle == HandlePos.NONE
+
+
+# ---------- zoom ----------
+
+
+def test_set_zoom_at_without_scroll_area_just_zooms():
+    # The widget must also work on its own (tests, previews): there is nothing
+    # to scroll, so the anchor only selects the zoom entry point.
+    widget = make_widget()
+    widget.set_zoom_at(QPointF(10, 10), 2.0)
+    assert widget.zoom_level == 2.0
+    assert widget.scale_factor == 2.0
+
+
+def test_wheel_event_zooms_without_scroll_area():
+    widget = make_widget()
+    widget.wheelEvent(
+        QWheelEvent(
+            QPointF(10, 10),
+            QPointF(10, 10),
+            QPoint(),
+            QPoint(0, 120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+    )
+    assert widget.zoom_level == pytest.approx(CropSelection.ZOOM_FACTOR, rel=1e-6)
