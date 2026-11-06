@@ -1,8 +1,8 @@
 # Кэш списка моделей: вынос из QSettings в отдельный JSON-файл
 
-**Статус:** план рефакторинга, код ещё не менялся.
+**Статус:** реализовано (этапы 1–3, см. §12); PR ещё не смержен.
 **Аудит:** [docs/security/owasp-audit.md](security/owasp-audit.md) — BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8.
-**Затрагиваемые файлы:** новый `src/barbaros/model_cache.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты.
+**Затрагиваемые файлы:** новый `src/barbaros/model_cache.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`); `README.md`.
 
 ## 1. Цель
 
@@ -491,3 +491,28 @@ class ModelCacheStore:
 ```
 
 `_sanitize()` — единая функция для чтения и записи: dict провайдеров, allowlist полей, проверки типов/длин, лимиты. `_atomic_write()` — каталог `0700` (создать/уточнить), `mkstemp` в том же каталоге, `fchmod 0600`, `write`, `fsync`, `replace`, best-effort `fsync` каталога; `unlink` temp при ошибке.
+
+## 12. Реализация: отклонения и заметки
+
+Реализовано по §4–§5 с тремя осознанными уточнениями:
+
+1. **Строгая валидация при restore.** `Model.model_validate(entry, strict=True)` вместо lenient-режима: pydantic в обычном режиме приводит `created=True` / `1.0` / `"1"` к `int`, и такие записи «воскресали» бы после чтения кэша (см. §3). `strict=True` согласует модель с тем же инвариантом, что проверяет `ModelCacheStore` (`type(value) is int`), и покрывает §7.2 component п. 10.
+2. **`ModelManager._persist()` не выпускает исключения наружу** (§7.2 component п. 8): сохранение обёрнуто в `try/except Exception` с `WARNING`. Реальный store fail-safe сам, это защита от регрессий контракта и от подменённой реализации: `set_models`/`remove` продолжают обновлять память и испускать сигналы.
+3. **Отсутствие файла кэша — не WARNING, а DEBUG.** Первый запуск и удалённый кэш — нормальное состояние; WARNING остаётся для ошибок открытия/чтения/схемы (§4.6), чтобы не засорять журнал на каждом старте.
+
+Прочее:
+- Новых runtime-зависимостей нет (stdlib: `json`, `os`, `tempfile`, `threading`, `stat`, `logging`).
+- System-тест `App()` (§7.2 system п. 6) выполняется в подпроцессе: в pytest-процессе уже существует singleton `QApplication` (session-fixture `qapp`), второй создать нельзя. В подпроцессе ставится in-memory keyring и stub `barbaros.main.TrayIcon`.
+- Security-тесты не утверждают, что BAR-01 исправлен: кэш не содержит pickle, но pickle-ключи `main_window/model` и `ocr_feature/model` остаются задачей отдельного P0.
+- README дополнен разделом «Model List Cache» (путь файла, права, отсутствие миграции и автозагрузки).
+
+### Release notes (черновик)
+
+> Model lists are now cached in a separate per-user JSON file
+> (`~/.local/share/barbaros/models.json`; Flatpak:
+> `~/.var/app/io.github.frimn.barbaros/data/barbaros/models.json`) instead of
+> `QSettings`. The file is readable only by the current user, validated as
+> untrusted input and can never break startup. The old cache is deleted on the
+> first start of this version and is **not migrated**: after upgrading, click
+> "Reload models" once per provider. Provider settings, target languages and
+> the selected model are unaffected; API keys stay in the system keyring.
