@@ -488,6 +488,9 @@ class CropSelection(QWidget):
         where the image sits inside the viewport is controlled by the enclosing
         QScrollArea, so after the resize the scrollbars are shifted to bring the
         anchor point back under the cursor.
+
+        Flow, invariants and known limits: docs/crop-cursor-zoom.md
+        (sequence diagram: docs/diagrams/crop-cursor-zoom.html).
         """
         scroll_area = self._enclosing_scroll_area()
         if scroll_area is None or self.scale_factor == 0:
