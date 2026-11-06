@@ -18,7 +18,7 @@ class LanguageListValidator(QValidator):
             for i in input_str.split(",")
         )
         has_invalid_char = any(
-            not c.isalpha() and not c.isspace() and not c == ","
+            not c.isalpha() and not c.isspace() and c != ","
             for c in input_str
         )
 

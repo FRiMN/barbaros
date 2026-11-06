@@ -1,3 +1,5 @@
+import contextlib
+
 import keyring
 from keyring.errors import PasswordDeleteError
 
@@ -18,7 +20,6 @@ class KeySecurityManager:
 
     def delete(self):
         """Removes an API key from the system keyring."""
-        try:
+        # Already deleted
+        with contextlib.suppress(PasswordDeleteError):
             keyring.delete_password(KeySecurityManager.SERVICE_NAME, self.provider_name)
-        except PasswordDeleteError:
-            pass  # Already deleted

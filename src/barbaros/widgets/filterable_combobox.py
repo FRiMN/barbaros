@@ -264,7 +264,7 @@ class ProviderModelTreePopup(QWidget):
         lowered_text = text.lower()
 
         # First, hide all children
-        for provider_name, provider_item in self.provider_items.items():
+        for provider_item in self.provider_items.values():
             child_count = provider_item.childCount()
             for i in range(child_count):
                 child = provider_item.child(i)
@@ -406,8 +406,4 @@ class ProviderModelComboBox(QWidget):
 
         provider_client = self.model_manager[item.provider]
 
-        for model in provider_client.models:
-            if model.id == item.model:
-                return True
-
-        return False
+        return any(model.id == item.model for model in provider_client.models)

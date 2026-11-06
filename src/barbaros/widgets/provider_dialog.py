@@ -88,7 +88,7 @@ class AddProviderDialog(QDialog):
             QMessageBox.warning(self, self.tr("Invalid Input"), self.tr("Name is required"))
             return
 
-        if not self.is_edit and name in self.parent().model_manager.keys():
+        if not self.is_edit and name in self.parent().model_manager:
             QMessageBox.warning(self, self.tr("Invalid Input"), self.tr("Name is exist"))
             return
 
@@ -168,7 +168,7 @@ class ProviderDialog(QDialog):
 
     def _populate_table(self):
         self.table.setRowCount(0)
-        for name, client in self.model_manager.items():
+        for client in self.model_manager.values():
             row = self.table.rowCount()
             self.table.insertRow(row)
 

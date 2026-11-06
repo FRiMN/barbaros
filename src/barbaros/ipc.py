@@ -2,6 +2,7 @@
 TODO: Refactor.
 """
 
+import contextlib
 import signal
 import socket
 import typing
@@ -74,10 +75,9 @@ class SignalHandling(QObject):
 
     def _signal_handler(self, signum, frame):
         """Signal handler that writes to socket"""
-        try:
+        # Ignore errors during signal handling: the handler must not raise.
+        with contextlib.suppress(BaseException):
             self.signal_write_sock.send(bytes([signum]))
-        except: # noqa: E722
-            pass  # Ignore errors during signal handling
 
     def _handle_signal_from_socket(self):
         """Read signal from socket and emit Qt signal"""
@@ -106,13 +106,8 @@ class SignalAdapter(IPCAdapterInterface):
             self.ipc_calls.popup_and_translate()
 
     def is_available(self) -> bool:
-        try:
-            # Try to use a common signal
-            signal.SIGINT
-            return True
-        except AttributeError:
-            # Unix signals not available (likely Windows)
-            return False
+        # Unix signals are not available on all platforms (e.g. Windows).
+        return hasattr(signal, "SIGINT")
 
     def send(self, method_name: str) -> bool:
         super().send(method_name)

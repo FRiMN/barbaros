@@ -15,7 +15,7 @@ class CustomTextEdit(QTextEdit):
 
         if font_size:
             if not (self.font_size_restrictions[0] <= font_size <= self.font_size_restrictions[1]):
-                warnings.warn(f"Font size must be between {self.font_size_restrictions[0]} and {self.font_size_restrictions[1]}")
+                warnings.warn(f"Font size must be between {self.font_size_restrictions[0]} and {self.font_size_restrictions[1]}", stacklevel=2)
                 font_size = max(self.font_size_restrictions[0], min(font_size, self.font_size_restrictions[1]))
             self.setFontPointSize(font_size)
 
