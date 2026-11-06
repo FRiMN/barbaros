@@ -1,14 +1,14 @@
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QScreen
 from PySide6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QPushButton,
-    QLabel,
+    QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QScreen, QPainter, QColor, QFont
 
 
 class ScreenHintWidget(QWidget):

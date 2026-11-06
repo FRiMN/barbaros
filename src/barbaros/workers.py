@@ -3,9 +3,9 @@ import base64
 import json
 from collections.abc import Sequence
 
-from PySide6.QtCore import QObject, Signal, Slot, QThread
 from any_llm.types.completion import ChatCompletion
 from any_llm.types.model import Model
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from .model_manager import ProviderClient, ProviderMeta
 from .widgets.filterable_combobox import ModelSelection

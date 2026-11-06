@@ -1,9 +1,10 @@
-import warnings
 import typing
+import warnings
 
-from PySide6.QtWidgets import QTextEdit, QMenu
-from PySide6.QtGui import QAction, QShortcut, QKeySequence
-from PySide6.QtCore import Qt, QMimeData
+from PySide6.QtCore import QMimeData, Qt
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtWidgets import QMenu, QTextEdit
+
 
 class CustomTextEdit(QTextEdit):
     font_size_step = 1  # Define the step for font size adjustment
@@ -14,7 +15,7 @@ class CustomTextEdit(QTextEdit):
 
         if font_size:
             if not (self.font_size_restrictions[0] <= font_size <= self.font_size_restrictions[1]):
-                warnings.warn(f"Font size must be between {self.font_size_restrictions[0]} and {self.font_size_restrictions[1]}")
+                warnings.warn(f"Font size must be between {self.font_size_restrictions[0]} and {self.font_size_restrictions[1]}", stacklevel=2)
                 font_size = max(self.font_size_restrictions[0], min(font_size, self.font_size_restrictions[1]))
             self.setFontPointSize(font_size)
 

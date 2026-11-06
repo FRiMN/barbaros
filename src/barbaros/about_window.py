@@ -1,8 +1,9 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
-from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
-from .__version__ import version, __version_tuple__
+from .__version__ import __version_tuple__, version
+
 
 class AboutWindow(QWidget):
     def __init__(self, *args, **kwargs):

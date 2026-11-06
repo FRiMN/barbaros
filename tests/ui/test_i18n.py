@@ -57,7 +57,7 @@ def test_language_display_name():
 
 def test_load_translator_russian(app):
     """
-    Перед тестированием проверь, что ts скомпилированы в qm
+    Before testing, make sure the ts files are compiled into qm
     """
     translator = load_translator("ru")
     assert translator is not None

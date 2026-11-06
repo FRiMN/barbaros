@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
+from dataclasses_json import dataclass_json
 from psygnal import Signal
 from PySide6.QtCore import QThread
-from dataclasses_json import dataclass_json
 
 from barbaros.security import KeySecurityManager
 

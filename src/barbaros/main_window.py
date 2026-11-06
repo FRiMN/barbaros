@@ -1,24 +1,26 @@
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QVBoxLayout,
-    QHBoxLayout,
-    QWidget,
-    QPushButton,
-    QComboBox,
-    QMessageBox,
-    QTabWidget, QLabel, QSizePolicy,
-    QStyle
-)
-from PySide6.QtGui import QCloseEvent
 from PySide6.QtCore import Q_ARG, QMetaObject, Qt, Slot
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QStyle,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-from .features.ocr import OCRFeature
-from .features.text import TextFeature
-from .features.settings import SettingsFeature
+from .common import TARGET_LANGUAGES, SettingsProxy, url_to_html_links
 from .features.base import AbstractFeature
-from .common import SettingsProxy, TARGET_LANGUAGES, url_to_html_links
-from .model_manager import ModelManager, default_providers, ProviderMeta
-from .widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
+from .features.ocr import OCRFeature
+from .features.settings import SettingsFeature
+from .features.text import TextFeature
+from .model_manager import ModelManager, ProviderMeta, default_providers
+from .widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 
 
 class MainWindow(QMainWindow):
@@ -152,7 +154,7 @@ class MainWindow(QMainWindow):
     def refresh_target_language_select(self):
         self.target_language_select.clear()
         self.target_language_select.addItems(self.target_language_list)
-        
+
     def update_fetching_workers(self, workers: list[str]):
         """Update the fetching workers label with the current count of workers in self.model_manager"""
         count = len(workers)
@@ -219,7 +221,7 @@ class MainWindow(QMainWindow):
             tab_widget.addTab(tab, f.tab_name)
 
         main_layout = QVBoxLayout()
-        
+
         top_panel = QHBoxLayout()
         top_panel.addWidget(self.model)
         top_panel.addStretch()

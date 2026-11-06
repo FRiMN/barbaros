@@ -2,8 +2,17 @@
 
 [project]
 name = "barbaros"
-description = "AI Translation app"
-keywords = ["AI", "Translation"]
+description = "AI-powered machine translation application with PySide6 GUI"
+keywords = ["translation", "ai", "qt", "gui", "pyside6", "machine-translation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+#    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
+    "Framework :: PySide",
+    "Intended Audience :: End Users/Desktop",
+]
 readme = "README.md"
 authors = [{ name = "Nik Volkov", email = "freezemandix@ya.ru" }]
 license = "MIT"
@@ -11,6 +20,7 @@ license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.11"
 dynamic = ["version"]
 dependencies = [
+    # Full pyside6 in dev group for language tools; main deps use pyside6-essentials for lighter footprint.
     "pyside6-essentials",
     "psutil",
     "any-llm-sdk[all]",
@@ -33,13 +43,16 @@ barbaros = "barbaros.main:main"
 [project.urls]
 Homepage = "https://github.com/FRiMN/barbaros"
 Issues = "https://github.com/FRiMN/barbaros/issues"
+Repository = "https://github.com/FRiMN/barbaros"
 
 [build-system]
-requires = ["setuptools>=61", "setuptools-scm"]
+# Requires setuptools >= 77.0.0 (PEP 639 license string syntax)
+requires = ["setuptools>=77.0.1", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 write_to = "src/barbaros/__version__.py"
+fallback_version = "0.0.0"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -54,7 +67,12 @@ barbaros = ["i18n/*.qm", "i18n/*.ts"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ruff]
+target-version = "py311"
+
 [tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 ignore = [
     "E741", # Ambiguous variable name
+    "E501", # Line too long
 ]

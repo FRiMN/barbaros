@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QValidator
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QLabel
+from PySide6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from barbaros.common import TARGET_LANGUAGES
 
@@ -18,7 +18,7 @@ class LanguageListValidator(QValidator):
             for i in input_str.split(",")
         )
         has_invalid_char = any(
-            not c.isalpha() and not c.isspace() and not c == ","
+            not c.isalpha() and not c.isspace() and c != ","
             for c in input_str
         )
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import typing
+
 from PySide6.QtCore import QCoreApplication, QLocale, QTranslator
 
 DEFAULT_LANGUAGE = "en"

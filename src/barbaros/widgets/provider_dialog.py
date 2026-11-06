@@ -1,11 +1,19 @@
+from any_llm import LLMProvider
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLineEdit, QComboBox, QMessageBox, QHeaderView, QFormLayout
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
 )
 
-from any_llm import LLMProvider
 from barbaros.common import is_valid_url, truncate_key
-
 from barbaros.model_manager import ModelManager, ProviderMeta
 
 
@@ -80,7 +88,7 @@ class AddProviderDialog(QDialog):
             QMessageBox.warning(self, self.tr("Invalid Input"), self.tr("Name is required"))
             return
 
-        if not self.is_edit and name in self.parent().model_manager.keys():
+        if not self.is_edit and name in self.parent().model_manager:
             QMessageBox.warning(self, self.tr("Invalid Input"), self.tr("Name is exist"))
             return
 
@@ -160,7 +168,7 @@ class ProviderDialog(QDialog):
 
     def _populate_table(self):
         self.table.setRowCount(0)
-        for name, client in self.model_manager.items():
+        for client in self.model_manager.values():
             row = self.table.rowCount()
             self.table.insertRow(row)
 

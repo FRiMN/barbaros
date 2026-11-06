@@ -1,22 +1,21 @@
-from typing import Optional, List
 from dataclasses import dataclass
 
+from any_llm.types.model import Model
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
-    QVBoxLayout,
-    QWidget,
-    QLineEdit,
-    QListWidget,
     QAbstractItemView,
     QFrame,
+    QLineEdit,
+    QListWidget,
     QTreeWidget,
     QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Signal, Qt, QPoint
-from PySide6.QtGui import QFontMetrics
-from any_llm.types.model import Model
 
+from ..model_manager import ModelManager, ProviderClient
 from .link_label import LinkLabel
-from ..model_manager import ProviderClient, ModelManager
 
 
 class FilterableComboBox(QWidget):
@@ -32,9 +31,9 @@ class FilterableComboBox(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
 
-        # Создаем виджет для отображения текущего выбора
+        # Create a widget to display the current selection
         self.display_label = LinkLabel(self.tr("Select an item"), self)
-        self.display_label.setMouseTracking(True)  # Включаем мониторинг мыши
+        self.display_label.setMouseTracking(True)
         self.display_label.mousePressEvent = self.show_filterable_popup
         layout.addWidget(self.display_label)
 
@@ -63,7 +62,7 @@ class FilterableComboBox(QWidget):
 
         self.selected_item = item
 
-        # Обрезаем текст с многоточием
+        # Truncate the text with an ellipsis
         fm = QFontMetrics(self.display_label.font())
         elided_text = fm.elidedText(
             item, Qt.TextElideMode.ElideLeft, self.display_label.width()
@@ -74,7 +73,7 @@ class FilterableComboBox(QWidget):
         self.hide_popup()
         self.selectionChanged.emit(self.selected_item)
 
-    def addItems(self, items: List[str]):
+    def addItems(self, items: list[str]):
         self.items.extend(items)
         self.filterable_popup.items = self.items
         self.filterable_popup.update_items()
@@ -88,7 +87,7 @@ class FilterableComboBox(QWidget):
 class FilterablePopup(QWidget):
     selectionChanged = Signal(str)
 
-    def __init__(self, parent=None, items: Optional[List[str]] = None):
+    def __init__(self, parent=None, items: list[str] | None = None):
         super().__init__(parent)
         self.items = items or []
         self.initUI()
@@ -104,13 +103,13 @@ class FilterablePopup(QWidget):
         frame_layout = QVBoxLayout(self.frame)
         frame_layout.setContentsMargins(4, 4, 4, 4)
 
-        # Создаем поле ввода для фильтра
+        # Create an input field for the filter
         self.filter_edit = QLineEdit(self.frame)
         self.filter_edit.setPlaceholderText(self.tr("Filter items"))
         self.filter_edit.textChanged.connect(self.apply_filter)
         frame_layout.addWidget(self.filter_edit)
 
-        # Создаем виджет для отображения списка вариантов
+        # Create a widget to display the list of options
         self.list_widget = QListWidget(self.frame)
         self.list_widget.setSelectionMode(
             QAbstractItemView.SelectionMode.SingleSelection
@@ -134,10 +133,10 @@ class FilterablePopup(QWidget):
         font_metrics = QFontMetrics(self.filter_edit.font())
         text_widths = []
 
-        # Заполняем список элементами
+        # Populate the list with items
         for item in self.items:
             self.list_widget.addItem(item)
-            # Расчет ширины строки
+            # String width calculation
             text_width = font_metrics.horizontalAdvance(item)
             text_widths.append(text_width)
 
@@ -265,7 +264,7 @@ class ProviderModelTreePopup(QWidget):
         lowered_text = text.lower()
 
         # First, hide all children
-        for provider_name, provider_item in self.provider_items.items():
+        for provider_item in self.provider_items.values():
             child_count = provider_item.childCount()
             for i in range(child_count):
                 child = provider_item.child(i)
@@ -307,7 +306,7 @@ class ProviderModelComboBox(QWidget):
     """ComboBox for selecting provider/model from ModelManager."""
     selectionChanged = Signal(object)  # emits ModelSelection
 
-    selected_item: Optional[ModelSelection] = None
+    selected_item: ModelSelection | None = None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -376,7 +375,7 @@ class ProviderModelComboBox(QWidget):
         self.hide_popup()
         self.selectionChanged.emit(self.selected_item)
 
-    def get_first_item(self) -> Optional[ModelSelection]:
+    def get_first_item(self) -> ModelSelection | None:
         """Return the first available model as ModelSelection."""
         if not self.model_manager:
             print("Model manager not set in ProviderModelComboBox")
@@ -407,8 +406,4 @@ class ProviderModelComboBox(QWidget):
 
         provider_client = self.model_manager[item.provider]
 
-        for model in provider_client.models:
-            if model.id == item.model:
-                return True
-
-        return False
+        return any(model.id == item.model for model in provider_client.models)

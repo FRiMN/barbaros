@@ -1,6 +1,6 @@
 app-id: io.github.frimn.barbaros
 runtime: org.kde.Platform
-runtime-version: "6.11" # Версия KDE Runtime, совместимая с PySide6
+runtime-version: "6.11" # KDE Runtime version compatible with PySide6
 sdk: org.kde.Sdk
 base: io.qt.PySide.BaseApp
 base-version: 6.11
@@ -10,18 +10,18 @@ build-options:
     BASEAPP_REMOVE_PYWEBENGINE: 1
     BASEAPP_DISABLE_NUMPY: 1
 
-command: barbaros # Команда для запуска, должна совпадать с Exec в .desktop и точкой входа
+command: barbaros # Launch command; must match Exec in the .desktop file and the entry point
 finish-args:
-  # Разрешения для GUI-приложения
+  # Permissions for the GUI application
   - --share=ipc
   - --socket=fallback-x11
   - --socket=wayland
-  - --device=dri # Для аппаратного ускорения
+  - --device=dri # For hardware acceleration
   - --share=network
   - --socket=session-bus
-  - --talk-name=org.freedesktop.secrets  # Разрешение на общение с сервисом паролей
+  - --talk-name=org.freedesktop.secrets  # Permission to communicate with the password service
   - --own-name=org.frimn.barbaros
-  # Если приложению нужен доступ к файлам пользователя:
+  # If the application needs access to user files:
   # - --filesystem=home
 
 cleanup-commands:
@@ -54,22 +54,22 @@ modules:
     build-commands:
       - echo ${FLATPAK_DEST} # /app
       - echo ${PWD} # /run/build/barbaros
-      # Установка зависимостей (без PySide6, так как он в BaseApp)
+      # Install dependencies (without PySide6, since it is provided by BaseApp)
       - pip3 install --verbose --prefix=${FLATPAK_DEST} -r requirements-flatpak.txt
-      # Установка приложения с помощью pip без подтягивания зависимостей
+      # Install the application with pip without pulling in dependencies
       - pip3 install --no-deps --verbose --exists-action=i --find-links="file://${PWD}/dist" --prefix=${FLATPAK_DEST} "barbaros"
-      # Копирование файлов
+      # Copy files
       - install -Dm644 io.github.frimn.barbaros.desktop /app/share/applications/io.github.frimn.barbaros.desktop
       - install -Dm644 icon3.png /app/share/icons/hicolor/256x256/apps/io.github.frimn.barbaros.png
     sources:
-      # Укажите источник кода вашего приложения
-      # Копируем .tar.gz и .whl файлы
+      # Specify the source of your application code
+      # Copy the .tar.gz and .whl files
       - type: dir
         path: ../dist
         dest: dist/
       - type: file
         path: requirements-flatpak.txt
-      # Также нужно включить файлы данных (.desktop, иконки)
+      # Data files (.desktop, icons) must also be included
       - type: file
         path: io.github.frimn.barbaros.desktop
       - type: file

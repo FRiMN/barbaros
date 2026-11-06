@@ -1,8 +1,7 @@
-from importlib.resources import files, open_text
 from enum import Enum
+from importlib.resources import files, open_text
 
 from PySide6.QtGui import QPixmap
-
 
 PACKAGE = "barbaros.resources"
 ICONS_LOC = f"{PACKAGE}.icons"

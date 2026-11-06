@@ -3,22 +3,23 @@ TODO:
     - Refactor to states of widgets; before ocr -> ocr -> before translate -> translate
 """
 
+from any_llm.types.completion import ChatCompletion, Choice
+from PySide6.QtCore import QThread
 from PySide6.QtWidgets import (
-    QVBoxLayout,
-    QPushButton,
     QBoxLayout,
     QHBoxLayout,
+    QLabel,
     QMessageBox,
-    QLabel, QSizePolicy,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
 )
-from PySide6.QtCore import QThread
-from any_llm.types.completion import ChatCompletion, Choice
 
 from barbaros.features.base import AbstractFeature
-from barbaros.widgets.image_manager import ImageManagerWidget
 from barbaros.widgets.custom_text_edit import CustomTextEdit
+from barbaros.widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
+from barbaros.widgets.image_manager import ImageManagerWidget
 from barbaros.widgets.progress_label import GradientRainbowLabel
-from barbaros.widgets.filterable_combobox import ProviderModelComboBox, ModelSelection
 from barbaros.workers import OCRWorker, TranslationWorker
 
 

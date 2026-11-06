@@ -1,7 +1,10 @@
+import contextlib
+
 import keyring
 from keyring.errors import PasswordDeleteError
 
-class KeySecurityManager(object):
+
+class KeySecurityManager:
     SERVICE_NAME = "barbaros:providers_api_keys"
 
     def __init__(self, provider_name: str):
@@ -17,7 +20,6 @@ class KeySecurityManager(object):
 
     def delete(self):
         """Removes an API key from the system keyring."""
-        try:
+        # Already deleted
+        with contextlib.suppress(PasswordDeleteError):
             keyring.delete_password(KeySecurityManager.SERVICE_NAME, self.provider_name)
-        except PasswordDeleteError:
-            pass  # Already deleted

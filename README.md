@@ -290,6 +290,10 @@ For detailed information about building the Flatpak package, see [build_flatpak.
 
 For details on how the application version is generated (setuptools_scm, CalVer format) and how it is displayed in the About window, see [versioning.md](docs/versioning.md).
 
+### Crop Zoom
+
+For how mouse-wheel zoom keeps the image point under the cursor in the crop dialog (with a sequence diagram), see [crop-cursor-zoom.md](docs/crop-cursor-zoom.md).
+
 **Quick Build:**
 We use **[invoke](https://docs.pyinvoke.org/en/stable/)** for the build process. See the `tasks.py` file in the project root.
 ```bash
