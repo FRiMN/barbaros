@@ -133,6 +133,7 @@ class ModelCacheStore:
         """
         if self._explicit_path is not None:
             return self._explicit_path
+
         if self._resolved is None and not self._disabled:
             from PySide6.QtCore import QStandardPaths
 
@@ -143,75 +144,24 @@ class ModelCacheStore:
                 self._resolved = Path(base) / _MODELS_FILENAME
             else:
                 self._disabled = True
+
         return self._resolved
 
     def load(self) -> dict[str, list[dict]]:
         """Return the sanitized cache; ``{}`` for any missing/invalid file."""
-        try:
-            path = self.path
-        except Exception as exc:  # Fail-safe boundary: errors never propagate.
-            logger.warning(
-                "Model cache: path resolution failed (%s)", exc.__class__.__name__
-            )
-            return {}
+        path = self._resolve_path()
         if path is None:
             return {}
 
-        try:
-            raw = read_regular_file_limited(
-                path,
-                self.MAX_FILE_BYTES,
-                logger=logger,
-                label="Model cache",
-            )
-        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
-            logger.warning(
-                "Model cache: read failed for %r (%s)", path, exc.__class__.__name__
-            )
-            return {}
+        raw = self._read_payload(path)
         if raw is None:
             return {}
 
-        try:
-            document = json.loads(raw.decode("utf-8"))
-            if not isinstance(document, dict):
-                logger.warning(
-                    "Model cache: top-level JSON is not an object, ignored: %r", path
-                )
-                return {}
-
-            if (
-                type(document.get("version")) is not int
-                or document.get("version") != self.VERSION
-            ):
-                logger.warning(
-                    "Model cache: unsupported schema version, ignored: %r", path
-                )
-                return {}
-
-            models = document.get("models")
-            if not isinstance(models, dict):
-                logger.warning(
-                    "Model cache: invalid 'models' section, ignored: %r", path
-                )
-                return {}
-
-            return self._sanitize(models)
-        except Exception as exc:  # Fail-safe boundary: errors never propagate.
-            logger.warning(
-                "Model cache: load failed for %r (%s)", path, exc.__class__.__name__
-            )
-            return {}
+        return self._parse_payload(path, raw)
 
     def save(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> bool:
         """Atomically persist the sanitized snapshot; ``False`` on any failure."""
-        try:
-            path = self.path
-        except Exception as exc:  # Fail-safe boundary: errors never propagate.
-            logger.warning(
-                "Model cache: path resolution failed (%s)", exc.__class__.__name__
-            )
-            return False
+        path = self._resolve_path()
         if path is None:
             return False
 
@@ -253,6 +203,69 @@ class ModelCacheStore:
                 "Model cache: save failed for %r (%s)", path, exc.__class__.__name__
             )
             return False
+
+    def _resolve_path(self) -> Path | None:
+        """Resolve the cache path; ``None`` when disabled or on resolution error."""
+        try:
+            return self.path
+        except Exception as exc:  # Fail-safe boundary: errors never propagate.
+            logger.warning(
+                "Model cache: path resolution failed (%s)", exc.__class__.__name__
+            )
+            return None
+
+    def _read_payload(self, path: Path) -> bytes | None:
+        """Read the cache bytes; ``None`` when the file is absent or unusable."""
+        try:
+            return read_regular_file_limited(
+                path,
+                self.MAX_FILE_BYTES,
+                logger=logger,
+                label="Model cache",
+            )
+        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
+            logger.warning(
+                "Model cache: read failed for %r (%s)", path, exc.__class__.__name__
+            )
+            return None
+
+    def _parse_payload(self, path: Path, raw: bytes) -> dict[str, list[dict]]:
+        """Decode, validate and sanitize the payload; ``{}`` for invalid content."""
+        try:
+            document = json.loads(raw.decode("utf-8"))
+
+            models = self._validated_models(path, document)
+            if models is None:
+                return {}
+
+            return self._sanitize(models)
+        except Exception as exc:  # Fail-safe boundary: errors never propagate.
+            logger.warning(
+                "Model cache: load failed for %r (%s)", path, exc.__class__.__name__
+            )
+            return {}
+
+    def _validated_models(self, path: Path, document: object) -> dict | None:
+        """Check the document envelope; ``None`` when it is not a cache document."""
+        if not isinstance(document, dict):
+            logger.warning(
+                "Model cache: top-level JSON is not an object, ignored: %r", path
+            )
+            return None
+
+        if (
+            type(document.get("version")) is not int
+            or document.get("version") != self.VERSION
+        ):
+            logger.warning("Model cache: unsupported schema version, ignored: %r", path)
+            return None
+
+        models = document.get("models")
+        if not isinstance(models, dict):
+            logger.warning("Model cache: invalid 'models' section, ignored: %r", path)
+            return None
+
+        return models
 
     def _sanitize(self, models: object) -> dict[str, list[dict]]:
         """Apply the shared allowlist/limits; identical on load and save."""

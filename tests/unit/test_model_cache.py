@@ -837,6 +837,33 @@ def test_config_path_hostile_value_is_logged_escaped(
     assert "rel\\nforged: log line" in message  # escaped repr form, one line
 
 
+# --- fail-safe boundary: unexpected internal errors -------------------------
+
+
+def test_unexpected_internal_error_is_fail_safe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = _make_store(tmp_path)
+    _write_document(store.path, {"p": [_model()]})
+
+    def broken_sanitize(models: object) -> dict[str, list[dict]]:
+        raise RuntimeError("unexpected bug")
+
+    monkeypatch.setattr(store, "_sanitize", broken_sanitize)
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert store.load() == {}
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "barbaros.model_cache"
+    ]
+    assert any(
+        str(store.path) in message and "RuntimeError" in message
+        for message in messages
+    )
+
+
 # --- logging contract (§4.6): warning details and log-injection safety -----
 
 
