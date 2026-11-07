@@ -40,7 +40,9 @@ class MainWindow(QMainWindow):
         self.target_language_list = []
         self.restore_target_languages()
 
-        self.model_manager = ModelManager(cache=ModelCacheStore())
+        model_cache = ModelCacheStore()
+        print(f"Model cache filepath: {model_cache.path}")
+        self.model_manager = ModelManager(cache=model_cache)
         self.model_manager.error.connect(self._show_provider_error)
         past_providers = self.settings.valueFromJson(
             self.settings_llm_providers_key, default=None
