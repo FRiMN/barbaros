@@ -99,12 +99,36 @@ def cache_path_from_config(value: object) -> Path | None:
     return path
 
 
+def _default_cache_path() -> Path | None:
+    """Resolve the default cache file; ``None`` when disabled or on failure."""
+    from PySide6.QtCore import QStandardPaths
+
+    try:
+        base = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.AppDataLocation
+        )
+    except Exception as exc:  # Fail-safe boundary: construction never raises.
+        logger.warning(
+            "Model cache: path resolution failed (%s)", exc.__class__.__name__
+        )
+        return None
+
+    if not base:
+        return None
+
+    return Path(base) / _MODELS_FILENAME
+
+
 class ModelCacheStore:
     """Fail-safe JSON store for the per-provider model cache.
 
     The store knows only plain ``dict[str, list[dict]]``: no Qt, no keyring, no
     LLM SDK. ``load`` and ``save`` never raise; every failure is logged and
     reported as an empty cache / ``False``.
+
+    ``path`` is resolved once in the constructor (an explicitly passed path wins
+    and never touches Qt) and is not modified afterwards; ``None`` means the
+    store is disabled because the default location is unavailable.
     """
 
     VERSION = 1
@@ -116,40 +140,15 @@ class ModelCacheStore:
     MAX_OWNED_BY_LEN = 256
     ALLOWED_MODEL_KEYS = ("id", "created", "object", "owned_by")
 
+    path: Path | None
+
     def __init__(self, path: Path | None = None) -> None:
-        self._explicit_path = Path(path) if path is not None else None
-        self._resolved: Path | None = None
-        self._disabled = False
+        self.path = Path(path) if path is not None else _default_cache_path()
         self._write_lock = threading.Lock()
-
-    @property
-    def path(self) -> Path | None:
-        """Cache file path, or ``None`` when the store is disabled.
-
-        An explicitly injected path wins and never touches Qt. Otherwise the
-        location is resolved lazily (after ``setApplicationName``) to
-        ``QStandardPaths.AppDataLocation/models.json``; an empty location
-        disables the store instead of writing to the current directory.
-        """
-        if self._explicit_path is not None:
-            return self._explicit_path
-
-        if self._resolved is None and not self._disabled:
-            from PySide6.QtCore import QStandardPaths
-
-            base = QStandardPaths.writableLocation(
-                QStandardPaths.StandardLocation.AppDataLocation
-            )
-            if base:
-                self._resolved = Path(base) / _MODELS_FILENAME
-            else:
-                self._disabled = True
-
-        return self._resolved
 
     def load(self) -> dict[str, list[dict]]:
         """Return the sanitized cache; ``{}`` for any missing/invalid file."""
-        path = self._resolve_path()
+        path = self.path
         if path is None:
             return {}
 
@@ -161,7 +160,7 @@ class ModelCacheStore:
 
     def save(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> bool:
         """Atomically persist the sanitized snapshot; ``False`` on any failure."""
-        path = self._resolve_path()
+        path = self.path
         if path is None:
             return False
 
@@ -203,16 +202,6 @@ class ModelCacheStore:
                 "Model cache: save failed for %r (%s)", path, exc.__class__.__name__
             )
             return False
-
-    def _resolve_path(self) -> Path | None:
-        """Resolve the cache path; ``None`` when disabled or on resolution error."""
-        try:
-            return self.path
-        except Exception as exc:  # Fail-safe boundary: errors never propagate.
-            logger.warning(
-                "Model cache: path resolution failed (%s)", exc.__class__.__name__
-            )
-            return None
 
     def _read_payload(self, path: Path) -> bytes | None:
         """Read the cache bytes; ``None`` when the file is absent or unusable."""

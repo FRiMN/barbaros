@@ -146,6 +146,7 @@ def test_path_resolution_failure_is_fail_safe(
     _patch_standard_paths(monkeypatch, RuntimeError("QStandardPaths is broken"))
     store = ModelCacheStore()
 
+    assert store.path is None  # the constructor degraded to a disabled store
     assert store.load() == {}
     assert store.save({"p": [_model()]}) is False
 
@@ -730,11 +731,28 @@ def test_default_path_is_appdata_location_models_json(
 
         assert expected.name == "models.json"
         assert store.path == expected
-        assert store.path == expected  # resolved once, then cached
+        assert store.path == expected  # a stable attribute, no re-resolution
         if sys.platform.startswith("linux"):
             assert expected.is_relative_to(data_home)
     finally:
         QCoreApplication.setApplicationName(previous_name)
+
+
+def test_path_is_resolved_once_when_the_store_is_created(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "appdata"
+    calls = _patch_standard_paths(monkeypatch, str(base))
+
+    store = ModelCacheStore()
+
+    assert store.path == base / "models.json"
+    assert len(calls) == 1  # resolved eagerly in the constructor
+
+    assert store.load() == {}
+    assert store.save({"p": [_model()]}) is True
+    assert store.load() == {"p": [_model()]}
+    assert len(calls) == 1  # property reads and I/O never re-resolve it
 
 
 def test_explicit_path_wins_without_resolving_qt(

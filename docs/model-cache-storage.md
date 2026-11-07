@@ -42,10 +42,10 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 |---|---|
 | `QSettings` в реальных native- и Flatpak-конфигах содержит `main_window/model` и `ocr_feature/model` с `PyObjectWrapper`; чтение соседнего ключа группы `main_window` (например, `llm_providers`) запускает unpickle | Удаление легаси-ключа через `QSettings` тоже триггерит unpickle. Оно допустимо только потому, что до этого в том же `MainWindow.__init__` группа `main_window` уже прочитана (unpickle уже произошёл), и добавляет ноль нового риска. Это гигиена, а не исправление BAR-01 (§4.7). |
 | `llm_by_providers` — plain JSON-строка, без pickle | Для десериализации переезд ничего не меняет; выигрыш — гигиена, разделение конфига и кэша, место под будущий JSON-стор |
-| `QStandardPaths.AppDataLocation` → native `~/.local/share/barbaros`, Flatpak `~/.var/app/io.github.frimn.barbaros/data/barbaros` (Linux, `<XDG_DATA_HOME>/barbaros`); по документации Qt: Windows `C:/Users/<USER>/AppData/Roaming/<APPNAME>`, macOS `~/Library/Application Support/<APPNAME>`; путь зависит от `setApplicationName` | Путь резолвить лениво после `setApplicationName` (`main.py:22-24`); пустой путь (защитно) → хранилище отключается |
+| `QStandardPaths.AppDataLocation` → native `~/.local/share/barbaros`, Flatpak `~/.var/app/io.github.frimn.barbaros/data/barbaros` (Linux, `<XDG_DATA_HOME>/barbaros`); по документации Qt: Windows `C:/Users/<USER>/AppData/Roaming/<APPNAME>`, macOS `~/Library/Application Support/<APPNAME>`; путь зависит от `setApplicationName` | Путь резолвить один раз в конструкторе хранилища после `setApplicationName` (`main.py:22-24`); пустой путь (защитно) → хранилище отключается |
 | `openai.types.model.Model.model_validate` требует `id: str, created: int, object: "model", owned_by: str`; лишние поля принимает и сохраняет, `to_dict()` их возвращает; `created` приводит `1.0`/`"1"`/`True` к `int` | Нужен строгий allowlist полей и явные проверки типов в хранилище, иначе произвольный JSON из файла будет вечно перезаписываться в кэш |
 | `Model.model_validate` на 25k моделях ≈ 98 мс; `json.loads` 2 МБ ≈ 19 мс; `to_dict()+dumps` ≈ 72 мс | Лимит файла 4 МБ достаточен с запасом; синхронная запись такого размера допустима (фактически она идёт в потоке воркера — см. §4.5) |
-| `QSettings` кэширует базовый каталог конфига при первом создании в процессе; `QStandardPaths` — динамичен | В тестах XDG-переменные — на import-time conftest; для QSettings — только явный путь |
+| `QSettings` кэширует базовый каталог конфига при первом создании в процессе; `QStandardPaths` — динамичен | `ModelCacheStore` резолвит путь один раз в конструкторе, поэтому окружение (XDG, `applicationName`) должно быть готово до его создания: в тестах XDG-переменные — на import-time conftest, для QSettings — только явный путь |
 | Сигнал Qt, подключённый к методу не-`QObject` получателя (`ModelManager` наследует `dict`), выполняется **в потоке отправителя** (проверено) | `set_models()`/сохранение кэша выполняются в потоке воркера; два воркера могут завершиться одновременно → нужна блокировка и целостный снапшот (§4.5) |
 | `MainWindow` конструируется offscreen; полный `App()` — нет (нужен stub `TrayIcon`, fake keyring) | Системные тесты через `MainWindow`/stub `App`, см. §7 |
 
@@ -66,7 +66,7 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 
 `<APPNAME>` Qt берёт из `applicationName` (у нас `barbaros`, задаётся в `main.py:22-24`); `organizationDomain` на Linux в этот путь не добавляется (проверено). Точный суффикс на Windows/macOS зависит от `organizationName`/`applicationName` — проекта касается только Linux. Манифест Flatpak не меняется (`flatpak/barbaros.yaml:14-25`), дополнительных разрешений не нужно: это собственный data-каталог приложения внутри sandbox.
 
-Обоснование: данные регенерируемы, но их отсутствие ломает выбор модели до ручного обновления, поэтому храним как персистентные данные приложения. Путь инжектируется в конструктор для тестов; при пустом результате `writableLocation` хранилище отключается (`load → {}`, `save → False`), а не пишет в текущий каталог.
+Обоснование: данные регенерируемы, но их отсутствие ломает выбор модели до ручного обновления, поэтому храним как персистентные данные приложения. Путь инжектируется в конструктор для тестов; при пустом результате `writableLocation` хранилище отключается (`load → {}`, `save → False`), а не пишет в текущий каталог. Резолв выполняется **один раз в конструкторе** (fail-safe: исключение `QStandardPaths` → `WARNING` и `path = None`), а не лениво в getter'е: публичный `path` — обычный атрибут, его чтение не меняет состояние store и не создаёт гонок между потоком воркера (`save`) и GUI-потоком (`load`).
 
 **Переопределение из конфига.** Ключ `model_cache_path` в корне `QSettings` (вне `main_window`, как и `language`) задаёт явный файл кэша. Значение — недоверенный конфиг, его разбирает отдельная функция `cache_path_from_config()` (не `ModelCacheStore`, который остаётся «тупым» и не знает про `QSettings`):
 
@@ -119,9 +119,8 @@ API хранилища (контракт замораживается до ре�
 ```python
 class ModelCacheStore:
     VERSION = 1
+    path: Path | None                          # резолвится один раз в __init__; None = отключено
     def __init__(self, path: Path | None = None) -> None: ...
-    @property
-    def path(self) -> Path | None: ...          # None, если хранилище отключено
     def load(self) -> dict[str, list[dict]]: ...  # никогда не бросает; порча → {}
     def save(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> bool: ...  # никогда не бросает
 ```
@@ -141,7 +140,7 @@ class ModelCacheStore:
 
 | Операция | Кто вызывает | Поток / момент |
 |---|---|---|
-| `ModelCacheStore.load()` | `ModelManager.add(..., cache_policy=RESTORE)` (`self._cache.load()`) | main thread на стартовом цикле `add` (или GUI-поток при явном runtime-`RESTORE`), **до** `RLock`; одно чтение на каждого `RESTORE`-провайдера; ошибки → `{}`, путь резолвится лениво в `ModelCacheStore.path` |
+| `ModelCacheStore.load()` | `ModelManager.add(..., cache_policy=RESTORE)` (`self._cache.load()`) | main thread на стартовом цикле `add` (или GUI-поток при явном runtime-`RESTORE`), **до** `RLock`; одно чтение на каждого `RESTORE`-провайдера; ошибки → `{}`, путь уже резолвлен один раз в конструкторе (`ModelCacheStore.path`) |
 | `ModelCacheStore.save()` | `ModelManager._persist()` → `cache.save(self.to_models_dict())` | вызывается только из `set_models()` (поток воркера) и `remove()` (GUI-поток), **под `RLock`**; внутри store — свой `Lock`, полный снапшот, атомарный `os.replace` |
 | I/O нет | `add(..., IGNORE)`, `to_models_dict()`, `to_list()`, `shutdown()` | `IGNORE` — дефолт, runtime-добавления не читают и не пишут файл |
 | Удаление легаси-ключа | `MainWindow._drop_legacy_model_cache()` | main thread, после чтения провайдеров; это `QSettings`, не `ModelCacheStore` |
@@ -215,7 +214,7 @@ class ModelCacheStore:
 
 Чтение (`load`):
 
-1. Путь: если `path` не передан — лениво `QStandardPaths.AppDataLocation` (импорт Qt внутри property); пустая строка (защитно) → store disabled, `{}`.
+1. Путь: резолвится один раз в конструкторе — явно переданный `path` имеет приоритет и не трогает Qt, иначе `_default_cache_path()` (fail-safe `QStandardPaths.AppDataLocation`; импорт Qt внутри функции); пустая строка/исключение → store disabled, `{}`. Публичный `path` — атрибут, а не property: чтение не меняет состояние.
 2. Открыть `os.open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)` (флаги через `getattr`, fallback для не-POSIX); `fstat`: только `S_ISREG`; прочитать не более `MAX_FILE_BYTES + 1`; больше — `WARNING`, `{}`. Это отсекает symlink/FIFO/устройства и гигантские файлы без загрузки в память.
 3. `json.loads` после `decode("utf-8")`; ошибки — `WARNING` (путь + класс исключения), `{}`.
 4. Проверить `dict`, `version == 1`, `models: dict`; иначе `WARNING`, `{}`.
@@ -354,7 +353,7 @@ fetch (воркер):
 10. Пустые/NaN/дубликаты ключей, огромные ints → контракт: `{}` или валидная часть, без исключений (`allow_nan=False`).
 11. Store disabled (path `None` при пустом `AppDataLocation` через monkeypatch `QStandardPaths.writableLocation`) → `load == {}`, `save == False`, нет записи в CWD.
 12. Импорт-гигиена: модуль не импортирует `QSettings`, `keyring`, `barbaros.security` (AST/`sys.modules`-проверка).
-13. Путь по умолчанию: при заданном `applicationName` `path == AppDataLocation/models.json`; инжектированный в конструктор путь имеет приоритет (никакого Qt-резолва).
+13. Путь по умолчанию: при заданном `applicationName` `path == AppDataLocation/models.json`; резолв происходит один раз в конструкторе (один вызов `QStandardPaths.writableLocation`); инжектированный в конструктор путь имеет приоритет (никакого Qt-резолва).
 
 **Component — `tests/components/test_model_manager_cache.py`** (fake store + `tmp_path`):
 
@@ -442,27 +441,24 @@ fetch (воркер):
 ## 11. Приложение: псевдокод хранилища
 
 ```python
+def _default_cache_path() -> Path | None:      # fail-safe QStandardPaths, один раз на store
+    try:
+        base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    except Exception as exc:
+        logger.warning("Model cache: path resolution failed (%s)", exc.__class__.__name__)
+        return None
+    return Path(base) / "models.json" if base else None
+
+
 class ModelCacheStore:
     VERSION = 1
     MAX_FILE_BYTES = 4 * 1024 * 1024
     ALLOWED_MODEL_KEYS = ("id", "created", "object", "owned_by")
+    path: Path | None
 
     def __init__(self, path: Path | None = None) -> None:
-        self._explicit_path = path
-        self._resolved: Path | None = None
-        self._disabled = False
+        self.path = Path(path) if path is not None else _default_cache_path()
         self._write_lock = threading.Lock()
-
-    @property
-    def path(self) -> Path | None:
-        if self._explicit_path is not None:
-            return self._explicit_path
-        if self._resolved is None and not self._disabled:
-            from PySide6.QtCore import QStandardPaths
-            base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-            self._disabled = not base
-            self._resolved = Path(base) / "models.json" if base else None
-        return self._resolved
 
     def load(self) -> dict[str, list[dict]]:
         try:
@@ -521,6 +517,7 @@ class ModelCacheStore:
 - README дополнен разделом «Model List Cache» (путь файла, права, отсутствие миграции и автозагрузки).
 - Путь кэша можно переопределить ключом `model_cache_path` (§4.1): разбор и валидация — в `cache_path_from_config()`; тесты в unit (абсолютный/`~`, относительный, нестрока, неразрешимый `~user`, log-injection) и system (override + restart, fallback при невалидном значении без записи в CWD).
 - Файловая механика вынесена из store в `src/barbaros/atomic_file.py` (`read_regular_file_limited` / `write_bytes_atomic`): store стал политикой, модуль — механизмом, который можно переиспользовать для JSON-стора выбора модели (BAR-01). Логирование осталось под прежними именами/текстами за счёт переданных `logger`/`label`; store дополнительно оборачивает вызовы в fail-safe `try/except` на случай регрессии контракта.
+- Путь резолвится один раз в конструкторе (`_default_cache_path()`, fail-safe), публичный `path` — обычный атрибут, а не property с ленивым сайд-эффектом: чтение ничего не мутирует, нет гонки `_resolved`/`_disabled` между GUI-потоком и воркером. Один вызов `writableLocation` фиксирует `test_path_is_resolved_once_when_the_store_is_created`; fail-safe конструктора при исключении `QStandardPaths` — `test_path_resolution_failure_is_fail_safe`.
 
 ### Release notes (черновик)
 
