@@ -24,6 +24,7 @@ import pytest
 from any_llm.types.model import Model
 
 from barbaros.main_window import MainWindow
+from barbaros.model_cache import SETTINGS_KEY
 from barbaros.model_manager import ModelManager
 from barbaros.widgets.filterable_combobox import ModelSelection
 
@@ -423,3 +424,53 @@ def test_startup_performs_no_network_or_fetch(
         assert window.model_manager.fetching_models_active_workers == []
 
     assert fetch_calls == ["ollama"]  # nothing else triggered a fetch
+
+
+# --- config override: model_cache_path -------------------------------------
+
+
+def test_config_override_changes_cache_location_and_survives_restart(
+    tmp_path, monkeypatch, fake_app, fake_settings, make_models
+):
+    """An absolute ``model_cache_path`` replaces the auto-resolved location."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    custom = tmp_path / "custom" / "models.json"
+    fake_settings.setValue(SETTINGS_KEY, str(custom))
+    fake_settings.sync()
+
+    entries = make_models(2)
+    with opened_window(fake_app) as window:
+        window.model_manager.set_models("ollama", as_models(entries))
+
+    assert custom.is_file()
+    assert not cache_path(tmp_path / "xdg-data").exists()
+    assert list(json.loads(custom.read_text())["models"]) == ["ollama"]
+
+    # The override is read again on the next start, so models are restored.
+    with opened_window(fake_app) as window:
+        assert restored_ids(window) == [entry["id"] for entry in entries]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("relative/models.json", id="relative"),
+        pytest.param("~no-such-user-xyz/models.json", id="unresolvable-tilde"),
+        pytest.param("", id="empty"),
+    ],
+)
+def test_invalid_config_override_falls_back_to_default(
+    value, tmp_path, monkeypatch, fake_app, fake_settings, make_models
+):
+    """A bad override never breaks startup and never writes to the CWD."""
+    data_home = tmp_path / "xdg-data"
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.chdir(tmp_path)
+    fake_settings.setValue(SETTINGS_KEY, value)
+    fake_settings.sync()
+
+    with opened_window(fake_app) as window:
+        window.model_manager.set_models("ollama", as_models(make_models(1)))
+
+    assert cache_path(data_home).is_file()
+    assert not (tmp_path / "relative").exists()

@@ -254,6 +254,12 @@ next start without querying every provider:
   and **not migrated**, so after upgrading click reload once per provider to populate
   the new cache. Provider configuration, target languages and the selected model are
   not affected.
+- **Custom location:** set `model_cache_path` to an absolute path in the application
+  settings file (the `Settings filepath:` line printed at startup), e.g.
+  `model_cache_path=/home/me/.cache/barbaros/models.json`. A leading `~` is expanded;
+  empty, relative or non-string values are ignored (with a warning) and the default
+  location is used. The cache is updated by atomically replacing that file, so point
+  the setting at a dedicated cache file, not at an existing file you want to keep.
 
 ## How It Works
 

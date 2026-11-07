@@ -19,7 +19,7 @@ from .features.base import AbstractFeature
 from .features.ocr import OCRFeature
 from .features.settings import SettingsFeature
 from .features.text import TextFeature
-from .model_cache import ModelCacheStore
+from .model_cache import SETTINGS_KEY, ModelCacheStore, cache_path_from_config
 from .model_manager import CachePolicy, ModelManager, ProviderMeta
 from .widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 
@@ -40,7 +40,9 @@ class MainWindow(QMainWindow):
         self.target_language_list = []
         self.restore_target_languages()
 
-        model_cache = ModelCacheStore()
+        model_cache = ModelCacheStore(
+            path=cache_path_from_config(self.app.settings.value(SETTINGS_KEY))
+        )
         print(f"Model cache filepath: {model_cache.path}")
         self.model_manager = ModelManager(cache=model_cache)
         self.model_manager.error.connect(self._show_provider_error)

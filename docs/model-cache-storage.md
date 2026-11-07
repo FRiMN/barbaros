@@ -1,6 +1,6 @@
 # Кэш списка моделей: вынос из QSettings в отдельный JSON-файл
 
-**Статус:** реализовано (этапы 1–3, см. §12); PR ещё не смержен.
+**Статус:** реализовано (этапы 1–3 и переопределение пути в §4.1, см. §12); PR ещё не смержен.
 **Аудит:** [docs/security/owasp-audit.md](security/owasp-audit.md) — BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8.
 **Затрагиваемые файлы:** новый `src/barbaros/model_cache.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`); `README.md`.
 
@@ -21,6 +21,7 @@
 
 ```
 QSettings (~/.config/io.github.frimn/barbaros.conf)
+├── model_cache_path               ABS-путь к файлу кэша (опционально, §4.1)
 ├── main_window/llm_providers      JSON-строка  ← список провайдеров (конфиг)
 ├── main_window/llm_by_providers   JSON-строка  ← легаси-кэш; удаляется при старте (§4.7)
 ├── main_window/model              pickled ModelSelection  ← BAR-01, отдельный PR
@@ -66,6 +67,15 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 `<APPNAME>` Qt берёт из `applicationName` (у нас `barbaros`, задаётся в `main.py:22-24`); `organizationDomain` на Linux в этот путь не добавляется (проверено). Точный суффикс на Windows/macOS зависит от `organizationName`/`applicationName` — проекта касается только Linux. Манифест Flatpak не меняется (`flatpak/barbaros.yaml:14-25`), дополнительных разрешений не нужно: это собственный data-каталог приложения внутри sandbox.
 
 Обоснование: данные регенерируемы, но их отсутствие ломает выбор модели до ручного обновления, поэтому храним как персистентные данные приложения. Путь инжектируется в конструктор для тестов; при пустом результате `writableLocation` хранилище отключается (`load → {}`, `save → False`), а не пишет в текущий каталог.
+
+**Переопределение из конфига.** Ключ `model_cache_path` в корне `QSettings` (вне `main_window`, как и `language`) задаёт явный файл кэша. Значение — недоверенный конфиг, его разбирает отдельная функция `cache_path_from_config()` (не `ModelCacheStore`, который остаётся «тупым» и не знает про `QSettings`):
+
+- `None`/пустая строка/пробелы → авторезолв (дефолт, поведение выше);
+- непустая строка: `~` раскрывается, результат обязан быть абсолютным путём → `ModelCacheStore(path=...)`;
+- нестрока, относительный путь, неразрешимый `~user` (pathlib бросает `RuntimeError`) → `WARNING` с экранированным усечённым значением и авторезолв; старт не падает и в текущий каталог ничего не пишется;
+- путь печатается при старте строкой `Model cache filepath:` (рядом с `Settings filepath:`), чтобы фактическое место было видно в журнале.
+
+Запись в переопределённый файл идёт тем же атомарным `replace`, поэтому значение должно указывать на выделенный файл кэша: существующий чужой файл будет заменён при первом успешном сохранении. Это осознанно: иначе пришлось бы вводить эвристику «файл не наш — не трогаем», противоречащую §4.6 (битый кэш не удаляется, но следующий `save` его заменяет).
 
 **Отвергнутая альтернатива:** `CacheLocation` (`~/.cache/barbaros`) — семантически «настоящий кэш», но ОС/утилиты чистки могут его удалить, а автозагрузки моделей при старте нет.
 
@@ -505,6 +515,7 @@ class ModelCacheStore:
 - System-тест `App()` (§7.2 system п. 6) выполняется в подпроцессе: в pytest-процессе уже существует singleton `QApplication` (session-fixture `qapp`), второй создать нельзя. В подпроцессе ставится in-memory keyring и stub `barbaros.main.TrayIcon`.
 - Security-тесты не утверждают, что BAR-01 исправлен: кэш не содержит pickle, но pickle-ключи `main_window/model` и `ocr_feature/model` остаются задачей отдельного P0.
 - README дополнен разделом «Model List Cache» (путь файла, права, отсутствие миграции и автозагрузки).
+- Путь кэша можно переопределить ключом `model_cache_path` (§4.1): разбор и валидация — в `cache_path_from_config()`; тесты в unit (абсолютный/`~`, относительный, нестрока, неразрешимый `~user`, log-injection) и system (override + restart, fallback при невалидном значении без записи в CWD).
 
 ### Release notes (черновик)
 

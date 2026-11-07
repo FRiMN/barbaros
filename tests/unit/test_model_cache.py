@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from barbaros import model_cache
-from barbaros.model_cache import ModelCacheStore
+from barbaros.model_cache import ModelCacheStore, cache_path_from_config
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX file semantics")
 
@@ -750,6 +750,91 @@ def test_explicit_path_wins_without_resolving_qt(
     assert store.save({"p": [_model()]}) is True
     assert store.load() == {"p": [_model()]}
     assert calls == []
+
+
+# --- config override: model_cache_path -------------------------------------
+
+
+def test_config_path_unset_or_empty_means_auto() -> None:
+    assert cache_path_from_config(None) is None
+    assert cache_path_from_config("") is None
+    assert cache_path_from_config("   ") is None
+
+
+def test_config_path_absolute_is_used(tmp_path: Path) -> None:
+    target = tmp_path / "custom" / "models.json"
+    assert cache_path_from_config(str(target)) == target
+
+
+def test_config_path_expands_tilde(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert cache_path_from_config("~/cache/models.json") == (
+        tmp_path / "cache" / "models.json"
+    )
+
+
+def test_config_path_is_used_by_the_store(tmp_path: Path) -> None:
+    target = tmp_path / "custom" / "models.json"
+    store = ModelCacheStore(cache_path_from_config(f"  {target}  "))
+
+    assert store.path == target
+    assert store.save({"p": [_model()]}) is True
+    assert store.load() == {"p": [_model()]}
+
+
+@pytest.mark.parametrize("value", [1, 1.5, True, [], {}, b"/tmp/models.json"])
+def test_config_path_non_string_is_ignored(
+    value: object, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert cache_path_from_config(value) is None
+
+    records = [record for record in caplog.records if record.name == "barbaros.model_cache"]
+    assert records
+    assert all(model_cache.SETTINGS_KEY in record.getMessage() for record in records)
+
+
+@pytest.mark.parametrize("value", ["cache.json", "./models.json", "../models.json"])
+def test_config_path_relative_is_ignored(
+    value: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert cache_path_from_config(value) is None
+
+    assert any(
+        "absolute" in record.getMessage()
+        for record in caplog.records
+        if record.name == "barbaros.model_cache"
+    )
+
+
+def test_config_path_with_unknown_user_is_ignored_without_raising(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # pathlib.expanduser() raises RuntimeError for an unresolvable ``~user``.
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert cache_path_from_config("~no-such-user-xyz/cache.json") is None
+
+    assert any(
+        "cannot expand" in record.getMessage()
+        for record in caplog.records
+        if record.name == "barbaros.model_cache"
+    )
+
+
+def test_config_path_hostile_value_is_logged_escaped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert cache_path_from_config("rel\nforged: log line") is None
+
+    records = [record for record in caplog.records if record.name == "barbaros.model_cache"]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert "\n" not in message
+    assert "rel\\nforged: log line" in message  # escaped repr form, one line
 
 
 # --- logging contract (§4.6): warning details and log-injection safety -----

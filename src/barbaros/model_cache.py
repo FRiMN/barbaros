@@ -34,6 +34,9 @@ _LOG_STRING_LIMIT = 64
 _MODELS_FILENAME = "models.json"
 _READ_CHUNK_BYTES = 64 * 1024
 
+#: QSettings key (application scope) that may override the default cache file.
+SETTINGS_KEY = "model_cache_path"
+
 # O_NOFOLLOW/O_NONBLOCK/O_CLOEXEC are POSIX-only; getattr keeps the module
 # importable elsewhere, the same way O_BINARY is Windows-only.
 _READ_FLAGS = (
@@ -52,6 +55,55 @@ def _log_value(value: object) -> str:
     them through ``repr`` and truncating avoids log injection (BAR-17).
     """
     return repr(str(value)[:_LOG_STRING_LIMIT])
+
+
+def cache_path_from_config(value: object) -> Path | None:
+    """Resolve the optional ``model_cache_path`` override from the config.
+
+    The value is user configuration, i.e. untrusted input.  Only a non-empty
+    absolute path is accepted; a leading ``~`` is expanded (a shell-like
+    convenience, not a search path).  Anything else is logged and treated as
+    "not configured", so the store keeps the default AppDataLocation instead
+    of writing to the process working directory or some other implicit place.
+
+    Returns:
+        The explicit cache file path, or ``None`` to auto-resolve the default.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        logger.warning(
+            "Model cache: ignoring non-string '%s' setting (%s)",
+            SETTINGS_KEY,
+            type(value).__name__,
+        )
+        return None
+
+    raw = value.strip()
+    if not raw:
+        return None
+
+    try:
+        path = Path(raw).expanduser()
+    except RuntimeError:
+        # pathlib raises when a ``~user`` form cannot be resolved (unknown user,
+        # missing HOME).  The config is untrusted input: fall back, don't crash.
+        logger.warning(
+            "Model cache: cannot expand '%s' setting, using the default "
+            "location: %s",
+            SETTINGS_KEY,
+            _log_value(raw),
+        )
+        return None
+    if not path.is_absolute():
+        logger.warning(
+            "Model cache: '%s' must be an absolute path, using the default "
+            "location: %s",
+            SETTINGS_KEY,
+            _log_value(raw),
+        )
+        return None
+    return path
 
 
 def _read_regular_file(path: Path, limit: int) -> bytes | None:
