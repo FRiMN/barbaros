@@ -20,6 +20,40 @@ concurrent writes to the same path — callers serialize writers (for example
 ``ModelCacheStore`` uses its own lock).
 
 The module deliberately imports nothing from Qt, keyring or any LLM SDK.
+
+Security rationale
+------------------
+The file path may come from user configuration and the file itself can be
+replaced at any moment (dotfile sync, backup restore, another same-uid
+process), so every access is treated as untrusted input (BAR-09, BAR-14):
+
+* ``O_NOFOLLOW`` + ``S_ISREG``: a planted symlink, FIFO, device or directory
+  is refused, so a swapped path cannot make the application read an unrelated
+  file, and ``O_NONBLOCK`` keeps a FIFO from hanging startup.  ``O_CLOEXEC``
+  keeps the descriptor from leaking into child processes.
+* A byte cap is enforced before and during the read (``limit + 1`` bytes), so
+  a hostile multi-gigabyte file cannot exhaust memory before validation.
+* ``os.replace`` acts on the directory entry: a symlink placed at the target
+  path is replaced, not followed, so a write cannot be redirected to another
+  file.  On any failure the previous file stays intact — no truncated state
+  that would break the next start (AGENTS.md #14).
+* POSIX modes ``0600`` for the file and ``0700`` for its directory do not
+  depend on the process umask, so other local users/groups cannot read the
+  data even under a permissive umask.  This is defense-in-depth only: the
+  audit's threat model treats a same-uid process as trusted (BAR-10), so
+  permissions are not a boundary against it.
+* Helpers are fail-safe and log only paths and exception class names — never
+  file contents, provider names or secrets — and escape logged paths through
+  ``%r``, which blocks log injection via newlines (BAR-17).  I/O errors
+  degrade to ``None``/``False`` instead of crashing the GUI or an autostart
+  attempt.
+* Pure stdlib, no dynamic imports or ``exec``, no network: the module adds no
+  attack surface of its own.
+
+Non-goals: this module does not fix BAR-01 (pickle), does not validate config
+values or payload schemas, and cannot stop a same-uid process from modifying
+the file — it only guarantees that untrusted file *mechanics* stay safe.  See
+``docs/model-cache-storage.md`` §4.6 and ``docs/security/owasp-audit.md``.
 """
 
 from __future__ import annotations
