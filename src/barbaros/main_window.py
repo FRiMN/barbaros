@@ -27,7 +27,7 @@ from .widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 class MainWindow(QMainWindow):
     settings_key_prefix = "main_window"
     settings_llm_providers_key = "llm_providers"
-    # Legacy JSON cache key, only removed on startup.  See _drop_legacy_model_cache.
+    # Legacy JSON cache key, only removed on startup. See `_drop_legacy_model_cache`.
     settings_legacy_llm_by_providers_key = "llm_by_providers"
     settings_target_language_list_key = "target_language_list"
     settings_target_language_key = "target_language"

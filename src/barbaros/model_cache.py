@@ -71,6 +71,7 @@ def cache_path_from_config(value: object) -> Path | None:
     """
     if value is None:
         return None
+
     if not isinstance(value, str):
         logger.warning(
             "Model cache: ignoring non-string '%s' setting (%s)",
@@ -95,6 +96,7 @@ def cache_path_from_config(value: object) -> Path | None:
             _log_value(raw),
         )
         return None
+
     if not path.is_absolute():
         logger.warning(
             "Model cache: '%s' must be an absolute path, using the default "
@@ -103,6 +105,7 @@ def cache_path_from_config(value: object) -> Path | None:
             _log_value(raw),
         )
         return None
+
     return path
 
 
@@ -208,6 +211,7 @@ def _fsync_directory(directory: Path) -> None:
             exc.__class__.__name__,
         )
         return
+
     try:
         os.fsync(dir_fd)
     except OSError as exc:
@@ -227,6 +231,7 @@ def _atomic_write(path: Path, payload: bytes) -> None:
     parent = path.parent
     fd, temp_name = tempfile.mkstemp(prefix=".models-", suffix=".tmp", dir=parent)
     temp_path = Path(temp_name)
+
     try:
         _chmod_temp_file(fd)
         try:
@@ -318,6 +323,7 @@ class ModelCacheStore:
                     "Model cache: top-level JSON is not an object, ignored: %r", path
                 )
                 return {}
+
             if (
                 type(document.get("version")) is not int
                 or document.get("version") != self.VERSION
@@ -326,12 +332,14 @@ class ModelCacheStore:
                     "Model cache: unsupported schema version, ignored: %r", path
                 )
                 return {}
+
             models = document.get("models")
             if not isinstance(models, dict):
                 logger.warning(
                     "Model cache: invalid 'models' section, ignored: %r", path
                 )
                 return {}
+
             return self._sanitize(models)
         except Exception as exc:  # Fail-safe boundary: errors never propagate.
             logger.warning(
