@@ -143,6 +143,46 @@ def test_directory_is_not_a_regular_file(
     assert any("not a regular file" in record.getMessage() for record in caplog.records)
 
 
+def test_read_error_is_logged_and_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "data.json"
+    path.write_bytes(b"data")
+
+    def failing_read(fd: int, size: int) -> bytes:
+        raise OSError("I/O error")
+
+    monkeypatch.setattr(atomic_file.os, "read", failing_read)
+    with caplog.at_level(logging.WARNING, logger=LOGGER.name):
+        assert _read(path) is None
+
+    assert any("read failed" in record.getMessage() for record in caplog.records)
+
+
+def test_fstat_error_is_fail_safe_and_closes_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "data.json"
+    path.write_bytes(b"data")
+    closed: list[int] = []
+    real_close = os.close
+
+    def failing_fstat(fd: int):
+        raise OSError("stat failed")
+
+    def tracking_close(fd: int) -> None:
+        closed.append(fd)
+        real_close(fd)
+
+    monkeypatch.setattr(atomic_file.os, "fstat", failing_fstat)
+    monkeypatch.setattr(atomic_file.os, "close", tracking_close)
+    with caplog.at_level(logging.WARNING, logger=LOGGER.name):
+        assert _read(path) is None
+
+    assert len(closed) == 1
+    assert any("read failed" in record.getMessage() for record in caplog.records)
+
+
 # --- writes ----------------------------------------------------------------
 
 
