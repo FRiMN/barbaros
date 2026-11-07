@@ -2,7 +2,7 @@
 
 **Статус:** реализовано (этапы 1–3 и переопределение пути в §4.1, см. §12); PR ещё не смержен.
 **Аудит:** [docs/security/owasp-audit.md](security/owasp-audit.md) — BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8.
-**Затрагиваемые файлы:** новый `src/barbaros/model_cache.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`); `README.md`.
+**Затрагиваемые файлы:** новые `src/barbaros/model_cache.py` и `src/barbaros/atomic_file.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/unit/test_atomic_file.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`); `README.md`.
 
 ## 1. Цель
 
@@ -211,6 +211,8 @@ class ModelCacheStore:
 
 Ключевые инварианты в docstring: *недоверенные данные, регенерируемо, без секретов, без QSettings*.
 
+**Механика вынесена в `src/barbaros/atomic_file.py`** (AGENTS #10: policy ↔ mechanism). Модуль не знает ни про JSON, ни про кэш: `read_regular_file_limited(path, limit, *, logger, label)` — чтение только regular file без symlink и с потолком байт; `write_bytes_atomic(path, payload, *, logger, label)` — `mkdir 0700` + `mkstemp` в том же каталоге + `fchmod 0600` + `write`/`fsync` + `os.replace` + best-effort `fsync` каталога, очистка temp при ошибке. Обе функции fail-safe (никогда не бросают) и логируют через **переданные** logger/label, поэтому записи остаются под `barbaros.model_cache` с прежним текстом; потокобезопасность записи — забота вызывающего (`ModelCacheStore` держит свой `Lock`). `ModelCacheStore` остаётся политикой: путь/конфиг, JSON-схема, allowlist, лимиты содержимого. Модуль рассчитан и на будущий JSON-стор выбора модели (BAR-01).
+
 Чтение (`load`):
 
 1. Путь: если `path` не передан — лениво `QStandardPaths.AppDataLocation` (импорт Qt внутри property); пустая строка (защитно) → store disabled, `{}`.
@@ -337,6 +339,8 @@ fetch (воркер):
 ### 7.2. Матрица тестов
 
 **Unit — `tests/unit/test_model_cache.py`** (store с инжектированным `tmp_path`, без Qt/any_llm):
+
+Файловая механика (пункты 6–9) дополнительно покрыта прямыми тестами `tests/unit/test_atomic_file.py`: лимит и «файл вырос между stat и read», symlink/FIFO/каталог, короткий `write`, падение `fsync`/`replace`, очистка temp, права `0600/0700` при umask `022/077`, ужесточение существующего каталога, NUL в пути, импорт-гигиена.
 
 1. Round-trip произвольных валидных данных (unicode, пустые списки, allowlist-поля) → `load() == sanitized(save(data))`.
 2. Нет файла/каталога → `{}`, исключений нет, файл не создаётся.
@@ -516,6 +520,7 @@ class ModelCacheStore:
 - Security-тесты не утверждают, что BAR-01 исправлен: кэш не содержит pickle, но pickle-ключи `main_window/model` и `ocr_feature/model` остаются задачей отдельного P0.
 - README дополнен разделом «Model List Cache» (путь файла, права, отсутствие миграции и автозагрузки).
 - Путь кэша можно переопределить ключом `model_cache_path` (§4.1): разбор и валидация — в `cache_path_from_config()`; тесты в unit (абсолютный/`~`, относительный, нестрока, неразрешимый `~user`, log-injection) и system (override + restart, fallback при невалидном значении без записи в CWD).
+- Файловая механика вынесена из store в `src/barbaros/atomic_file.py` (`read_regular_file_limited` / `write_bytes_atomic`): store стал политикой, модуль — механизмом, который можно переиспользовать для JSON-стора выбора модели (BAR-01). Логирование осталось под прежними именами/текстами за счёт переданных `logger`/`label`; store дополнительно оборачивает вызовы в fail-safe `try/except` на случай регрессии контракта.
 
 ### Release notes (черновик)
 

@@ -19,8 +19,8 @@ from .features.base import AbstractFeature
 from .features.ocr import OCRFeature
 from .features.settings import SettingsFeature
 from .features.text import TextFeature
-from .model_cache import ModelCacheStore, cache_path_from_config
 from .model_cache import SETTINGS_KEY as SETTINGS_KEY_MODEL_CACHE
+from .model_cache import ModelCacheStore, cache_path_from_config
 from .model_manager import CachePolicy, ModelManager, ProviderMeta
 from .widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 

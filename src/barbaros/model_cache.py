@@ -14,38 +14,28 @@ Invariants:
   ``dict[str, list[dict]]`` and knows nothing about ``Model``, ``QSettings``,
   keyring, or ``any_llm``. ``QStandardPaths`` is imported lazily only when the
   default path is resolved.
+* This module is policy (path, JSON schema, allowlist, limits, logging
+  context); file mechanics (no-symlink capped reads, atomic replace) live in
+  :mod:`barbaros.atomic_file`.
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
-import os
-import stat
-import tempfile
 import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+
+from barbaros.atomic_file import read_regular_file_limited, write_bytes_atomic
 
 logger = logging.getLogger(__name__)
 
 _LOG_STRING_LIMIT = 64
 _MODELS_FILENAME = "models.json"
-_READ_CHUNK_BYTES = 64 * 1024
 
 #: QSettings key (application scope) that may override the default cache file.
 SETTINGS_KEY = "model_cache_path"
-
-# O_NOFOLLOW/O_NONBLOCK/O_CLOEXEC are POSIX-only; getattr keeps the module
-# importable elsewhere, the same way O_BINARY is Windows-only.
-_READ_FLAGS = (
-    os.O_RDONLY
-    | getattr(os, "O_NOFOLLOW", 0)
-    | getattr(os, "O_NONBLOCK", 0)
-    | getattr(os, "O_CLOEXEC", 0)
-    | getattr(os, "O_BINARY", 0)
-)
 
 
 def _log_value(value: object) -> str:
@@ -109,145 +99,6 @@ def cache_path_from_config(value: object) -> Path | None:
     return path
 
 
-def _read_regular_file(path: Path, limit: int) -> bytes | None:
-    """Read at most ``limit`` bytes from a regular file, never following links.
-
-    Returns ``None`` (after logging) when the file cannot be opened, is not a
-    regular file (symlink/FIFO/device/directory), or exceeds ``limit``.
-    """
-    try:
-        fd = os.open(path, _READ_FLAGS)
-    except FileNotFoundError:
-        # Normal state on first run or after the cache was pruned: not a fault.
-        logger.debug("Model cache: no cache file at %r", path)
-        return None
-    except OSError as exc:
-        logger.warning("Model cache: cannot open %r (%s)", path, exc.__class__.__name__)
-        return None
-
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode):
-            logger.warning("Model cache: not a regular file, ignored: %r", path)
-            return None
-        if info.st_size > limit:
-            logger.warning(
-                "Model cache: file too large (%d > %d bytes), ignored: %r",
-                info.st_size,
-                limit,
-                path,
-            )
-            return None
-        chunks: list[bytes] = []
-        remaining = limit + 1
-        while remaining > 0:
-            chunk = os.read(fd, min(remaining, _READ_CHUNK_BYTES))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        data = b"".join(chunks)
-    except OSError as exc:
-        logger.warning(
-            "Model cache: read failed for %r (%s)", path, exc.__class__.__name__
-        )
-        return None
-    finally:
-        with contextlib.suppress(OSError):
-            os.close(fd)
-
-    if len(data) > limit:
-        # The file grew between fstat() and read(); drop it instead of parsing.
-        logger.warning(
-            "Model cache: file too large (%d > %d bytes), ignored: %r",
-            len(data),
-            limit,
-            path,
-        )
-        return None
-    return data
-
-
-def _write_all(fd: int, payload: bytes) -> None:
-    view = memoryview(payload)
-    while view:
-        written = os.write(fd, view)
-        if written <= 0:
-            raise OSError("short write to model cache temp file")
-        view = view[written:]
-
-
-def _chmod_temp_file(fd: int) -> None:
-    fchmod = getattr(os, "fchmod", None)
-    if fchmod is None:  # Windows: mkstemp already creates a private file.
-        return
-    try:
-        fchmod(fd, 0o600)
-    except OSError as exc:
-        logger.debug(
-            "Model cache: could not set temp file mode (%s)", exc.__class__.__name__
-        )
-
-
-def _tighten_directory(directory: Path) -> None:
-    try:
-        os.chmod(directory, 0o700)
-    except OSError as exc:
-        # Best effort: saving the cache must not fail because of permissions
-        # that are already narrower (or because another user owns the dir).
-        logger.debug(
-            "Model cache: could not set directory mode on %r (%s)",
-            directory,
-            exc.__class__.__name__,
-        )
-
-
-def _fsync_directory(directory: Path) -> None:
-    try:
-        dir_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-    except OSError as exc:
-        logger.debug(
-            "Model cache: could not open directory for fsync (%s)",
-            exc.__class__.__name__,
-        )
-        return
-
-    try:
-        os.fsync(dir_fd)
-    except OSError as exc:
-        logger.debug("Model cache: directory fsync failed (%s)", exc.__class__.__name__)
-    finally:
-        with contextlib.suppress(OSError):
-            os.close(dir_fd)
-
-
-def _ensure_directory(directory: Path) -> None:
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    _tighten_directory(directory)
-
-
-def _atomic_write(path: Path, payload: bytes) -> None:
-    """Write ``payload`` to ``path`` atomically, keeping the old file on error."""
-    parent = path.parent
-    fd, temp_name = tempfile.mkstemp(prefix=".models-", suffix=".tmp", dir=parent)
-    temp_path = Path(temp_name)
-
-    try:
-        _chmod_temp_file(fd)
-        try:
-            _write_all(fd, payload)
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        os.replace(temp_path, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(temp_path)
-        raise
-
-    _fsync_directory(parent)
-
-
 class ModelCacheStore:
     """Fail-safe JSON store for the per-provider model cache.
 
@@ -307,8 +158,13 @@ class ModelCacheStore:
             return {}
 
         try:
-            raw = _read_regular_file(path, self.MAX_FILE_BYTES)
-        except Exception as exc:  # Fail-safe boundary: read errors never propagate.
+            raw = read_regular_file_limited(
+                path,
+                self.MAX_FILE_BYTES,
+                logger=logger,
+                label="Model cache",
+            )
+        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
             logger.warning(
                 "Model cache: read failed for %r (%s)", path, exc.__class__.__name__
             )
@@ -385,15 +241,18 @@ class ModelCacheStore:
             return False
 
         try:
-            _ensure_directory(path.parent)
             with self._write_lock:
-                _atomic_write(path, payload)
-        except Exception as exc:  # Fail-safe boundary: errors never propagate.
+                return write_bytes_atomic(
+                    path,
+                    payload,
+                    logger=logger,
+                    label="Model cache",
+                )
+        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
             logger.warning(
                 "Model cache: save failed for %r (%s)", path, exc.__class__.__name__
             )
             return False
-        return True
 
     def _sanitize(self, models: object) -> dict[str, list[dict]]:
         """Apply the shared allowlist/limits; identical on load and save."""
