@@ -218,6 +218,7 @@ class ModelCacheDocument:
         for name, entries in models.items():
             if len(sanitized) >= self.MAX_PROVIDERS:
                 break
+
             if (
                 not isinstance(name, str)
                 or not 0 < len(name) <= self.MAX_PROVIDER_NAME_LEN
@@ -227,16 +228,19 @@ class ModelCacheDocument:
                     _log_value(name),
                 )
                 continue
+
             if not isinstance(entries, list):
                 logger.debug(
                     "Model cache: skipped provider %s with non-list models",
                     _log_value(name),
                 )
                 continue
+
             cleaned: list[dict] = []
             for entry in entries:
                 if len(cleaned) >= self.MAX_MODELS_PER_PROVIDER:
                     break
+
                 model = self._sanitize_model(entry)
                 if model is None:
                     skipped_models += 1
@@ -254,20 +258,25 @@ class ModelCacheDocument:
     def _sanitize_model(self, entry: object) -> dict | None:
         if not isinstance(entry, dict):
             return None
+
         model_id = entry.get("id")
         if (
             not isinstance(model_id, str)
             or not 0 < len(model_id) <= self.MAX_MODEL_ID_LEN
         ):
             return None
+
         created = entry.get("created")
         if type(created) is not int:
             return None
+
         if entry.get("object") != "model":
             return None
+
         owned_by = entry.get("owned_by")
         if not isinstance(owned_by, str) or len(owned_by) > self.MAX_OWNED_BY_LEN:
             return None
+
         return {key: entry[key] for key in self.ALLOWED_MODEL_KEYS}
 
 
@@ -343,6 +352,7 @@ class ModelCacheStore:
         """Deserialize via the document; map its errors to the usual WARNINGs."""
         try:
             return ModelCacheDocument.from_bytes(raw).models
+
         except InvalidDocument as exc:
             if exc.reason == "json":
                 logger.warning(
@@ -361,6 +371,7 @@ class ModelCacheStore:
                 else:
                     logger.warning(message, path)
             return {}
+
         except Exception as exc:  # Fail-safe boundary: errors never propagate.
             logger.warning(
                 "Model cache: load failed for %r (%s)", path, exc.__class__.__name__
@@ -376,6 +387,7 @@ class ModelCacheStore:
         try:
             document = ModelCacheDocument(models)
             return document.to_bytes(max_bytes=self.MAX_FILE_BYTES)
+
         except DocumentTooLarge as exc:
             logger.warning(
                 "Model cache: payload too large (%d > %d bytes), not saved: %r",
@@ -384,6 +396,7 @@ class ModelCacheStore:
                 path,
             )
             return None
+
         except Exception as exc:  # Fail-safe boundary: errors never propagate.
             logger.warning(
                 "Model cache: serialization failed for %r (%s)",
