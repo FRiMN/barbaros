@@ -30,7 +30,7 @@ from any_llm.types.model import Model
 
 import barbaros.model_manager
 from barbaros.main_window import MainWindow
-from barbaros.model_cache import ModelCacheStore
+from barbaros.model_cache import ModelCacheDocument, ModelCacheStore
 
 POSIX_ONLY = pytest.mark.skipif(
     os.name != "posix", reason="file permission bits are POSIX-only"
@@ -148,11 +148,11 @@ def test_saved_cache_has_only_allowlisted_json_fields(
     document = json.loads(raw.decode("utf-8"))
 
     assert set(document) == {"version", "models"}
-    assert document["version"] == ModelCacheStore.VERSION
+    assert document["version"] == ModelCacheDocument.VERSION
     assert list(document["models"]) == ["ollama"]
     entries = document["models"]["ollama"]
     assert [entry["id"] for entry in entries] == ["cached-1", "cached-2", "fetched-1"]
-    allowed_keys = set(ModelCacheStore.ALLOWED_MODEL_KEYS)
+    allowed_keys = set(ModelCacheDocument.ALLOWED_MODEL_KEYS)
     for entry in entries:
         assert set(entry) == allowed_keys
 

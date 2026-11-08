@@ -96,7 +96,7 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 - `version` — для будущих несовместимых изменений; неизвестная версия → файл игнорируется, приложение стартует с пустым кэшем (файл не удаляется).
 - Поля элемента — только allowlist `id/created/object/owned_by`; лишние ключи отбрасываются при чтении и записи (иначе `Model` сохранит произвольные поля из подменённого файла).
 - Провайдеры с пустым списком моделей не пишутся; при чтении пустые/невалидные записи пропускаются.
-- Лимиты: `MAX_FILE_BYTES = 4 МиБ`, `MAX_PROVIDERS = 1000`, `MAX_MODELS_PER_PROVIDER = 10_000`, `MAX_PROVIDER_NAME_LEN = 256`, `MAX_MODEL_ID_LEN = 1024`, `MAX_OWNED_BY_LEN = 256`.
+- Лимиты (владелец схемы — `ModelCacheDocument`): `MAX_PROVIDERS = 1000`, `MAX_MODELS_PER_PROVIDER = 10_000`, `MAX_PROVIDER_NAME_LEN = 256`, `MAX_MODEL_ID_LEN = 1024`, `MAX_OWNED_BY_LEN = 256`; файловый лимит `MAX_FILE_BYTES = 4 МиБ` остаётся в `ModelCacheStore` (read-cap + лимит для `to_bytes`).
 
 ### 4.3. Класс хранилища и его место
 
@@ -117,8 +117,18 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 API хранилища (контракт замораживается до реализации):
 
 ```python
-class ModelCacheStore:
+class ModelCacheDocument:                      # формат: обе стороны + схема
     VERSION = 1
+    def __init__(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> None: ...
+    @property
+    def models(self) -> dict[str, list[dict]]: ...
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> ModelCacheDocument: ...   # InvalidDocument
+    def to_bytes(self, max_bytes: int) -> bytes: ...             # DocumentTooLarge
+
+
+class ModelCacheStore:
+    MAX_FILE_BYTES = 4 * 1024 * 1024
     path: Path | None                          # резолвится один раз в __init__; None = отключено
     def __init__(self, path: Path | None = None) -> None: ...
     def load(self) -> dict[str, list[dict]]: ...  # никогда не бросает; порча → {}
@@ -212,23 +222,24 @@ class ModelCacheStore:
 
 **Механика вынесена в `src/barbaros/atomic_file.py`** (AGENTS #10: policy ↔ mechanism). Модуль не знает ни про JSON, ни про кэш: `read_regular_file_limited(path, limit, *, logger, label)` — чтение только regular file без symlink и с потолком байт; `write_bytes_atomic(path, payload, *, logger, label)` — `mkdir 0700` + `mkstemp` в том же каталоге + `fchmod 0600` + `write`/`fsync` + `os.replace` + best-effort `fsync` каталога, очистка temp при ошибке. Обе функции fail-safe (никогда не бросают) и логируют через **переданные** logger/label, поэтому записи остаются под `barbaros.model_cache` с прежним текстом; потокобезопасность записи — забота вызывающего (`ModelCacheStore` держит свой `Lock`). `ModelCacheStore` остаётся политикой: путь/конфиг, JSON-схема, allowlist, лимиты содержимого. Модуль рассчитан и на будущий JSON-стор выбора модели (BAR-01).
 
+**Формат вынесен в `ModelCacheDocument`** — класс-кодек документа. Ему принадлежат `VERSION`, allowlist, schema-лимиты, санитизация и обе стороны формата: `to_bytes(max_bytes)` (сериализация + проверка размера) и `from_bytes(raw)` (десериализация + envelope-валидация). Класс не знает путей, файлов, локов и fallback-логики и на ошибках бросает типизированные `DocumentTooLarge`/`InvalidDocument`; `ModelCacheStore` — единственная fail-safe-граница и владелец путей/логов, он маппит эти ошибки в прежние WARNING. `MAX_FILE_BYTES` остаётся в store (read-cap и лимит, передаваемый в `to_bytes`).
+
 Чтение (`load`):
 
 1. Путь: резолвится один раз в конструкторе — явно переданный `path` имеет приоритет и не трогает Qt, иначе `_default_cache_path()` (fail-safe `QStandardPaths.AppDataLocation`; импорт Qt внутри функции); пустая строка/исключение → store disabled, `{}`. Публичный `path` — атрибут, а не property: чтение не меняет состояние.
 2. Открыть `os.open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)` (флаги через `getattr`, fallback для не-POSIX); `fstat`: только `S_ISREG`; прочитать не более `MAX_FILE_BYTES + 1`; больше — `WARNING`, `{}`. Это отсекает symlink/FIFO/устройства и гигантские файлы без загрузки в память.
-3. `json.loads` после `decode("utf-8")`; ошибки — `WARNING` (путь + класс исключения), `{}`.
-4. Проверить `dict`, `version == 1`, `models: dict`; иначе `WARNING`, `{}`.
-5. По каждому провайдеру (лимит): имя — непустая `str` ≤ 256; значение — `list`; каждый элемент — `dict`; `id` — непустая `str` ≤ 1024; `created` — `type(...) is int` (не `bool`); `object == "model"`; `owned_by` — `str` ≤ 256. Ключи вне allowlist отбросить. Невалидные элементы пропустить (счётчик — в `DEBUG`), валидные соседи сохранить.
-6. Вернуть `dict` без пустых списков.
+3. `ModelCacheDocument.from_bytes(raw)`: `decode("utf-8")` + `json.loads` + envelope (`dict`, `version == ModelCacheDocument.VERSION`, `models: dict`). Битый JSON/не-UTF8/recursion → `InvalidDocument("json", cause=…)`; неверный верхний уровень/версия/секция `models` — соответствующие причины. Store маппит причины в прежние WARNING (`load failed for <path> (<class>)`, `top-level JSON is not an object…`, `unsupported schema version…`, `invalid 'models' section…`) и возвращает `{}`.
+4. Конструктор `ModelCacheDocument(models)` санитизирует содержимое: имя провайдера — непустая `str` ≤ 256; значение — `list`; `id` — непустая `str` ≤ 1024; `created` — `type(...) is int` (не `bool`); `object == "model"`; `owned_by` — `str` ≤ 256; ключи вне allowlist отбросить; невалидные элементы пропустить (валидные соседи сохраняются); caps `MAX_PROVIDERS`/`MAX_MODELS_PER_PROVIDER`; пустые провайдеры не попадают. Skip-сообщения — `DEBUG` под `barbaros.model_cache`.
+5. Вернуть `document.models` — санитизированный `dict` без пустых списков.
 
 Запись (`save`):
 
 1. store disabled → `False`.
-2. Санитизировать вход теми же правилами/лимитами (защита от неожиданной формы/будущих полей `any_llm`).
-3. Сериализовать `{"version": 1, "models": ...}` через `json.dumps(..., ensure_ascii=False, allow_nan=False, separators=(",", ":"))`; `UnicodeEncodeError`/`ValueError` → `WARNING`, `False`; превышение `MAX_FILE_BYTES` → `WARNING`, `False`.
+2. `ModelCacheDocument(models)` — санитизация теми же правилами/лимитами (защита от неожиданной формы/будущих полей `any_llm`).
+3. `document.to_bytes(MAX_FILE_BYTES)` — компактный JSON `{"version": VERSION, "models": ...}` (`ensure_ascii=False`, `allow_nan=False`, `separators=(",", ":")`) сразу с проверкой размера. `DocumentTooLarge` → `WARNING` с размерами и путём, `False`; `UnicodeEncodeError`/прочее → `WARNING serialization failed for <path> (<class>)`, `False`.
 4. `path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)`; best-effort ужесточить существующий каталог до `0700` (ошибка — только лог, запись продолжается).
-5. `tempfile.mkstemp(prefix=".models-", suffix=".tmp", dir=parent)`; `os.fchmod(fd, 0o600)`; write/flush/`os.fsync`; close; `os.replace(tmp, path)`; best-effort `fsync` каталога. При любой ошибке — `unlink` временного файла, `WARNING`, `False`; старый файл остаётся целым.
-6. Под `threading.Lock` (см. §4.5). `os.replace` заменяет symlink, а не его цель (проверено); ровно поэтому запись не следует по ссылке.
+5. `tempfile.mkstemp(prefix=".barbaros-", suffix=".tmp", dir=parent)`; `os.fchmod(fd, 0o600)`; write/flush/`os.fsync`; close; `os.replace(tmp, path)`; best-effort `fsync` каталога. При любой ошибке — `unlink` временного файла, `WARNING`, `False`; старый файл остаётся целым.
+6. Под `threading.Lock` (см. §4.5); сериализация — вне лока (порядок снапшотов обеспечивает `RLock` в `ModelManager`). `os.replace` заменяет symlink, а не его цель (проверено); ровно поэтому запись не следует по ссылке.
 
 `fsync` — «Should»: кэш одноразовый, атомарности `replace` достаточно для отсутствия «рваного» чтения; `fsync` дешёвый (запись редкая, ≤4 КБ) и сохраняет кэш при внезапном выключении. Если появятся жалобы на задержки UI — убрать `fsync` первым.
 
@@ -339,7 +350,7 @@ fetch (воркер):
 
 **Unit — `tests/unit/test_model_cache.py`** (store с инжектированным `tmp_path`, без Qt/any_llm):
 
-Файловая механика (пункты 6–9) дополнительно покрыта прямыми тестами `tests/unit/test_atomic_file.py`: лимит и «файл вырос между stat и read», symlink/FIFO/каталог, короткий `write`, падение `fsync`/`replace`, очистка temp, права `0600/0700` при umask `022/077`, ужесточение существующего каталога, NUL в пути, импорт-гигиена.
+Кодек `ModelCacheDocument` покрыт отдельными тестами в `tests/unit/test_model_cache.py`: round-trip и компактный JSON, каждый `InvalidDocument.reason` (json/top_level/version/models, включая `version: true`), сохранение `cause`, `DocumentTooLarge` (size/limit, точная граница), независимость `.models` от входного mapping. Файловая механика (пункты 6–9) дополнительно покрыта прямыми тестами `tests/unit/test_atomic_file.py`: лимит и «файл вырос между stat и read», symlink/FIFO/каталог, короткий `write`, падение `fsync`/`replace`, очистка temp, права `0600/0700` при umask `022/077`, ужесточение существующего каталога, NUL в пути, импорт-гигиена.
 
 1. Round-trip произвольных валидных данных (unicode, пустые списки, allowlist-поля) → `load() == sanitized(save(data))`.
 2. Нет файла/каталога → `{}`, исключений нет, файл не создаётся.
@@ -450,10 +461,42 @@ def _default_cache_path() -> Path | None:      # fail-safe QStandardPaths, од�
     return Path(base) / "models.json" if base else None
 
 
-class ModelCacheStore:
+class DocumentTooLarge(ValueError):
+    def __init__(self, size: int, limit: int): ...
+
+
+class InvalidDocument(ValueError):
+    """reason: "json" | "top_level" | "version" | "models"; cause — исходное исключение."""
+
+
+class ModelCacheDocument:
+    """Валидированное представление и кодек on-disk документа."""
     VERSION = 1
-    MAX_FILE_BYTES = 4 * 1024 * 1024
+    MAX_PROVIDERS = 1000
+    MAX_MODELS_PER_PROVIDER = 10_000
+    MAX_PROVIDER_NAME_LEN = 256
+    MAX_MODEL_ID_LEN = 1024
+    MAX_OWNED_BY_LEN = 256
     ALLOWED_MODEL_KEYS = ("id", "created", "object", "owned_by")
+
+    def __init__(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> None:
+        self._models = self._sanitize(models)      # allowlist + лимиты, копия
+
+    @property
+    def models(self) -> dict[str, list[dict]]: ...
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> ModelCacheDocument:
+        # decode/loads + envelope; ошибки -> InvalidDocument(reason, cause=...)
+        ...
+
+    def to_bytes(self, max_bytes: int) -> bytes:
+        # compact UTF-8 JSON + DocumentTooLarge при превышении
+        ...
+
+
+class ModelCacheStore:
+    MAX_FILE_BYTES = 4 * 1024 * 1024
     path: Path | None
 
     def __init__(self, path: Path | None = None) -> None:
@@ -461,52 +504,34 @@ class ModelCacheStore:
         self._write_lock = threading.Lock()
 
     def load(self) -> dict[str, list[dict]]:
-        try:
-            path = self.path
-            if path is None:
-                return {}
-            raw = _read_regular_file_limited(path, self.MAX_FILE_BYTES)  # O_NOFOLLOW, fstat, cap
-            if raw is None:
-                return {}
-            doc = json.loads(raw.decode("utf-8"))
-            if not isinstance(doc, dict) or doc.get("version") != self.VERSION:
-                logger.warning("Model cache: unsupported schema, ignored: %s", path)
-                return {}
-            models = doc.get("models")
-            if not isinstance(models, dict):
-                logger.warning("Model cache: invalid 'models' section, ignored: %s", path)
-                return {}
-            return self._sanitize(models)
-        except (OSError, ValueError, UnicodeDecodeError, RecursionError) as exc:
-            logger.warning("Model cache: load failed (%r): %s", self.path, exc.__class__.__name__)
+        path = self.path
+        if path is None:
             return {}
+        raw = self._read_payload(path)                 # atomic_file: O_NOFOLLOW, cap
+        if raw is None:
+            return {}
+        return self._parse_payload(path, raw)          # маппинг InvalidDocument -> WARNING
 
-    def save(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> bool:
+    def save(self, models) -> bool:
         path = self.path
         if path is None:
             return False
-        try:
-            doc = {"version": self.VERSION, "models": self._sanitize(models)}
-            payload = json.dumps(doc, ensure_ascii=False, allow_nan=False,
-                                 separators=(",", ":")).encode("utf-8")
-            if len(payload) > self.MAX_FILE_BYTES:
-                logger.warning("Model cache: payload too large, not saved: %s", path)
-                return False
-            with self._write_lock:
-                _atomic_write(path, payload)  # mkstemp 0600 + fsync + os.replace
-            return True
-        except (OSError, ValueError, UnicodeEncodeError, RecursionError) as exc:
-            logger.warning("Model cache: save failed (%s): %s", path, exc.__class__.__name__)
+        payload = self._serialize_payload(path, models)   # document + DocumentTooLarge
+        if payload is None:
             return False
+        return self._write_payload(path, payload)          # lock + atomic_file
+
+    # _read_payload / _parse_payload / _serialize_payload / _write_payload —
+    # fail-safe-границы и логирование с путём; формат и валидация — в документе.
 ```
 
-`_sanitize()` — единая функция для чтения и записи: dict провайдеров, allowlist полей, проверки типов/длин, лимиты. `_atomic_write()` — каталог `0700` (создать/уточнить), `mkstemp` в том же каталоге, `fchmod 0600`, `write`, `fsync`, `replace`, best-effort `fsync` каталога; `unlink` temp при ошибке.
+`_read_payload`/`_write_payload` остаются обёртками над `atomic_file` (fail-safe + логирование); `_parse_payload`/`_serialize_payload` — единственные места, где store знает про кодек: маппинг `InvalidDocument`/`DocumentTooLarge` в прежние WARNING и возврат `{}`/`False`. Санитизация и JSON живут только в `ModelCacheDocument`.
 
 ## 12. Реализация: отклонения и заметки
 
 Реализовано по §4–§5 с тремя осознанными уточнениями:
 
-1. **Строгая валидация при restore.** `Model.model_validate(entry, strict=True)` вместо lenient-режима: pydantic в обычном режиме приводит `created=True` / `1.0` / `"1"` к `int`, и такие записи «воскресали» бы после чтения кэша (см. §3). `strict=True` согласует модель с тем же инвариантом, что проверяет `ModelCacheStore` (`type(value) is int`), и покрывает §7.2 component п. 10.
+1. **Строгая валидация при restore.** `Model.model_validate(entry, strict=True)` вместо lenient-режима: pydantic в обычном режиме приводит `created=True` / `1.0` / `"1"` к `int`, и такие записи «воскресали» бы после чтения кэша (см. §3). `strict=True` согласует модель с тем же инвариантом, что проверяет `ModelCacheDocument` (`type(value) is int`), и покрывает §7.2 component п. 10.
 2. **`ModelManager._persist()` не выпускает исключения наружу** (§7.2 component п. 8): сохранение обёрнуто в `try/except Exception` с `WARNING`. Реальный store fail-safe сам, это защита от регрессий контракта и от подменённой реализации: `set_models`/`remove` продолжают обновлять память и испускать сигналы.
 3. **Отсутствие файла кэша — не WARNING, а DEBUG.** Первый запуск и удалённый кэш — нормальное состояние; WARNING остаётся для ошибок открытия/чтения/схемы (§4.6), чтобы не засорять журнал на каждом старте.
 
@@ -518,6 +543,7 @@ class ModelCacheStore:
 - Путь кэша можно переопределить ключом `model_cache_path` (§4.1): разбор и валидация — в `cache_path_from_config()`; тесты в unit (абсолютный/`~`, относительный, нестрока, неразрешимый `~user`, log-injection) и system (override + restart, fallback при невалидном значении без записи в CWD).
 - Файловая механика вынесена из store в `src/barbaros/atomic_file.py` (`read_regular_file_limited` / `write_bytes_atomic`): store стал политикой, модуль — механизмом, который можно переиспользовать для JSON-стора выбора модели (BAR-01). Логирование осталось под прежними именами/текстами за счёт переданных `logger`/`label`; store дополнительно оборачивает вызовы в fail-safe `try/except` на случай регрессии контракта.
 - Путь резолвится один раз в конструкторе (`_default_cache_path()`, fail-safe), публичный `path` — обычный атрибут, а не property с ленивым сайд-эффектом: чтение ничего не мутирует, нет гонки `_resolved`/`_disabled` между GUI-потоком и воркером. Один вызов `writableLocation` фиксирует `test_path_is_resolved_once_when_the_store_is_created`; fail-safe конструктора при исключении `QStandardPaths` — `test_path_resolution_failure_is_fail_safe`.
+- Формат вынесен в `ModelCacheDocument` (обе стороны: `from_bytes`/`to_bytes`, плюс `VERSION`, allowlist, schema-лимиты и санитизация); `ModelCacheStore` остаётся владельцем пути, файла, лока, fail-safe-границ и логов и маппит `InvalidDocument`/`DocumentTooLarge` в прежние WARNING. Тексты логов, формат и публичные `load`/`save` не менялись; документ покрыт отдельными unit-тестами (round-trip, каждый `InvalidDocument.reason`, `DocumentTooLarge`, независимость снапшота от входного mapping).
 
 ### Release notes (черновик)
 

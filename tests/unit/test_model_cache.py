@@ -20,7 +20,13 @@ from pathlib import Path
 import pytest
 
 from barbaros import model_cache
-from barbaros.model_cache import ModelCacheStore, cache_path_from_config
+from barbaros.model_cache import (
+    DocumentTooLarge,
+    InvalidDocument,
+    ModelCacheDocument,
+    ModelCacheStore,
+    cache_path_from_config,
+)
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX file semantics")
 
@@ -287,8 +293,8 @@ def test_invalid_model_entries_are_skipped_valid_neighbours_kept(
 
 def test_length_limits_accept_exact_boundary_values(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
-    provider_name = "p" * store.MAX_PROVIDER_NAME_LEN
-    entry = _model("m" * store.MAX_MODEL_ID_LEN, owned_by="o" * store.MAX_OWNED_BY_LEN)
+    provider_name = "p" * ModelCacheDocument.MAX_PROVIDER_NAME_LEN
+    entry = _model("m" * ModelCacheDocument.MAX_MODEL_ID_LEN, owned_by="o" * ModelCacheDocument.MAX_OWNED_BY_LEN)
     _write_document(store.path, {provider_name: [entry]})
 
     assert store.load() == {provider_name: [entry]}
@@ -391,9 +397,9 @@ def test_file_of_exact_max_size_is_still_read(tmp_path: Path) -> None:
 
 def test_save_refuses_payload_larger_than_limit(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
-    huge_id = "m" * store.MAX_MODEL_ID_LEN
+    huge_id = "m" * ModelCacheDocument.MAX_MODEL_ID_LEN
     data = {
-        "p": [_model(huge_id, created=i) for i in range(store.MAX_MODELS_PER_PROVIDER)]
+        "p": [_model(huge_id, created=i) for i in range(ModelCacheDocument.MAX_MODELS_PER_PROVIDER)]
     }
 
     assert store.save(data) is False
@@ -864,10 +870,10 @@ def test_unexpected_internal_error_is_fail_safe(
     store = _make_store(tmp_path)
     _write_document(store.path, {"p": [_model()]})
 
-    def broken_sanitize(models: object) -> dict[str, list[dict]]:
+    def broken_sanitize(self, models: object) -> dict[str, list[dict]]:
         raise RuntimeError("unexpected bug")
 
-    monkeypatch.setattr(store, "_sanitize", broken_sanitize)
+    monkeypatch.setattr(ModelCacheDocument, "_sanitize", broken_sanitize)
     with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
         assert store.load() == {}
 
@@ -880,6 +886,106 @@ def test_unexpected_internal_error_is_fail_safe(
         str(store.path) in message and "RuntimeError" in message
         for message in messages
     )
+
+
+def test_write_helper_regression_is_fail_safe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = _make_store(tmp_path)
+
+    def broken_write(*args: object, **kwargs: object) -> bool:
+        raise RuntimeError("unexpected bug")
+
+    monkeypatch.setattr(model_cache, "write_bytes_atomic", broken_write)
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert store.save({"p": [_model()]}) is False
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "barbaros.model_cache"
+    ]
+    assert any(
+        str(store.path) in message and "RuntimeError" in message
+        for message in messages
+    )
+
+
+# --- ModelCacheDocument: codec and schema policy ---------------------------
+
+
+def test_document_round_trip_sanitizes_and_encodes() -> None:
+    document = ModelCacheDocument(
+        {
+            "ollama": [
+                _model("m1"),
+                _model("m2", extra_field="dropped"),
+                {"id": "invalid-entry"},
+            ],
+            "empty": [],
+        }
+    )
+
+    payload = document.to_bytes(max_bytes=1024)
+    decoded = json.loads(payload.decode("utf-8"))
+
+    assert decoded == {
+        "version": ModelCacheDocument.VERSION,
+        "models": {"ollama": [_model("m1"), _model("m2")]},
+    }
+    assert b", " not in payload and b": " not in payload  # compact separators
+    assert ModelCacheDocument.from_bytes(payload).models == decoded["models"]
+
+
+@pytest.mark.parametrize(
+    ("payload", "reason"),
+    [
+        pytest.param(b"{not json", "json", id="invalid-json"),
+        pytest.param(b"\xff\xfe", "json", id="not-utf8"),
+        pytest.param(b"[]", "top_level", id="top-level-list"),
+        pytest.param(b'{"version": 2, "models": {}}', "version", id="unknown-version"),
+        pytest.param(b'{"version": true, "models": {}}', "version", id="bool-version"),
+        pytest.param(b'{"version": 1, "models": []}', "models", id="models-not-dict"),
+    ],
+)
+def test_document_from_bytes_rejects_invalid_documents(
+    payload: bytes, reason: str
+) -> None:
+    with pytest.raises(InvalidDocument) as excinfo:
+        ModelCacheDocument.from_bytes(payload)
+
+    assert excinfo.value.reason == reason
+
+
+def test_document_from_bytes_keeps_the_cause_for_logging() -> None:
+    with pytest.raises(InvalidDocument) as excinfo:
+        ModelCacheDocument.from_bytes(b"{not json")
+
+    assert isinstance(excinfo.value.cause, json.JSONDecodeError)
+
+
+def test_document_to_bytes_enforces_the_byte_limit() -> None:
+    document = ModelCacheDocument({"p": [_model("m1")]})
+    payload = document.to_bytes(max_bytes=1024)
+
+    assert document.to_bytes(max_bytes=len(payload)) == payload
+
+    with pytest.raises(DocumentTooLarge) as excinfo:
+        document.to_bytes(max_bytes=len(payload) - 1)
+
+    assert excinfo.value.size == len(payload)
+    assert excinfo.value.limit == len(payload) - 1
+
+
+def test_document_models_does_not_alias_the_input() -> None:
+    entries = [_model("m1")]
+    source = {"p": entries}
+    document = ModelCacheDocument(source)
+
+    entries[0]["id"] = "mutated"
+    source["new"] = [_model("m2")]
+
+    assert document.models == {"p": [_model("m1")]}
 
 
 # --- logging contract (§4.6): warning details and log-injection safety -----
@@ -902,6 +1008,37 @@ def test_load_warning_contains_path_and_exception_class(
     assert any(
         str(store.path) in message and "JSONDecodeError" in message
         for message in messages
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        (b"[]", "top-level JSON is not an object"),
+        (b'{"version": 2, "models": {}}', "unsupported schema version"),
+        (b'{"version": 1, "models": []}', "invalid 'models' section"),
+    ],
+    ids=["top-level", "version", "models"],
+)
+def test_load_logs_specific_schema_warnings(
+    tmp_path: Path,
+    payload: bytes,
+    expected: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = _make_store(tmp_path)
+    _write_raw(store.path, payload)
+
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert store.load() == {}
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "barbaros.model_cache"
+    ]
+    assert any(
+        expected in message and str(store.path) in message for message in messages
     )
 
 
@@ -948,40 +1085,40 @@ def test_save_failure_log_does_not_leak_file_content(
 
 def test_save_caps_providers_deterministically(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
-    providers = {f"p{i:04d}": [_model(f"m{i}")] for i in range(store.MAX_PROVIDERS + 1)}
+    providers = {f"p{i:04d}": [_model(f"m{i}")] for i in range(ModelCacheDocument.MAX_PROVIDERS + 1)}
 
     assert store.save(providers) is True
     loaded = store.load()
-    assert len(loaded) == store.MAX_PROVIDERS
-    assert list(loaded) == [f"p{i:04d}" for i in range(store.MAX_PROVIDERS)]
+    assert len(loaded) == ModelCacheDocument.MAX_PROVIDERS
+    assert list(loaded) == [f"p{i:04d}" for i in range(ModelCacheDocument.MAX_PROVIDERS)]
 
 
 def test_load_caps_providers_deterministically(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
-    providers = {f"p{i:04d}": [_model(f"m{i}")] for i in range(store.MAX_PROVIDERS + 1)}
+    providers = {f"p{i:04d}": [_model(f"m{i}")] for i in range(ModelCacheDocument.MAX_PROVIDERS + 1)}
     _write_document(store.path, providers)  # bypasses save-side sanitizing
 
     loaded = store.load()
-    assert len(loaded) == store.MAX_PROVIDERS
-    assert f"p{store.MAX_PROVIDERS:04d}" not in loaded
+    assert len(loaded) == ModelCacheDocument.MAX_PROVIDERS
+    assert f"p{ModelCacheDocument.MAX_PROVIDERS:04d}" not in loaded
 
 
 def test_save_caps_models_per_provider_deterministically(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
-    models = [_model(f"m{i:05d}") for i in range(store.MAX_MODELS_PER_PROVIDER + 2)]
+    models = [_model(f"m{i:05d}") for i in range(ModelCacheDocument.MAX_MODELS_PER_PROVIDER + 2)]
 
     assert store.save({"p": models}) is True
     loaded = store.load()
-    assert len(loaded["p"]) == store.MAX_MODELS_PER_PROVIDER
+    assert len(loaded["p"]) == ModelCacheDocument.MAX_MODELS_PER_PROVIDER
     assert loaded["p"][0]["id"] == "m00000"
-    assert loaded["p"][-1]["id"] == f"m{store.MAX_MODELS_PER_PROVIDER - 1:05d}"
+    assert loaded["p"][-1]["id"] == f"m{ModelCacheDocument.MAX_MODELS_PER_PROVIDER - 1:05d}"
 
 
 def test_load_caps_models_per_provider_deterministically(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
-    models = [_model(f"m{i:05d}") for i in range(store.MAX_MODELS_PER_PROVIDER + 2)]
+    models = [_model(f"m{i:05d}") for i in range(ModelCacheDocument.MAX_MODELS_PER_PROVIDER + 2)]
     _write_document(store.path, {"p": models})  # bypasses save-side sanitizing
 
     loaded = store.load()
-    assert len(loaded["p"]) == store.MAX_MODELS_PER_PROVIDER
-    assert loaded["p"][-1]["id"] == f"m{store.MAX_MODELS_PER_PROVIDER - 1:05d}"
+    assert len(loaded["p"]) == ModelCacheDocument.MAX_MODELS_PER_PROVIDER
+    assert loaded["p"][-1]["id"] == f"m{ModelCacheDocument.MAX_MODELS_PER_PROVIDER - 1:05d}"

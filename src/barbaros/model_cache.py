@@ -14,9 +14,10 @@ Invariants:
   ``dict[str, list[dict]]`` and knows nothing about ``Model``, ``QSettings``,
   keyring, or ``any_llm``. ``QStandardPaths`` is imported lazily only when the
   default path is resolved.
-* This module is policy (path, JSON schema, allowlist, limits, logging
-  context); file mechanics (no-symlink capped reads, atomic replace) live in
-  :mod:`barbaros.atomic_file`.
+* The on-disk format (version, allowlist, limits, serialization and
+  deserialization) lives in :class:`ModelCacheDocument`; the store owns the
+  path, file mechanics (:mod:`barbaros.atomic_file`), the write lock, the
+  fail-safe boundaries and the logging context.
 """
 
 from __future__ import annotations
@@ -119,20 +120,39 @@ def _default_cache_path() -> Path | None:
     return Path(base) / _MODELS_FILENAME
 
 
-class ModelCacheStore:
-    """Fail-safe JSON store for the per-provider model cache.
+class DocumentTooLarge(ValueError):
+    """The encoded document exceeds the byte limit requested by the store."""
 
-    The store knows only plain ``dict[str, list[dict]]``: no Qt, no keyring, no
-    LLM SDK. ``load`` and ``save`` never raise; every failure is logged and
-    reported as an empty cache / ``False``.
+    def __init__(self, size: int, limit: int) -> None:
+        self.size = size
+        self.limit = limit
+        super().__init__(f"{size} > {limit} bytes")
 
-    ``path`` is resolved once in the constructor (an explicitly passed path wins
-    and never touches Qt) and is not modified afterwards; ``None`` means the
-    store is disabled because the default location is unavailable.
+
+class InvalidDocument(ValueError):
+    """The bytes are not a valid cache document.
+
+    ``reason`` is a stable machine-readable code; ``cause`` preserves the
+    underlying decode/parse exception for the ``"json"`` case, so the store can
+    keep logging the original exception class name.
+    """
+
+    def __init__(self, reason: str, *, cause: BaseException | None = None) -> None:
+        self.reason = reason
+        self.cause = cause
+        super().__init__(reason)
+
+
+class ModelCacheDocument:
+    """Validated representation and codec of the on-disk model cache document.
+
+    Owns the schema policy (version, allowlist, limits, sanitization) and both
+    directions of the file format. It knows nothing about paths, files, locks
+    or fallback logging: the store maps its typed errors to the usual WARNINGs.
+    Instances are sanitized snapshots; the input mapping is never referenced.
     """
 
     VERSION = 1
-    MAX_FILE_BYTES = 4 * 1024 * 1024
     MAX_PROVIDERS = 1000
     MAX_MODELS_PER_PROVIDER = 10_000
     MAX_PROVIDER_NAME_LEN = 256
@@ -140,121 +160,53 @@ class ModelCacheStore:
     MAX_OWNED_BY_LEN = 256
     ALLOWED_MODEL_KEYS = ("id", "created", "object", "owned_by")
 
-    path: Path | None
+    def __init__(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> None:
+        self._models = self._sanitize(models)
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = Path(path) if path is not None else _default_cache_path()
-        self._write_lock = threading.Lock()
+    @property
+    def models(self) -> dict[str, list[dict]]:
+        """Sanitized ``{provider: [model entry, ...]}`` snapshot."""
+        return self._models
 
-    def load(self) -> dict[str, list[dict]]:
-        """Return the sanitized cache; ``{}`` for any missing/invalid file."""
-        path = self.path
-        if path is None:
-            return {}
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> ModelCacheDocument:
+        """Decode and validate a cache document stored as UTF-8 JSON bytes.
 
-        raw = self._read_payload(path)
-        if raw is None:
-            return {}
-
-        return self._parse_payload(path, raw)
-
-    def save(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> bool:
-        """Atomically persist the sanitized snapshot; ``False`` on any failure."""
-        path = self.path
-        if path is None:
-            return False
-
-        try:
-            document = {"version": self.VERSION, "models": self._sanitize(models)}
-            payload = json.dumps(
-                document,
-                ensure_ascii=False,
-                allow_nan=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        except Exception as exc:  # Fail-safe boundary: errors never propagate.
-            logger.warning(
-                "Model cache: serialization failed for %r (%s)",
-                path,
-                exc.__class__.__name__,
-            )
-            return False
-
-        if len(payload) > self.MAX_FILE_BYTES:
-            logger.warning(
-                "Model cache: payload too large (%d > %d bytes), not saved: %r",
-                len(payload),
-                self.MAX_FILE_BYTES,
-                path,
-            )
-            return False
-
-        try:
-            with self._write_lock:
-                return write_bytes_atomic(
-                    path,
-                    payload,
-                    logger=logger,
-                    label="Model cache",
-                )
-        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
-            logger.warning(
-                "Model cache: save failed for %r (%s)", path, exc.__class__.__name__
-            )
-            return False
-
-    def _read_payload(self, path: Path) -> bytes | None:
-        """Read the cache bytes; ``None`` when the file is absent or unusable."""
-        try:
-            return read_regular_file_limited(
-                path,
-                self.MAX_FILE_BYTES,
-                logger=logger,
-                label="Model cache",
-            )
-        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
-            logger.warning(
-                "Model cache: read failed for %r (%s)", path, exc.__class__.__name__
-            )
-            return None
-
-    def _parse_payload(self, path: Path, raw: bytes) -> dict[str, list[dict]]:
-        """Decode, validate and sanitize the payload; ``{}`` for invalid content."""
+        Raises:
+            InvalidDocument: with reason ``"json"`` (decode/parse failure),
+                ``"top_level"``, ``"version"`` or ``"models"``.
+        """
         try:
             document = json.loads(raw.decode("utf-8"))
+        except (ValueError, RecursionError) as exc:
+            raise InvalidDocument("json", cause=exc) from exc
 
-            models = self._validated_models(path, document)
-            if models is None:
-                return {}
-
-            return self._sanitize(models)
-        except Exception as exc:  # Fail-safe boundary: errors never propagate.
-            logger.warning(
-                "Model cache: load failed for %r (%s)", path, exc.__class__.__name__
-            )
-            return {}
-
-    def _validated_models(self, path: Path, document: object) -> dict | None:
-        """Check the document envelope; ``None`` when it is not a cache document."""
         if not isinstance(document, dict):
-            logger.warning(
-                "Model cache: top-level JSON is not an object, ignored: %r", path
-            )
-            return None
+            raise InvalidDocument("top_level")
 
-        if (
-            type(document.get("version")) is not int
-            or document.get("version") != self.VERSION
-        ):
-            logger.warning("Model cache: unsupported schema version, ignored: %r", path)
-            return None
+        version = document.get("version")
+        if type(version) is not int or version != cls.VERSION:
+            raise InvalidDocument("version")
 
         models = document.get("models")
         if not isinstance(models, dict):
-            logger.warning("Model cache: invalid 'models' section, ignored: %r", path)
-            return None
+            raise InvalidDocument("models")
 
-        return models
+        return cls(models)
+
+    def to_bytes(self, max_bytes: int) -> bytes:
+        """Encode as compact UTF-8 JSON; raise ``DocumentTooLarge`` over the limit."""
+        payload = json.dumps(
+            {"version": self.VERSION, "models": self._models},
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        if len(payload) > max_bytes:
+            raise DocumentTooLarge(size=len(payload), limit=max_bytes)
+
+        return payload
 
     def _sanitize(self, models: object) -> dict[str, list[dict]]:
         """Apply the shared allowlist/limits; identical on load and save."""
@@ -317,3 +269,145 @@ class ModelCacheStore:
         if not isinstance(owned_by, str) or len(owned_by) > self.MAX_OWNED_BY_LEN:
             return None
         return {key: entry[key] for key in self.ALLOWED_MODEL_KEYS}
+
+
+_INVALID_DOCUMENT_MESSAGES = {
+    "top_level": "Model cache: top-level JSON is not an object, ignored: %r",
+    "version": "Model cache: unsupported schema version, ignored: %r",
+    "models": "Model cache: invalid 'models' section, ignored: %r",
+}
+
+
+class ModelCacheStore:
+    """Fail-safe JSON store for the per-provider model cache.
+
+    The store owns the path, file mechanics (via :mod:`barbaros.atomic_file`),
+    the write lock, the fail-safe boundaries and the logging context; the
+    on-disk format itself is :class:`ModelCacheDocument`. ``load`` and ``save``
+    never raise; every failure is logged and reported as an empty cache /
+    ``False``.
+
+    ``path`` is resolved once in the constructor (an explicitly passed path wins
+    and never touches Qt) and is not modified afterwards; ``None`` means the
+    store is disabled because the default location is unavailable.
+    """
+
+    MAX_FILE_BYTES = 4 * 1024 * 1024
+
+    path: Path | None
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = Path(path) if path is not None else _default_cache_path()
+        self._write_lock = threading.Lock()
+
+    def load(self) -> dict[str, list[dict]]:
+        """Return the sanitized cache; ``{}`` for any missing/invalid file."""
+        path = self.path
+        if path is None:
+            return {}
+
+        raw = self._read_payload(path)
+        if raw is None:
+            return {}
+
+        return self._parse_payload(path, raw)
+
+    def save(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> bool:
+        """Atomically persist the sanitized snapshot; ``False`` on any failure."""
+        path = self.path
+        if path is None:
+            return False
+
+        payload = self._serialize_payload(path, models)
+        if payload is None:
+            return False
+
+        return self._write_payload(path, payload)
+
+    def _read_payload(self, path: Path) -> bytes | None:
+        """Read the cache bytes; ``None`` when the file is absent or unusable."""
+        try:
+            return read_regular_file_limited(
+                path,
+                self.MAX_FILE_BYTES,
+                logger=logger,
+                label="Model cache",
+            )
+        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
+            logger.warning(
+                "Model cache: read failed for %r (%s)", path, exc.__class__.__name__
+            )
+            return None
+
+    def _parse_payload(self, path: Path, raw: bytes) -> dict[str, list[dict]]:
+        """Deserialize via the document; map its errors to the usual WARNINGs."""
+        try:
+            return ModelCacheDocument.from_bytes(raw).models
+        except InvalidDocument as exc:
+            if exc.reason == "json":
+                logger.warning(
+                    "Model cache: load failed for %r (%s)",
+                    path,
+                    (exc.cause or exc).__class__.__name__,
+                )
+            else:
+                message = _INVALID_DOCUMENT_MESSAGES.get(exc.reason)
+                if message is None:
+                    logger.warning(
+                        "Model cache: load failed for %r (%s)",
+                        path,
+                        exc.__class__.__name__,
+                    )
+                else:
+                    logger.warning(message, path)
+            return {}
+        except Exception as exc:  # Fail-safe boundary: errors never propagate.
+            logger.warning(
+                "Model cache: load failed for %r (%s)", path, exc.__class__.__name__
+            )
+            return {}
+
+    def _serialize_payload(
+        self,
+        path: Path,
+        models: Mapping[str, Sequence[Mapping[str, object]]],
+    ) -> bytes | None:
+        """Serialize via the document; ``None`` with a WARNING on failure."""
+        try:
+            document = ModelCacheDocument(models)
+            return document.to_bytes(max_bytes=self.MAX_FILE_BYTES)
+        except DocumentTooLarge as exc:
+            logger.warning(
+                "Model cache: payload too large (%d > %d bytes), not saved: %r",
+                exc.size,
+                exc.limit,
+                path,
+            )
+            return None
+        except Exception as exc:  # Fail-safe boundary: errors never propagate.
+            logger.warning(
+                "Model cache: serialization failed for %r (%s)",
+                path,
+                exc.__class__.__name__,
+            )
+            return None
+
+    def _write_payload(self, path: Path, payload: bytes) -> bool:
+        """Atomically write a serialized payload.
+
+        Serialization runs outside the lock: snapshot ordering is guaranteed by
+        ModelManager's RLock, this lock only serializes file replacements.
+        """
+        try:
+            with self._write_lock:
+                return write_bytes_atomic(
+                    path,
+                    payload,
+                    logger=logger,
+                    label="Model cache",
+                )
+        except Exception as exc:  # Defensive: the helper is fail-safe by contract.
+            logger.warning(
+                "Model cache: save failed for %r (%s)", path, exc.__class__.__name__
+            )
+            return False
