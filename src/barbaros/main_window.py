@@ -41,10 +41,16 @@ class MainWindow(QMainWindow):
         self.target_language_list = []
         self.restore_target_languages()
 
-        model_cache = ModelCacheStore(
-            path=cache_path_from_config(self.app.settings.value(SETTINGS_KEY_MODEL_CACHE))
+        configured_cache_path = cache_path_from_config(
+            self.app.settings.value(SETTINGS_KEY_MODEL_CACHE)
         )
-        print(f"Model cache filepath: {model_cache.path}")
+        model_cache = ModelCacheStore(
+            path=configured_cache_path,
+            # A user-configured path may be in a shared directory: only the
+            # app-owned default directory may be forced to 0700.
+            tighten_directory=configured_cache_path is None,
+        )
+        print(f"Model cache filepath: {str(model_cache.path)!r}")
         self.model_manager = ModelManager(cache=model_cache)
         self.model_manager.error.connect(self._show_provider_error)
         past_providers = self.settings.valueFromJson(

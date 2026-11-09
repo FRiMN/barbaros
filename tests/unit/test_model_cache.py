@@ -1122,3 +1122,17 @@ def test_load_caps_models_per_provider_deterministically(tmp_path: Path) -> None
     loaded = store.load()
     assert len(loaded["p"]) == ModelCacheDocument.MAX_MODELS_PER_PROVIDER
     assert loaded["p"][-1]["id"] == f"m{ModelCacheDocument.MAX_MODELS_PER_PROVIDER - 1:05d}"
+
+
+@POSIX_ONLY
+def test_override_path_does_not_tighten_existing_directory(tmp_path: Path) -> None:
+    """``model_cache_path`` may point into a shared directory; leave its mode."""
+    directory = tmp_path / "shared"
+    directory.mkdir()
+    os.chmod(directory, 0o755)
+    store = ModelCacheStore(directory / "models.json", tighten_directory=False)
+
+    assert store.save({"p": [_model()]}) is True
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o755
+    assert stat.S_IMODE(store.path.stat().st_mode) == 0o600

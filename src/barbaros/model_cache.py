@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 
 from barbaros.atomic_file import read_regular_file_limited, write_bytes_atomic
@@ -160,7 +160,7 @@ class ModelCacheDocument:
     MAX_OWNED_BY_LEN = 256
     ALLOWED_MODEL_KEYS = ("id", "created", "object", "owned_by")
 
-    def __init__(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> None:
+    def __init__(self, models: Mapping[str, list[Mapping[str, object]]]) -> None:
         self._models = self._sanitize(models)
 
     @property
@@ -299,15 +299,28 @@ class ModelCacheStore:
     ``path`` is resolved once in the constructor (an explicitly passed path wins
     and never touches Qt) and is not modified afterwards; ``None`` means the
     store is disabled because the default location is unavailable.
+    ``tighten_directory=False`` keeps the mode of an existing parent directory
+    (``model_cache_path`` may point into a shared directory); the cache file
+    itself is always written with ``0600``.
     """
 
     MAX_FILE_BYTES = 4 * 1024 * 1024
 
     path: Path | None
 
-    def __init__(self, path: Path | None = None) -> None:
+    def __init__(
+        self,
+        path: Path | None = None,
+        *,
+        tighten_directory: bool = True,
+    ) -> None:
         self.path = Path(path) if path is not None else _default_cache_path()
         self._write_lock = threading.Lock()
+        # Only the app-owned default location may have its directory forced to
+        # 0700.  A user-configured path can point at an existing shared
+        # directory, where changing the mode would be a destructive surprise;
+        # the cache file itself is still written with 0600.
+        self._tighten_directory = tighten_directory
 
     def load(self) -> dict[str, list[dict]]:
         """Return the sanitized cache; ``{}`` for any missing/invalid file."""
@@ -321,7 +334,7 @@ class ModelCacheStore:
 
         return self._parse_payload(path, raw)
 
-    def save(self, models: Mapping[str, Sequence[Mapping[str, object]]]) -> bool:
+    def save(self, models: Mapping[str, list[Mapping[str, object]]]) -> bool:
         """Atomically persist the sanitized snapshot; ``False`` on any failure."""
         path = self.path
         if path is None:
@@ -381,7 +394,7 @@ class ModelCacheStore:
     def _serialize_payload(
         self,
         path: Path,
-        models: Mapping[str, Sequence[Mapping[str, object]]],
+        models: Mapping[str, list[Mapping[str, object]]],
     ) -> bytes | None:
         """Serialize via the document; ``None`` with a WARNING on failure."""
         try:
@@ -418,6 +431,7 @@ class ModelCacheStore:
                     payload,
                     logger=logger,
                     label="Model cache",
+                    tighten_directory=self._tighten_directory,
                 )
         except Exception as exc:  # Defensive: the helper is fail-safe by contract.
             logger.warning(

@@ -196,14 +196,27 @@ def write_bytes_atomic(
     *,
     logger: logging.Logger,
     label: str = "File",
+    tighten_directory: bool = True,
 ) -> bool:
     """Atomically and durably replace ``path`` with ``payload``.
 
     Never raises.  Returns ``False`` (after logging) on any failure; the
     previous file content is left intact and the temporary file is removed.
+
+    ``tighten_directory`` restricts the parent directory to ``0700`` (best
+    effort).  Callers must disable it when the parent is not owned by the
+    application (for example a user-configured path in a shared directory):
+    the file itself is always written with ``0600``, but changing an existing
+    shared directory's mode would be a destructive side effect.
     """
     try:
-        _atomic_write(path, payload, logger=logger, label=label)
+        _atomic_write(
+            path,
+            payload,
+            logger=logger,
+            label=label,
+            tighten_directory=tighten_directory,
+        )
     except Exception as exc:  # Fail-safe boundary: never propagate.
         logger.warning("%s: save failed for %r (%s)", label, path, exc.__class__.__name__)
         return False
@@ -273,11 +286,13 @@ def _atomic_write(
     *,
     logger: logging.Logger,
     label: str,
+    tighten_directory: bool,
 ) -> None:
     """Write ``payload`` to ``path`` atomically, keeping the old file on error."""
     parent = path.parent
     parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    _tighten_directory(parent, logger=logger, label=label)
+    if tighten_directory:
+        _tighten_directory(parent, logger=logger, label=label)
 
     fd, temp_name = tempfile.mkstemp(prefix=".barbaros-", suffix=".tmp", dir=parent)
     temp_path = Path(temp_name)

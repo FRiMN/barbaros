@@ -325,3 +325,26 @@ def test_module_imports_no_qt_keyring_or_llm_sdk() -> None:
     assert not [
         name for name in imported if name.startswith(forbidden)
     ], imported
+
+
+@POSIX_ONLY
+def test_directory_is_not_tightened_when_disabled(tmp_path: Path) -> None:
+    """A user-configured path must not change a shared directory's mode."""
+    directory = tmp_path / "shared"
+    directory.mkdir(mode=0o755)
+    os.chmod(directory, 0o755)
+    path = directory / "data.json"
+
+    assert (
+        write_bytes_atomic(
+            path,
+            b"new",
+            logger=LOGGER,
+            label=LABEL,
+            tighten_directory=False,
+        )
+        is True
+    )
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o755
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
