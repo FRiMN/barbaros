@@ -53,7 +53,7 @@ process), so every access is treated as untrusted input (BAR-09, BAR-14):
 Non-goals: this module does not fix BAR-01 (pickle), does not validate config
 values or payload schemas, and cannot stop a same-uid process from modifying
 the file — it only guarantees that untrusted file *mechanics* stay safe.  See
-``docs/model-cache-storage.md`` §4.6 and ``docs/security/owasp-audit.md``.
+``docs/model-cache-storage.md`` §4.6.
 """
 
 from __future__ import annotations

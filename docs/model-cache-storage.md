@@ -1,7 +1,7 @@
 # Кэш списка моделей: вынос из QSettings в отдельный JSON-файл
 
 **Статус:** реализовано (этапы 1–3 и переопределение пути в §4.1, см. §12); PR ещё не смержен.
-**Аудит:** [docs/security/owasp-audit.md](security/owasp-audit.md) — BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8.
+**Аудит:** BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8 — идентификаторы находок отдельного OWASP-аудита (в этот PR не входит).
 **Затрагиваемые файлы:** новые `src/barbaros/model_cache.py` и `src/barbaros/atomic_file.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/unit/test_atomic_file.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`); `README.md`.
 
 ## 1. Цель
