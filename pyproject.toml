@@ -66,6 +66,9 @@ barbaros = ["i18n/*.qm", "i18n/*.ts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The NFR timing tests are opt-in: their budgets are generous but would make
+# the default suite slow and flaky on loaded machines. Run with `-m slow`.
+addopts = "-m 'not slow'"
 markers = [
     "slow: long-running and non-functional (timing/memory) tests",
 ]
