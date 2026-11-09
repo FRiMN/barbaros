@@ -13,7 +13,7 @@ from any_llm import AnyLLM, LLMProvider
 from any_llm.types.model import Model
 from dataclasses_json import dataclass_json
 from psygnal import Signal
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QObject, Qt, QThread, Slot
 
 from barbaros.security import KeySecurityManager
 
@@ -71,6 +71,26 @@ def _short_repr(value: object, limit: int = 64) -> str:
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
 
 
+class _FetchResultsDispatcher(QObject):
+    """Deliver worker results to the thread that owns the ``ModelManager``.
+
+    ``QThread.terminate()`` does not release Python locks held by the killed
+    thread, so a worker must never call back into the manager: if it were
+    terminated inside ``set_models``/``_persist``, the ``RLock`` (or the store's
+    write lock) would stay locked forever.  This object is created in the
+    manager's thread, and the queued connection moves result handling and the
+    cache write there; worker threads only emit the signal.
+    """
+
+    def __init__(self, manager: ModelManager) -> None:
+        super().__init__()
+        self._manager = manager
+
+    @Slot(ProviderMeta, str)
+    def on_finished(self, provider: ProviderMeta, marshaled_models: str) -> None:
+        self._manager._on_fetching_finished(provider, marshaled_models)
+
+
 class ModelManager(dict):
     """
     Manager for handling LLM providers and their models.
@@ -98,6 +118,7 @@ class ModelManager(dict):
         self._cache = cache
         self._lock = threading.RLock()
         self._fetching_models_workers = {}
+        self._fetch_results = _FetchResultsDispatcher(self)
 
     @staticmethod
     def default_providers() -> list[ProviderMeta]:
@@ -113,7 +134,13 @@ class ModelManager(dict):
         if cache_policy is CachePolicy.RESTORE and self._cache is not None:
             # Read outside the lock: disk I/O must not block mutations, and the
             # store is safe for concurrent load/save.
-            cached = self._cache.load().get(provider.name, [])
+            try:
+                cached = self._cache.load().get(provider.name, [])
+            except Exception:
+                # The store contract says load() never raises; keep startup
+                # fail-safe even if a substitute store breaks that contract.
+                logger.warning("ModelManager: loading model cache failed", exc_info=True)
+                cached = []
             models = self._parse_models(cached, provider.name)
 
         with self._lock:
@@ -201,7 +228,10 @@ class ModelManager(dict):
         thread.started.connect(self._on_started_thread)
         thread.started.connect(worker.run)
 
-        worker.finished.connect(self._on_fetching_finished)
+        worker.finished.connect(
+            self._fetch_results.on_finished,
+            Qt.ConnectionType.QueuedConnection,
+        )
         worker.error.connect(self._on_fetching_error)
         thread.destroyed.connect(partial(self._remove_worker, provider.meta.name))
 
@@ -228,11 +258,20 @@ class ModelManager(dict):
         self.set_models(provider, models)
 
     def set_models(self, provider: ProviderMeta | str, models: Sequence[Model]):
+        name = provider if isinstance(provider, str) else provider.name
         with self._lock:
-            client: ProviderClient = self[provider]
+            client = super().get(name)
+            if client is None:
+                # A fetch may finish after the provider was removed/replaced;
+                # its result must not resurrect the provider or crash the slot.
+                logger.debug(
+                    "ModelManager: ignoring models for removed provider %s",
+                    _short_repr(name),
+                )
+                return
             client.models = models
             # Full snapshot under the lock: the last save always reflects the
-            # newest in-memory state, even with concurrent workers.
+            # newest in-memory state, even with concurrent callers.
             self._persist()
         self.loaded_list_models.emit()
 

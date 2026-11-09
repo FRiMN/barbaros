@@ -13,6 +13,7 @@ from copy import deepcopy
 import pytest
 from any_llm import LLMProvider
 from any_llm.types.model import Model
+from PySide6.QtCore import QObject, Signal
 
 from barbaros.model_manager import CachePolicy, ModelManager, ProviderMeta
 
@@ -403,3 +404,71 @@ def test_default_providers_returns_fresh_list_of_fresh_instances():
 
     assert second[0].name == "ollama"
     assert len(ModelManager.default_providers()) == 1
+
+
+# --- thread hand-off --------------------------------------------------------
+
+
+def test_fetch_results_are_applied_in_the_manager_thread(monkeypatch, wait_until):
+    """Worker results are queued to the manager's thread, never applied in the worker.
+
+    This is what keeps ``set_models``/``_persist`` safe from ``QThread.terminate()``:
+    a terminated worker holding a Python lock would leak it forever.
+    """
+    import barbaros.workers as workers
+
+    applied_in: list[str] = []
+
+    class FakeWorker(QObject):
+        finished = Signal(ProviderMeta, str)
+        error = Signal(ProviderMeta, str)
+
+        def __init__(self, provider):
+            super().__init__()
+            self.provider = provider.meta
+
+        def run(self):
+            self.finished.emit(self.provider, json.dumps([cache_entry("fetched")]))
+
+        def connect_terminate(self, thread):
+            for signal in (self.finished, self.error):
+                signal.connect(self.deleteLater)
+                signal.connect(thread.quit)
+
+    monkeypatch.setattr(workers, "ListModelWorker", FakeWorker)
+    manager = ModelManager(cache=FakeStore())
+    manager.add(P1)
+    original_set_models = manager.set_models
+
+    def recording_set_models(*args, **kwargs):
+        applied_in.append(threading.current_thread().name)
+        return original_set_models(*args, **kwargs)
+
+    monkeypatch.setattr(manager, "set_models", recording_set_models)
+
+    manager._start_fetching_models(manager[P1])
+
+    assert wait_until(lambda: bool(manager[P1].models))
+    assert applied_in == [threading.current_thread().name]
+    assert [model.id for model in manager[P1].models] == ["fetched"]
+
+    manager.shutdown()
+
+
+def test_set_models_for_removed_provider_is_ignored():
+    manager = ModelManager()
+    manager.add(P1)
+    manager.remove("p1")
+
+    manager.set_models(P1, [make_model("late")])
+
+    assert "p1" not in manager
+
+
+def test_restore_load_failure_is_fail_safe():
+    store = FakeStore(raise_on_load=True)
+    manager = ModelManager(cache=store)
+
+    manager.add(P1, cache_policy=CachePolicy.RESTORE)
+
+    assert manager[P1].models == []
