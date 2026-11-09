@@ -260,6 +260,8 @@ next start without querying every provider:
   empty, relative or non-string values are ignored (with a warning) and the default
   location is used. The cache is updated by atomically replacing that file, so point
   the setting at a dedicated cache file, not at an existing file you want to keep.
+  The parent directory of a custom path is left as is; the cache file itself is still
+  created with `0600` permissions.
 
 ## How It Works
 

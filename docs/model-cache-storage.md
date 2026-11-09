@@ -2,7 +2,7 @@
 
 **Статус:** реализовано (этапы 1–3 и переопределение пути в §4.1, см. §12); PR ещё не смержен.
 **Аудит:** BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8 — идентификаторы находок отдельного OWASP-аудита (в этот PR не входит).
-**Затрагиваемые файлы:** новые `src/barbaros/model_cache.py` и `src/barbaros/atomic_file.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/unit/test_atomic_file.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`); `README.md`.
+**Затрагиваемые файлы:** новые `src/barbaros/model_cache.py` и `src/barbaros/atomic_file.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/unit/test_atomic_file.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`, `addopts`); `README.md`; `docs/README_RU.md`; этот документ.
 
 ## 1. Цель
 
@@ -73,7 +73,8 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 - `None`/пустая строка/пробелы → авторезолв (дефолт, поведение выше);
 - непустая строка: `~` раскрывается, результат обязан быть абсолютным путём → `ModelCacheStore(path=...)`;
 - нестрока, относительный путь, неразрешимый `~user` (pathlib бросает `RuntimeError`) → `WARNING` с экранированным усечённым значением и авторезолв; старт не падает и в текущий каталог ничего не пишется;
-- путь печатается при старте строкой `Model cache filepath:` (рядом с `Settings filepath:`), чтобы фактическое место было видно в журнале.
+- путь печатается при старте строкой `Model cache filepath:` (рядом с `Settings filepath:`), чтобы фактическое место было видно в журнале;
+- каталог переопределённого пути **не ужесточается**: файл пишется с `0600`, но режим существующего каталога (возможно, общего) не меняется — иначе `~/shared/models.json` неожиданно закрыл бы каталог для группы. Каталоги, созданные приложением, по-прежнему создаются с `0700`; ужесточение до `0700` применяется только к дефолтному app-owned каталогу.
 
 Запись в переопределённый файл идёт тем же атомарным `replace`, поэтому значение должно указывать на выделенный файл кэша: существующий чужой файл будет заменён при первом успешном сохранении. Это осознанно: иначе пришлось бы вводить эвристику «файл не наш — не трогаем», противоречащую §4.6 (битый кэш не удаляется, но следующий `save` его заменяет).
 
@@ -151,7 +152,7 @@ class ModelCacheStore:
 | Операция | Кто вызывает | Поток / момент |
 |---|---|---|
 | `ModelCacheStore.load()` | `ModelManager.add(..., cache_policy=RESTORE)` (`self._cache.load()`) | main thread на стартовом цикле `add` (или GUI-поток при явном runtime-`RESTORE`), **до** `RLock`; одно чтение на каждого `RESTORE`-провайдера; ошибки → `{}`, путь уже резолвлен один раз в конструкторе (`ModelCacheStore.path`) |
-| `ModelCacheStore.save()` | `ModelManager._persist()` → `cache.save(self.to_models_dict())` | вызывается только из `set_models()` (поток воркера) и `remove()` (GUI-поток), **под `RLock`**; внутри store — свой `Lock`, полный снапшот, атомарный `os.replace` |
+| `ModelCacheStore.save()` | `ModelManager._persist()` → `cache.save(self.to_models_dict())` | вызывается только из `set_models()` и `remove()`; оба теперь выполняются в GUI-потоке (результат воркера доставляется туда queued-соединением, §4.5), **под `RLock`**; внутри store — свой `Lock`, полный снапшот, атомарный `os.replace` |
 | I/O нет | `add(..., IGNORE)`, `to_models_dict()`, `to_list()`, `shutdown()` | `IGNORE` — дефолт, runtime-добавления не читают и не пишут файл |
 | Удаление легаси-ключа | `MainWindow._drop_legacy_model_cache()` | main thread, после чтения провайдеров; это `QSettings`, не `ModelCacheStore` |
 
@@ -163,13 +164,14 @@ class ModelCacheStore:
 
 **Принято: lock включаем в этом PR.**
 
-Поскольку `set_models()` вызывается из потоков воркеров, а `remove()`/`add()` — из GUI-потока:
+Поскольку `set_models()` вызывается из GUI-потока (результат воркера доставляется туда queued-соединением, см. ниже), а `remove()`/`add()` — тоже из GUI-потока:
 
+- Результат воркера **не применяется в потоке воркера**: `worker.finished` соединяется с `QObject`-диспетчером `_FetchResultsDispatcher`, созданным в GUI-потоке, через `QueuedConnection`; поэтому `set_models()`/`_persist()` выполняются в GUI-потоке. Причина: `QThread.terminate()` (в `stop_fetching_models`) не освобождает Python-локи убитого потока — воркер, завершённый внутри `set_models`, навсегда оставил бы `RLock` (и lock store) захваченными. Это же убирает обновление виджетов из чужого потока, которое было у `loaded_list_models`.
 - `ModelCacheStore` сериализует записи собственным `threading.Lock` (внутри `save`). Чтение не блокируется: атомарный `os.replace` даёт читателю либо старый, либо новый целый файл.
-- `ModelManager` получает `threading.RLock`; под ним выполняются мутации словаря (`add`, `remove`, `set_models`) и снятие снапшота (`to_models_dict`). Сохранение выполняется **под тем же lock** — это гарантирует, что порядок записей соответствует порядку изменений (иначе два одновременных fetch могут записать устаревший снапшот последним). Запись 4 КБ + `fsync` — единицы миллисекунд, удержание lock на это время допустимо.
-- `loaded_list_models.emit()` — после отпускания lock (UI-слоты не должны работать под нашим lock). Заметка: psygnal-сигналы сейчас синхронно вызываются в потоке воркера — это существующая особенность (обновление виджетов из чужого потока), не расширяем её; исправление — отдельная задача.
+- `ModelManager` получает `threading.RLock`; под ним выполняются мутации словаря (`add`, `remove`, `set_models`) и снятие снапшота (`to_models_dict`). Сохранение выполняется **под тем же lock** — это сохраняет порядок записей и защищает словарь от прямых многопоточных вызовов (например, в тестах). Запись 4 КБ + `fsync` — единицы миллисекунд, удержание lock на это время допустимо.
+- `loaded_list_models.emit()` — после отпускания lock (UI-слоты не должны работать под нашим lock); теперь сигнал испускается в GUI-потоке.
 
-**Гарантия при двух одновременных fetch (в одном процессе).** Каждый `save` пишет полный снапшот под lock, а не патч файла. Второй воркер снимает снапшот уже после того, как первый применил свои модели, поэтому итоговый файл содержит **оба списка целиком**; промежуточный файл между двумя записями — валидный JSON с первым обновлением (не «половина»). Если запись второго воркера упала (`ENOSPC`, read-only), в файле останется первое обновление, а в памяти — оба; следующий успешный `save` (reload/remove/set_models) запишет полный снапшот. Между **разными процессами** гарантии слияния нет — last-writer-wins; для кэша это осознанно допустимо (§4.5.1). Проверяется component-тестом «два `set_models` из разных потоков» (§7.2).
+**Гарантия при двух одновременных fetch (в одном процессе).** Каждый `save` пишет полный снапшот под lock, а не патч файла. Второй результат применяется после того, как первый уже сохранил свои модели, поэтому итоговый файл содержит **оба списка целиком**; промежуточный файл между двумя записями — валидный JSON с первым обновлением (не «половина»). Если запись второго результата упала (`ENOSPC`, read-only), в файле останется первое обновление, а в памяти — оба; следующий успешный `save` (reload/remove/set_models) запишет полный снапшот. Между **разными процессами** гарантии слияния нет — last-writer-wins; для кэша это осознанно допустимо (§4.5.1). Проверяется component-тестом «два `set_models` из разных потоков» (§7.2).
 
 ### 4.5.1. Сторонние библиотеки для lock/атомарной записи не нужны
 
@@ -237,7 +239,7 @@ class ModelCacheStore:
 1. store disabled → `False`.
 2. `ModelCacheDocument(models)` — санитизация теми же правилами/лимитами (защита от неожиданной формы/будущих полей `any_llm`).
 3. `document.to_bytes(MAX_FILE_BYTES)` — компактный JSON `{"version": VERSION, "models": ...}` (`ensure_ascii=False`, `allow_nan=False`, `separators=(",", ":")`) сразу с проверкой размера. `DocumentTooLarge` → `WARNING` с размерами и путём, `False`; `UnicodeEncodeError`/прочее → `WARNING serialization failed for <path> (<class>)`, `False`.
-4. `path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)`; best-effort ужесточить существующий каталог до `0700` (ошибка — только лог, запись продолжается).
+4. `path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)`; best-effort ужесточить существующий каталог до `0700` — только для дефолтного app-owned пути; для переопределённого `model_cache_path` каталог не трогается (ошибка — только лог, запись продолжается).
 5. `tempfile.mkstemp(prefix=".barbaros-", suffix=".tmp", dir=parent)`; `os.fchmod(fd, 0o600)`; write/flush/`os.fsync`; close; `os.replace(tmp, path)`; best-effort `fsync` каталога. При любой ошибке — `unlink` временного файла, `WARNING`, `False`; старый файл остаётся целым.
 6. Под `threading.Lock` (см. §4.5); сериализация — вне лока (порядок снапшотов обеспечивает `RLock` в `ModelManager`). `os.replace` заменяет symlink, а не его цель (проверено); ровно поэтому запись не следует по ссылке.
 
@@ -293,9 +295,9 @@ class ModelManager(dict):
   ```
   `ProviderMeta.from_dict` принимает и dict, и `ProviderMeta` (проверено).
 - Удалить `_restore_models_lists()` (`:89-99`), `save_models_list()` (`:121-123`) и подключение `loaded_list_models → save_models_list` (`:43`).
-- Добавить `_drop_legacy_model_cache()`: `self.settings.remove(self.settings_llm_providers_key)` в том же месте, где был `_restore_models_lists()` (`:51`), после чтения провайдеров/языка. Константу `settings_llm_by_providers_key` оставить только для этого удаления (переименовать в `settings_legacy_llm_by_providers_key`), с комментарием «гигиена, не BAR-01; убрать после BAR-01».
+- Добавить `_drop_legacy_model_cache()`: `self.settings.remove(self.settings_legacy_llm_by_providers_key)` в том же месте, где был `_restore_models_lists()` (`:51`), после чтения провайдеров/языка. Константу `settings_llm_by_providers_key` оставить только для этого удаления (переименовать в `settings_legacy_llm_by_providers_key`), с комментарием «гигиена, не BAR-01; убрать после BAR-01».
 - `save_providers()`/`llm_providers` не трогаем — это конфиг, а не кэш.
-- Побочный выигрыш: исчезает запись в `QSettings` из потока воркера (`save_models_list` вызывался из `loaded_list_models`, а тот — из потока воркера); запись кэша остаётся в потоке воркера, но становится потокобезопасной (§4.5).
+- Побочный выигрыш: исчезает запись в `QSettings` из потока воркера (`save_models_list` вызывался из `loaded_list_models`, а тот — из потока воркера); результат воркера доставляется в GUI-поток queued-соединением, и запись кэша выполняется там под lock (§4.5).
 
 ### 5.4. Последовательность
 
@@ -380,6 +382,7 @@ fetch (воркер):
 10. Если fake store вернул записи, не проходящие `Model.model_validate` (`created=True`/`None`), — `add(RESTORE)` их отбрасывает, валидные соседи поднимаются.
 11. Записи кэша для провайдеров вне конфига не добавляются; первый `save()` записывает файл без них (самопрунинг полного снапшота, отдельного `prune` нет).
 12. `ModelManager.default_providers()` возвращает новый список инстансов (не общий мутабельный объект).
+13. Результат воркера применяется в потоке менеджера, а не в потоке воркера (`_FetchResultsDispatcher` + queued-соединение); `set_models` для удалённого провайдера игнорируется; падение `load()` в `add(RESTORE)` не роняет старт.
 
 **Integration/system — `tests/system/test_model_cache_flow.py`:**
 
@@ -401,7 +404,7 @@ fetch (воркер):
 5. Имя провайдера с `\n`/HTML в логах — одна экранированная запись, без инъекции.
 6. `tests/ui/...`: cached `model.id` с HTML рендерится как plain text — **не в этом рефакторинге** (BAR-13), зафиксировать в follow-up; иначе тест упадёт.
 
-**NFR (медленные, `@pytest.mark.slow`):**
+**NFR (медленные, `@pytest.mark.slow`; по умолчанию исключены через `addopts = -m 'not slow'`, запуск — `uv run pytest -m slow`):**
 
 1. `load()` 25k моделей/2 МБ < 500 мс; `save()` того же < 500 мс (замеры: ~19+98 / ~72+31 мс).
 2. Старт `MainWindow` с 25k моделями медленнее пустого не более чем на 1.5 с (замер: +0.58 с).
@@ -425,7 +428,7 @@ fetch (воркер):
 
 Итого ~1.5 рабочих дня. Один PR с 3–4 коммитами (store → ModelManager → MainWindow/tests → docs).
 
-**Definition of Done:** новые/изменённые тесты зелёные (`uv run pytest`), `uv run ruff check` чистый, новых runtime-зависимостей нет, в `MainWindow` нет чтения/записи `llm_by_providers` (только однократное удаление), при битом кэше приложение стартует, файл `0600`, README/changelog отражают переезд кэша, удаление старого ключа и отсутствие миграции данных.
+**Definition of Done:** новые/изменённые тесты зелёные (`uv run pytest`; NFR — `uv run pytest -m slow`), `uv run ruff check` чистый, новых runtime-зависимостей нет, в `MainWindow` нет чтения/записи `llm_by_providers` (только однократное удаление), при битом кэше приложение стартует, файл `0600`, README/changelog отражают переезд кэша, удаление старого ключа и отсутствие миграции данных.
 
 ## 9. Риски и откат
 
@@ -529,18 +532,19 @@ class ModelCacheStore:
 
 ## 12. Реализация: отклонения и заметки
 
-Реализовано по §4–§5 с тремя осознанными уточнениями:
+Реализовано по §4–§5 с четырьмя осознанными уточнениями:
 
 1. **Строгая валидация при restore.** `Model.model_validate(entry, strict=True)` вместо lenient-режима: pydantic в обычном режиме приводит `created=True` / `1.0` / `"1"` к `int`, и такие записи «воскресали» бы после чтения кэша (см. §3). `strict=True` согласует модель с тем же инвариантом, что проверяет `ModelCacheDocument` (`type(value) is int`), и покрывает §7.2 component п. 10.
 2. **`ModelManager._persist()` не выпускает исключения наружу** (§7.2 component п. 8): сохранение обёрнуто в `try/except Exception` с `WARNING`. Реальный store fail-safe сам, это защита от регрессий контракта и от подменённой реализации: `set_models`/`remove` продолжают обновлять память и испускать сигналы.
 3. **Отсутствие файла кэша — не WARNING, а DEBUG.** Первый запуск и удалённый кэш — нормальное состояние; WARNING остаётся для ошибок открытия/чтения/схемы (§4.6), чтобы не засорять журнал на каждом старте.
+4. **Результат воркера применяется в GUI-потоке.** `worker.finished` соединён с `_FetchResultsDispatcher` через `QueuedConnection`, поэтому `set_models`/`_persist` не выполняются в потоке, который может быть остановлен `QThread.terminate()`: убитый поток не освобождает Python-локи, и `RLock`/lock store остались бы захваченными навсегда. Побочно `loaded_list_models` теперь испускается в GUI-потоке; `RLock` оставлен для прямых многопоточных вызовов и порядка снапшотов.
 
 Прочее:
 - Новых runtime-зависимостей нет (stdlib: `json`, `os`, `tempfile`, `threading`, `stat`, `logging`).
 - System-тест `App()` (§7.2 system п. 6) выполняется в подпроцессе: в pytest-процессе уже существует singleton `QApplication` (session-fixture `qapp`), второй создать нельзя. В подпроцессе ставится in-memory keyring и stub `barbaros.main.TrayIcon`.
 - Security-тесты не утверждают, что BAR-01 исправлен: кэш не содержит pickle, но pickle-ключи `main_window/model` и `ocr_feature/model` остаются задачей отдельного P0.
 - README дополнен разделом «Model List Cache» (путь файла, права, отсутствие миграции и автозагрузки).
-- Путь кэша можно переопределить ключом `model_cache_path` (§4.1): разбор и валидация — в `cache_path_from_config()`; тесты в unit (абсолютный/`~`, относительный, нестрока, неразрешимый `~user`, log-injection) и system (override + restart, fallback при невалидном значении без записи в CWD).
+- Путь кэша можно переопределить ключом `model_cache_path` (§4.1): разбор и валидация — в `cache_path_from_config()`; тесты в unit (абсолютный/`~`, относительный, нестрока, неразрешимый `~user`, log-injection) и system (override + restart, fallback при невалидном значении без записи в CWD). Для переопределённого пути `ModelCacheStore(tighten_directory=False)` не меняет режим существующего каталога (файл всё равно `0600`); ужесточение до `0700` осталось только для дефолтного app-owned каталога.
 - Файловая механика вынесена из store в `src/barbaros/atomic_file.py` (`read_regular_file_limited` / `write_bytes_atomic`): store стал политикой, модуль — механизмом, который можно переиспользовать для JSON-стора выбора модели (BAR-01). Логирование осталось под прежними именами/текстами за счёт переданных `logger`/`label`; store дополнительно оборачивает вызовы в fail-safe `try/except` на случай регрессии контракта.
 - Путь резолвится один раз в конструкторе (`_default_cache_path()`, fail-safe), публичный `path` — обычный атрибут, а не property с ленивым сайд-эффектом: чтение ничего не мутирует, нет гонки `_resolved`/`_disabled` между GUI-потоком и воркером. Один вызов `writableLocation` фиксирует `test_path_is_resolved_once_when_the_store_is_created`; fail-safe конструктора при исключении `QStandardPaths` — `test_path_resolution_failure_is_fail_safe`.
 - Формат вынесен в `ModelCacheDocument` (обе стороны: `from_bytes`/`to_bytes`, плюс `VERSION`, allowlist, schema-лимиты и санитизация); `ModelCacheStore` остаётся владельцем пути, файла, лока, fail-safe-границ и логов и маппит `InvalidDocument`/`DocumentTooLarge` в прежние WARNING. Тексты логов, формат и публичные `load`/`save` не менялись; документ покрыт отдельными unit-тестами (round-trip, каждый `InvalidDocument.reason`, `DocumentTooLarge`, независимость снапшота от входного mapping).
