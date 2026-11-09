@@ -231,6 +231,18 @@ Each provider can have multiple models. Select the desired model from the tree v
 - Models appear as children under each provider
 - Selection persists between sessions
 
+### Model List Cache
+
+Fetched model lists are cached on disk, so the model dropdown is populated immediately
+on the next start. Model lists are not fetched automatically: if the list is empty,
+click the reload button next to a provider.
+
+**Custom location:** set `model_cache_path` to an absolute path in the application
+settings file (the `Settings filepath:` line printed at startup), e.g.
+`model_cache_path=/home/me/.cache/barbaros/models.json`. A leading `~` is expanded;
+empty, relative or non-string values are ignored and the default location is used.
+Point the setting at a dedicated cache file, not at an existing file you want to keep.
+
 ## How It Works
 
 Barbaros uses a dual-communication system for reliable popup functionality:
