@@ -233,35 +233,15 @@ Each provider can have multiple models. Select the desired model from the tree v
 
 ### Model List Cache
 
-Fetched model lists are cached on disk so the model dropdown works immediately on the
-next start without querying every provider:
+Fetched model lists are cached on disk, so the model dropdown is populated immediately
+on the next start. Model lists are not fetched automatically: if the list is empty,
+click the reload button next to a provider.
 
-| Environment | Cache file |
-|---|---|
-| Linux (native) | `$XDG_DATA_HOME/barbaros/models.json`, usually `~/.local/share/barbaros/models.json` |
-| Flatpak | `~/.var/app/io.github.frimn.barbaros/data/barbaros/models.json` |
-
-- The cache is a plain JSON file, validated as untrusted input before use, atomically
-  replaced and readable only by the current user (`0600`). Corrupt, oversized or
-  foreign files are ignored and never break startup — the app simply starts with an
-  empty model list.
-- The cache contains model metadata only; API keys stay in the system keyring, and
-  endpoint URLs are not stored there.
-- Model lists are **not** fetched automatically on startup (some providers can be slow
-  to answer). If the cache is empty, click the reload button next to a provider.
-- **Upgrading from an older version:** the old cache was kept in `QSettings`
-  (`main_window/llm_by_providers`). It is deleted on the first start of this version
-  and **not migrated**, so after upgrading click reload once per provider to populate
-  the new cache. Provider configuration, target languages and the selected model are
-  not affected.
-- **Custom location:** set `model_cache_path` to an absolute path in the application
-  settings file (the `Settings filepath:` line printed at startup), e.g.
-  `model_cache_path=/home/me/.cache/barbaros/models.json`. A leading `~` is expanded;
-  empty, relative or non-string values are ignored (with a warning) and the default
-  location is used. The cache is updated by atomically replacing that file, so point
-  the setting at a dedicated cache file, not at an existing file you want to keep.
-  The parent directory of a custom path is left as is; the cache file itself is still
-  created with `0600` permissions.
+**Custom location:** set `model_cache_path` to an absolute path in the application
+settings file (the `Settings filepath:` line printed at startup), e.g.
+`model_cache_path=/home/me/.cache/barbaros/models.json`. A leading `~` is expanded;
+empty, relative or non-string values are ignored and the default location is used.
+Point the setting at a dedicated cache file, not at an existing file you want to keep.
 
 ## How It Works
 
