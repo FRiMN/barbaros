@@ -1,14 +1,18 @@
 import asyncio
 import base64
 import json
+import logging
 from collections.abc import Sequence
 
 from any_llm.types.completion import ChatCompletion
 from any_llm.types.model import Model
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
-from .model_manager import ProviderClient, ProviderMeta
+from .model_manager import ProviderClient, ProviderMeta, _short_repr
+from .provider_models import model_entries
 from .widgets.filterable_combobox import ModelSelection
+
+logger = logging.getLogger(__name__)
 
 
 class AbstractAsyncWorker(QObject):
@@ -111,8 +115,6 @@ class ListModelWorker(QObject):
     finished = Signal(ProviderMeta, str)
     error = Signal(ProviderMeta, str)
 
-    marshaling_fields = {"id", "created", "object", "owned_by"}
-
     def __init__(self, provider: ProviderClient):
         super().__init__()
         self.provider = provider.meta
@@ -123,17 +125,15 @@ class ListModelWorker(QObject):
         print(f"Fetching models for '{self.provider.name}' ({self.provider.provider_type})")
         try:
             models: Sequence[Model] = self.client.list_models()
+            entries = model_entries(models)
+            if len(entries) != len(models):
+                logger.warning(
+                    "ListModelWorker: provider %s returned %d unusable model entries",
+                    _short_repr(self.provider.name),
+                    len(models) - len(entries),
+                )
 
-            # See: https://github.com/mozilla-ai/any-llm/issues/1083
-            for model in models:
-                if model.owned_by is None:
-                    model.owned_by = ""
-                model.object = "model"
-
-            marshaled_models = json.dumps([
-                m.model_dump(include=self.marshaling_fields)
-                for m in models
-            ])
+            marshaled_models = json.dumps(entries)
         except Exception as e:
             print(f"emit error {self.provider.name=}")
             self.error.emit(self.provider, str(e))
