@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QComboBox, QGroupBox, QLabel, QVBoxLayout
 
 from barbaros.widgets.providers_card import ProvidersCard
 
+from ..common import read_setting
 from ..i18n import available_languages, language_display_name
 from ..widgets.target_language_list_edit import LanguageListEdit
 from .base import AbstractFeature
@@ -100,7 +101,7 @@ class LanguageGroup(BaseGroup):
         for lang in available_languages():
             self.lang_combo.addItem(self.tr(language_display_name(lang)), lang)
 
-        current = self.parent.app.settings.value("language") or ""
+        current = read_setting(self.parent.app.settings, "language") or ""
         idx = self.lang_combo.findData(current)
         if idx >= 0:
             self.lang_combo.setCurrentIndex(idx)

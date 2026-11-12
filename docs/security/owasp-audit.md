@@ -47,6 +47,17 @@
 
 ### BAR-01. pickle-десериализация `ModelSelection` из `QSettings` → RCE
 
+- **Статус (2026-11-12): исправлено.** Санация сырого INI выполняется до
+  создания `QSettings` (`src/barbaros/settings_sanitize.py`), выбор модели
+  хранится как JSON, а `read_setting()` страхует старт, если санация
+  невозможна. PySide6 6.12 дополнительно не десериализует pickle, поэтому
+  старый конфиг перестал быть RCE-вектором, но без миграции ронял старт
+  (`RuntimeError: Failed to deserialize Python object from QDataStream`).
+  Детали, миграция и тесты — `docs/settings-migration.md`. Известное
+  следствие: старый выбор модели не импортируется и сбрасывается при первом
+  запуске. Ссылки на строки в этом разделе — на HEAD аудита (`71197f8`), не на
+  текущий HEAD; отклонение срабатывает на первом чтении каждой INI-секции с
+  pickled-значением, а не только на самом ключе.
 - **OWASP:** `Deserialization_Cheat_Sheet.md` → «Python / Clear-box Review»: *«Unpickling can execute arbitrary code; never unpickle untrusted data»*; «Using Alternative Data Formats»; `Secure_Code_Review_Cheat_Sheet.md` → «Deserialization Vulnerabilities». Top-10: A08:2021 Software and Data Integrity Failures (CWE-502).
 - **Место:**
   - запись: `src/barbaros/main_window.py:105-106` (`save_choosed_model` → `self.settings.setValue("model", selection)`); `src/barbaros/features/ocr.py:101-102` (`save_choosed_ocr_model`);
@@ -254,7 +265,7 @@
 ## 7. План исправлений
 
 **P0 — до следующего релиза:**
-1. **BAR-01:** убрать pickle из `QSettings` (JSON/два строковых ключа); миграция — санитизация сырого INI до первого обращения к `QSettings` либо полный переход на JSON-стор; тест на отсутствие `PyObjectWrapper` в конфиге.
+1. **BAR-01:** убрать pickle из `QSettings` (JSON/два строковых ключа); миграция — санитизация сырого INI до первого обращения к `QSettings` либо полный переход на JSON-стор; тест на отсутствие `PyObjectWrapper` в конфиге. **Сделано:** см. `docs/settings-migration.md`.
 2. **BAR-02:** вызывать `api_key_manager.delete()` при удалении провайдера + явная очистка ключа в диалоге; обрабатывать `KeyringError`; тест с fake backend.
 3. **BAR-06:** `QMessageBox` для ошибок — plain text; `url_to_html_links` переписать как `escape → linkify` или удалить.
 4. **BAR-04/BAR-15:** IPC/`--popup` только фокусирует окно; перевод из clipboard — только по явному действию пользователя; D-Bus-метод возвращает явный статус; rate limit/проверка вызывающего.
