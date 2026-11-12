@@ -4,6 +4,8 @@
 **Аудит:** BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8 — идентификаторы находок отдельного OWASP-аудита (в этот PR не входит).
 **Затрагиваемые файлы:** новые `src/barbaros/model_cache.py` и `src/barbaros/atomic_file.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/unit/test_atomic_file.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`, `addopts`); `README.md`; `docs/README_RU.md`; этот документ.
 
+> **Обновление 2026-11-12:** BAR-01 исправлен отдельным изменением (`src/barbaros/settings_sanitize.py` + JSON-выборы модели): при успешной санации pickle-ключей больше нет, выборы модели хранятся как JSON. Утверждения ниже о pickle-ключах и о том, что BAR-01 не исправлен, описывают состояние этого PR, а не текущий HEAD. См. `docs/settings-migration.md`.
+
 ## 1. Цель
 
 1. Убрать кэш списка LLM-моделей из `QSettings` (`main_window/llm_by_providers`) в отдельный JSON-файл.

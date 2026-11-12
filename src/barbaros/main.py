@@ -1,5 +1,6 @@
 import signal
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QSettings
 from PySide6.QtGui import QAction, QIcon
@@ -7,9 +8,11 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from .__version__ import version
 from .about_window import AboutWindow
+from .common import read_setting
 from .i18n import load_translator, resolve_language
 from .ipc import IPCService
 from .main_window import MainWindow
+from .settings_sanitize import sanitize_pickled_settings, settings_file_path
 
 
 class App(QApplication):
@@ -23,12 +26,34 @@ class App(QApplication):
         self.setApplicationVersion(version)
         self.setApplicationName("barbaros")
 
+        # BAR-01: PySide6 6.12 aborts the first read of each INI section that
+        # still holds a pickled Python object.  The raw INI has to be cleaned
+        # before the QSettings instance exists: QSettings snapshots the file in
+        # its constructor, so a later rewrite would not be visible to it.
+        settings_path = settings_file_path()
+        removed = sanitize_pickled_settings(settings_path)
+        if removed is None:
+            print(
+                "Warning: could not sanitize the settings file; "
+                "legacy values may remain"
+            )
+        elif removed:
+            print(
+                f"Settings: removed {removed} legacy pickled value(s); "
+                f"backup next to {settings_path!s}"
+            )
+
         self.settings = QSettings(QSettings.Scope.UserScope)
         print(f"Settings filepath: {self.settings.fileName()}")
+        if settings_path is not None and Path(self.settings.fileName()) != settings_path:
+            print(
+                "Warning: QSettings path does not match the sanitized one: "
+                f"{settings_path!s}"
+            )
 
         # Install UI translator before any window is built so that all
         # ``tr()`` calls at construction time resolve to the chosen language.
-        lang = resolve_language(self.settings.value("language"))
+        lang = resolve_language(read_setting(self.settings, "language"))
         self.translator = load_translator(lang)
         if self.translator is not None:
             self.installTranslator(self.translator)

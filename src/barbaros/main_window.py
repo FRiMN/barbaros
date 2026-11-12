@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .common import TARGET_LANGUAGES, SettingsProxy, url_to_html_links
+from .common import TARGET_LANGUAGES, SettingsProxy, read_setting, url_to_html_links
 from .features.base import AbstractFeature
 from .features.ocr import OCRFeature
 from .features.settings import SettingsFeature
@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
         self.restore_target_languages()
 
         configured_cache_path = cache_path_from_config(
-            self.app.settings.value(SETTINGS_KEY_MODEL_CACHE)
+            read_setting(self.app.settings, SETTINGS_KEY_MODEL_CACHE)
         )
         model_cache = ModelCacheStore(
             path=configured_cache_path,
@@ -104,11 +104,10 @@ class MainWindow(QMainWindow):
     def _drop_legacy_model_cache(self):
         """Remove the pre-refactoring model cache from QSettings, without migration.
 
-        Hygiene, not a BAR-01 fix: the value itself is plain JSON (no pickle), and
-        the pickle keys of the ``main_window`` group are left untouched.  By this
-        point the group has already been read for providers/language, so this
-        ``remove()`` adds no new unpickle risk.  Remove this method once BAR-01
-        sanitizes the raw INI before the first QSettings access.
+        The value itself is plain JSON (no pickle); its only consumer is the
+        JSON cache file.  Legacy pickled values are already removed from the
+        raw INI before QSettings is created (BAR-01, ``settings_sanitize``), so
+        this ``remove()`` only finishes the cache move: no data is migrated.
         """
         self.settings.remove(self.settings_legacy_llm_by_providers_key)
 
@@ -116,8 +115,13 @@ class MainWindow(QMainWindow):
         self.settings.setValue("geometry", self.saveGeometry())
         event.accept()
 
-    def save_choosed_model(self, selection: ModelSelection):
-        self.settings.setValue("model", selection)
+    def save_choosed_model(self, selection: ModelSelection | None):
+        """Persist the selection as JSON; ``None`` clears it (BAR-01)."""
+        if selection is None:
+            self.settings.remove("model")
+            return
+
+        self.settings.setValueAsJson("model", selection.to_dict())
 
     def save_choosed_target_language(self, lang: str):
         self.settings.setValue(self.settings_target_language_key, lang)
@@ -209,11 +213,16 @@ class MainWindow(QMainWindow):
 
     def restore_model(self):
         """Restore model from settings"""
-        if past_selection := self.settings.value("model"):
-            if isinstance(past_selection, ModelSelection):
-                self.model.on_selection_changed(past_selection)
-            else:
-                print("Saved model in wrong format: ignore")
+        past_data = self.settings.valueFromJson("model")
+        if past_data is None:
+            return
+
+        past_selection = ModelSelection.from_dict(past_data)
+        if past_selection is None:
+            print("Saved model in wrong format: ignore")
+            return
+
+        self.model.on_selection_changed(past_selection)
 
     def handle_clear_button(self):
         for f in self.features:

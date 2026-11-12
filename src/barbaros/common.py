@@ -1,8 +1,43 @@
 import json
+import logging
 import re
 import typing
 
 from PySide6.QtCore import QSettings
+
+logger = logging.getLogger(__name__)
+
+
+def read_setting(settings: QSettings, key: str, default=None):
+    """Read a QSettings value without crashing on legacy pickled data (BAR-01).
+
+    PySide6 6.12 raises ``RuntimeError`` instead of unpickling a
+    ``PySide::PyObjectWrapper`` value.  The rejection flag is checked per INI
+    *section*: the first read that parses a section containing such a value
+    fails (and clears the flag), so an immediate retry of that key returns the
+    value normally.  A retry returning ``None`` means the key itself holds the
+    rejected value - then ``default`` is used.  Such values are removed before
+    QSettings is created (``settings_sanitize``); this guard covers the cases
+    where that was not possible (read-only config directory, symlinked file,
+    ...).
+    """
+    try:
+        return settings.value(key, default)
+    except RuntimeError:
+        logger.warning("Settings: legacy value in the section of %r, retrying", key)
+
+    try:
+        value = settings.value(key)
+    except RuntimeError:
+        logger.warning("Settings: cannot read %r, using the default", key)
+        return default
+
+    if value is None:
+        # The flag was cleared by the retry, so a still-missing value means Qt
+        # rejected this very key (or the key is absent): use the default.
+        logger.warning("Settings: %r is not readable, using the default", key)
+        return default
+    return value
 
 
 class SettingsProxy:
@@ -15,13 +50,24 @@ class SettingsProxy:
         return f"{self.prefix}/{key}"
 
     def value(self, key: str, default=None) -> typing.Any:
-        return self.settings.value(self._prefixed_key(key), default)
+        return read_setting(self.settings, self._prefixed_key(key), default)
 
     def valueFromJson(self, key: str, default=None):
-        v = self.settings.value(self._prefixed_key(key))
+        v = self.value(key)
         if v is None:
             return default
-        return json.loads(v)
+        try:
+            return json.loads(v)
+        except (TypeError, ValueError, RecursionError) as exc:
+            # RecursionError (deeply nested input) is a RuntimeError subclass,
+            # so it must be listed explicitly: a hostile config value must not
+            # abort startup.
+            logger.warning(
+                "Settings: %r is not valid JSON (%s), using the default",
+                self._prefixed_key(key),
+                exc.__class__.__name__,
+            )
+            return default
 
     def setValue(self, key: str, value):
         self.settings.setValue(self._prefixed_key(key), value)

@@ -21,20 +21,23 @@ requires-python = ">=3.11"
 dynamic = ["version"]
 dependencies = [
     # Full pyside6 in dev group for language tools; main deps use pyside6-essentials for lighter footprint.
-    "pyside6-essentials",
-    "psutil",
-    "any-llm-sdk[all]",
-    "keyring>=25.7.0",
-    "psygnal>=0.15.1",
-    "dataclasses-json>=0.6.7",
+    # Pinned to the minor line (~=x.y.z): patch updates are allowed, a new
+    # minor must be reviewed and bumped explicitly (see docs/settings-migration.md
+    # for the PySide6 6.12 / any-llm 1.50 upgrade that broke startup).
+    "pyside6-essentials~=6.12.0",
+    "psutil~=7.2.2",
+    "any-llm-sdk[all]~=1.50.0",
+    "keyring~=25.7.0",
+    "psygnal~=0.16.1",
+    "dataclasses-json~=0.6.7",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff",
-    "pytest",
-    "invoke",
-    "pyside6"
+    "ruff~=0.17.4",
+    "pytest~=9.2.0",
+    "invoke~=3.0.3",
+    "pyside6~=6.12.0",
 ]
 
 [project.gui-scripts]

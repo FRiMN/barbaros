@@ -167,6 +167,26 @@ class ModelSelection:
     provider: str
     model: str
 
+    def to_dict(self) -> dict[str, str]:
+        """Plain-JSON form persisted in QSettings (never pickle, BAR-01)."""
+        return {"provider": self.provider, "model": self.model}
+
+    @classmethod
+    def from_dict(cls, data) -> "ModelSelection | None":
+        """Parse the persisted form; ``None`` for missing or malformed data."""
+        if not isinstance(data, dict):
+            return None
+
+        provider = data.get("provider")
+        model = data.get("model")
+        if not (isinstance(provider, str) and isinstance(model, str)):
+            return None
+
+        if not provider or not model:
+            return None
+
+        return cls(provider=provider, model=model)
+
 
 class ProviderModelTreePopup(QWidget):
     """Tree popup for provider → model selection."""

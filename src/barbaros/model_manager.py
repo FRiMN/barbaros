@@ -15,6 +15,7 @@ from dataclasses_json import dataclass_json
 from psygnal import Signal
 from PySide6.QtCore import QObject, Qt, QThread, Slot
 
+from barbaros.provider_models import model_entries
 from barbaros.security import KeySecurityManager
 
 if TYPE_CHECKING:
@@ -169,9 +170,15 @@ class ModelManager(dict):
         return ProviderMeta.schema().dump(metas, many=True)
 
     def to_models_dict(self) -> dict[str, list[dict]]:
+        """Snapshot in the cache allowlist shape (``provider_models`` layout).
+
+        ``Model.to_dict()`` mirrors any-llm's model, which may grow fields the
+        app neither needs nor validates; the cache contract is the same
+        allowlist the fetched lists are normalized to.
+        """
         with self._lock:
             return {
-                name: [m.to_dict() for m in client.models]
+                name: model_entries(client.models)
                 for name, client in self.items()
             }
 
