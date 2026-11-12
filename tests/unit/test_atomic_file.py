@@ -36,6 +36,29 @@ def _temp_files(directory: Path) -> list[Path]:
     return sorted(directory.glob(".barbaros-*.tmp"))
 
 
+class _OsProxy:
+    """``atomic_file``'s own view of ``os`` with a few methods replaced.
+
+    Monkeypatching attributes of the global ``os`` module would also affect
+    pytest itself: fd capture calls ``os.fstat`` when it reads the captured
+    output right after the test body, so faking those calls aborts the run
+    instead of the code under test.  Replacing the module's own ``os``
+    reference keeps the fake local to ``barbaros.atomic_file``.
+    """
+
+    def __init__(self, **overrides):
+        self._overrides = overrides
+
+    def __getattr__(self, name):
+        if name in self._overrides:
+            return self._overrides[name]
+        return getattr(os, name)
+
+
+def _patch_os(monkeypatch: pytest.MonkeyPatch, **overrides) -> None:
+    monkeypatch.setattr(atomic_file, "os", _OsProxy(**overrides))
+
+
 # --- reads -----------------------------------------------------------------
 
 
@@ -101,7 +124,7 @@ def test_file_growing_between_stat_and_read_is_rejected(
         values[stat.ST_SIZE] = 1  # pretend the file is tiny when stat'ed
         return os.stat_result(values)
 
-    monkeypatch.setattr(atomic_file.os, "fstat", fake_fstat)
+    _patch_os(monkeypatch, fstat=fake_fstat)
     with caplog.at_level(logging.WARNING, logger=LOGGER.name):
         assert _read(path, limit=10) is None
 
@@ -152,7 +175,7 @@ def test_read_error_is_logged_and_returns_none(
     def failing_read(fd: int, size: int) -> bytes:
         raise OSError("I/O error")
 
-    monkeypatch.setattr(atomic_file.os, "read", failing_read)
+    _patch_os(monkeypatch, read=failing_read)
     with caplog.at_level(logging.WARNING, logger=LOGGER.name):
         assert _read(path) is None
 
@@ -174,8 +197,7 @@ def test_fstat_error_is_fail_safe_and_closes_descriptor(
         closed.append(fd)
         real_close(fd)
 
-    monkeypatch.setattr(atomic_file.os, "fstat", failing_fstat)
-    monkeypatch.setattr(atomic_file.os, "close", tracking_close)
+    _patch_os(monkeypatch, fstat=failing_fstat, close=tracking_close)
     with caplog.at_level(logging.WARNING, logger=LOGGER.name):
         assert _read(path) is None
 
@@ -213,7 +235,7 @@ def test_write_failure_keeps_old_file_and_cleans_temp(
     def failing_replace(*args: object, **kwargs: object) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr(atomic_file.os, "replace", failing_replace)
+    _patch_os(monkeypatch, replace=failing_replace)
     with caplog.at_level(logging.WARNING, logger=LOGGER.name):
         assert _write(path, b"new") is False
 
@@ -228,7 +250,7 @@ def test_short_write_fails_safely(
     path = tmp_path / "data.json"
     path.write_bytes(b"old")
 
-    monkeypatch.setattr(atomic_file.os, "write", lambda fd, view: 0)
+    _patch_os(monkeypatch, write=lambda fd, view: 0)
 
     assert _write(path, b"new") is False
     assert path.read_bytes() == b"old"
@@ -244,7 +266,7 @@ def test_fsync_failure_fails_safely(
     def failing_fsync(fd: int) -> None:
         raise OSError("fsync failed")
 
-    monkeypatch.setattr(atomic_file.os, "fsync", failing_fsync)
+    _patch_os(monkeypatch, fsync=failing_fsync)
 
     assert _write(path, b"new") is False
     assert path.read_bytes() == b"old"
@@ -276,7 +298,7 @@ def test_fchmod_failure_is_best_effort(
     def failing_fchmod(fd: int, mode: int) -> None:
         raise OSError("not permitted")
 
-    monkeypatch.setattr(atomic_file.os, "fchmod", failing_fchmod)
+    _patch_os(monkeypatch, fchmod=failing_fchmod)
 
     assert _write(path, b"new") is True
     assert path.read_bytes() == b"new"
