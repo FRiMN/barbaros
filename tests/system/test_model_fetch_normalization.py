@@ -36,7 +36,7 @@ class FakeProviderClient:
     def __init__(self, models: list[Model]) -> None:
         self._models = models
 
-    def list_models(self) -> list[Model]:
+    async def alist_models(self) -> list[Model]:
         return list(self._models)
 
 
