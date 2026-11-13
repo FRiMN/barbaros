@@ -44,12 +44,9 @@ class MainWindow(QMainWindow):
         configured_cache_path = cache_path_from_config(
             read_setting(self.app.settings, SETTINGS_KEY_MODEL_CACHE)
         )
-        model_cache = ModelCacheStore(
-            path=configured_cache_path,
-            # A user-configured path may be in a shared directory: only the
-            # app-owned default directory may be forced to 0700.
-            tighten_directory=configured_cache_path is None,
-        )
+        # An explicitly configured path may point into a shared directory, so
+        # the store tightens the mode only of the app-owned default location.
+        model_cache = ModelCacheStore(path=configured_cache_path)
         print(f"Model cache filepath: {str(model_cache.path)!r}")
         self.model_manager = ModelManager(cache=model_cache)
         self.model_manager.error.connect(self._show_provider_error)

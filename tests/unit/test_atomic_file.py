@@ -28,8 +28,16 @@ def _read(path: Path, limit: int = 1024) -> bytes | None:
     return read_regular_file_limited(path, limit, logger=LOGGER, label=LABEL)
 
 
-def _write(path: Path, payload: bytes = b"payload") -> bool:
-    return write_bytes_atomic(path, payload, logger=LOGGER, label=LABEL)
+def _write(
+    path: Path, payload: bytes = b"payload", *, tighten_directory: bool = True
+) -> bool:
+    return write_bytes_atomic(
+        path,
+        payload,
+        logger=LOGGER,
+        label=LABEL,
+        tighten_directory=tighten_directory,
+    )
 
 
 def _temp_files(directory: Path) -> list[Path]:
@@ -327,6 +335,57 @@ def test_existing_permissive_directory_is_tightened(tmp_path: Path) -> None:
 
     assert _write(path, b"new") is True
     assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+
+
+@POSIX_ONLY
+def test_symlinked_parent_directory_is_not_tightened(tmp_path: Path) -> None:
+    """A symlinked parent must not change its target directory's mode (BAR-19)."""
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    os.chmod(real_dir, 0o755)
+    link = tmp_path / "link"
+    os.symlink(real_dir, link)
+
+    assert _write(link / "data.json", b"payload") is True
+
+    assert link.is_symlink()
+    assert stat.S_IMODE(real_dir.stat().st_mode) == 0o755
+    assert (real_dir / "data.json").read_bytes() == b"payload"
+    assert stat.S_IMODE((real_dir / "data.json").stat().st_mode) == 0o600
+
+
+@POSIX_ONLY
+def test_directory_reached_through_symlinked_component_is_not_tightened(
+    tmp_path: Path,
+) -> None:
+    """``os.chmod`` follows every component, not only the immediate parent."""
+    foreign = tmp_path / "foreign"
+    (foreign / "sub").mkdir(parents=True)
+    os.chmod(foreign / "sub", 0o755)
+    link = tmp_path / "link"
+    os.symlink(foreign, link)
+
+    assert _write(link / "sub" / "data.json", b"payload") is True
+
+    assert stat.S_IMODE((foreign / "sub").stat().st_mode) == 0o755
+    assert (foreign / "sub" / "data.json").read_bytes() == b"payload"
+
+
+@POSIX_ONLY
+def test_directory_is_not_tightened_by_default(tmp_path: Path) -> None:
+    """Tightening is opt-in: the mechanism never changes a mode by itself."""
+    directory = tmp_path / "permissive"
+    directory.mkdir()
+    os.chmod(directory, 0o755)
+
+    assert (
+        write_bytes_atomic(
+            directory / "data.json", b"new", logger=LOGGER, label=LABEL
+        )
+        is True
+    )
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o755
 
 
 # --- import hygiene --------------------------------------------------------

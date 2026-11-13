@@ -196,18 +196,21 @@ def write_bytes_atomic(
     *,
     logger: logging.Logger,
     label: str = "File",
-    tighten_directory: bool = True,
+    tighten_directory: bool = False,
 ) -> bool:
     """Atomically and durably replace ``path`` with ``payload``.
 
     Never raises.  Returns ``False`` (after logging) on any failure; the
     previous file content is left intact and the temporary file is removed.
 
-    ``tighten_directory`` restricts the parent directory to ``0700`` (best
-    effort).  Callers must disable it when the parent is not owned by the
-    application (for example a user-configured path in a shared directory):
-    the file itself is always written with ``0600``, but changing an existing
-    shared directory's mode would be a destructive side effect.
+    ``tighten_directory`` (opt-in, default ``False``) restricts the parent
+    directory to ``0700`` (best effort).  Callers must also disable it when the
+    parent is not owned by the application (for example a user-configured path
+    in a shared directory): the file itself is always written with ``0600``,
+    but changing an existing shared directory's mode would be a destructive
+    side effect.  A directory reached through a symlink (in any component) is
+    never tightened: ``os.chmod`` would follow the link and change a foreign
+    directory's mode (BAR-19).
     """
     try:
         _atomic_write(
@@ -244,9 +247,41 @@ def _chmod_temp_file(fd: int, *, logger: logging.Logger, label: str) -> None:
         logger.debug("%s: could not set temp file mode (%s)", label, exc.__class__.__name__)
 
 
+def _has_symlink_component(path: Path) -> bool:
+    """Whether ``path`` itself or any of its components is a symbolic link.
+
+    ``os.chmod`` resolves every component, so a directory reached through a
+    link (even an intermediate one) belongs elsewhere: restricting its mode
+    would change a foreign directory (BAR-19). A component that cannot be
+    inspected is reported as unsafe - not tightening costs nothing, a wrong
+    ``chmod`` is destructive.
+    """
+    for component in (path, *path.parents):
+        try:
+            if stat.S_ISLNK(os.lstat(component).st_mode):
+                return True
+        except FileNotFoundError:
+            return False  # The write will fail on its own; nothing to tighten.
+        except OSError:
+            return True
+    return False
+
+
 def _tighten_directory(directory: Path, *, logger: logging.Logger, label: str) -> None:
-    """Try to restrict the target directory to ``0700`` (best effort)."""
+    """Try to restrict the target directory to ``0700`` (best effort).
+
+    A directory reached through a symlink (in any component) is skipped:
+    ``os.chmod`` follows links and would change a foreign directory's mode
+    (BAR-19).
+    """
     try:
+        if _has_symlink_component(directory):
+            logger.debug(
+                "%s: not tightening a directory reached through a symlink: %r",
+                label,
+                directory,
+            )
+            return
         os.chmod(directory, 0o700)
     except OSError as exc:
         # Best effort: saving must not fail because of permissions that are
