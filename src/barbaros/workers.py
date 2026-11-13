@@ -166,9 +166,10 @@ class ListModelWorker(QObject):
         # A private loop: nothing else in this thread waits for it, and the
         # running loop is what ``asyncio.get_event_loop()`` resolves to inside
         # the coroutine, so the thread-global loop is left untouched.
-        loop = asyncio.new_event_loop()
+        loop = None
 
         try:
+            loop = asyncio.new_event_loop()
             if self._cancel_pending():
                 return
 
@@ -191,7 +192,8 @@ class ListModelWorker(QObject):
             with self._lock:
                 self._task = None
             try:
-                loop.close()
+                if loop is not None:
+                    loop.close()
             finally:
                 # Terminal on every path: the thread only quits on ``stopped``.
                 self.stopped.emit()

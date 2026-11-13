@@ -218,11 +218,17 @@ class ModelManager(dict):
         even when an endpoint never answers.  Idempotent.
         """
         names = list(self._fetching_models_workers)
-        if not names:
-            return
+        if names:
+            logger.info("ModelManager shutdown: stopping %d fetch worker(s)", len(names))
+            self._stop_workers(names, SHUTDOWN_BUDGET_MS)
 
-        logger.info("ModelManager shutdown: stopping %d fetch worker(s)", len(names))
-        self._stop_workers(names, SHUTDOWN_BUDGET_MS)
+        # Retired workers are not awaited again (their budget was already spent);
+        # report them so a stuck provider is visible in the log (BAR-23).
+        if self._retiring_workers:
+            logger.warning(
+                "ModelManager shutdown: %d fetch worker(s) were already left running past their stop budget",
+                len(self._retiring_workers),
+            )
 
     def _stop_workers(self, names: Sequence[str], budget_ms: int) -> None:
         """Stop several fetch workers under one shared deadline (BAR-23)."""
