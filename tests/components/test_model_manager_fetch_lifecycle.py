@@ -145,6 +145,22 @@ class DelayedClient:
         return list(self._models)
 
 
+class DelayedFailingClient:
+    """Fails after a short delay, so its error can be queued but not yet applied."""
+
+    def __init__(self, *, delay: float = 0.05, message: str = "provider failed"):
+        self.delay = delay
+        self.message = message
+        self.started = threading.Event()
+        self.calls = 0
+
+    async def alist_models(self, **kwargs) -> list[Model]:
+        self.calls += 1
+        self.started.set()
+        await asyncio.sleep(self.delay)
+        raise RuntimeError(self.message)
+
+
 class FixedProvider:
     """Duck-typed provider returning one already-created client."""
 
@@ -338,7 +354,76 @@ def test_stop_drops_a_result_that_was_already_queued(manager, wait_until):
     assert manager_errors == []
 
 
+def test_stop_drops_an_error_from_a_stopped_worker(manager, wait_until):
+    """A provider error queued before the stop must not raise a dialog (BAR-23).
+
+    Symmetric to the stale-result case: the worker fails right after the fetch
+    is stopped, so its ``error`` is still pending when the manager drops the
+    worker from tracking.
+    """
+    meta = make_meta()
+    manager.add(meta)
+    client = DelayedFailingClient()
+    manager_errors: list[str] = []
+    manager.error.connect(manager_errors.append)
+    manager._start_fetching_models(FixedProvider(meta, client))
+    _worker, thread = tracked(manager, meta.name)
+
+    assert client.started.wait(FETCH_START_DEADLINE_S), "the fetch never reached the client"
+    assert thread.wait(2_000), "the failing fetch thread did not finish"
+
+    manager.stop_fetching_models(meta.name)
+    wait_until(lambda: False, timeout=0.3)
+
+    assert manager_errors == [], "an error from a stopped fetch must be dropped"
+
+
+def test_error_of_the_current_fetch_is_still_delivered(manager, wait_until):
+    """Positive control: the identity guard must not swallow real fetch failures."""
+    meta = make_meta()
+    manager.add(meta)
+    manager_errors: list[str] = []
+    manager.error.connect(manager_errors.append)
+
+    manager._start_fetching_models(FixedProvider(meta, DelayedFailingClient(delay=0)))
+
+    assert wait_until(lambda: bool(manager_errors), timeout=FETCH_START_DEADLINE_S), (
+        "a provider failure of the tracked fetch was not reported"
+    )
+    assert len(manager_errors) == 1
+    assert "provider failed" in manager_errors[0]
+
+
 # --- shutdown: one global, bounded, idempotent deadline ---------------------
+
+
+def test_stop_workers_uses_one_shared_deadline(manager):
+    """A batch stop of N workers is bounded by one deadline, not N budgets (BAR-23)."""
+
+    class SleepingThread(FakeThread):
+        """A thread that actually spends the wait budget it is given."""
+
+        def wait(self, msecs: int = -1, **kwargs) -> bool:
+            self.waits.append(msecs)
+            time.sleep(max(0, msecs) / 1000)
+            return False
+
+    pairs: dict[str, tuple[FakeWorker, FakeThread]] = {}
+    for name in ("a", "b", "c"):
+        worker, thread = FakeWorker(), SleepingThread()
+        manager._fetching_models_workers[name] = (worker, thread)
+        pairs[name] = (worker, thread)
+
+    budget_ms = 200
+    started_at = time.monotonic()
+    manager._stop_workers(list(pairs), budget_ms)
+    elapsed = time.monotonic() - started_at
+
+    assert elapsed < budget_ms / 1000 + 0.3, f"batch stop took {elapsed:.2f}s"
+    first_budget = pairs["a"][1].waits[0]
+    assert abs(first_budget - budget_ms) <= 10, first_budget
+    assert all(thread.terminate_calls == 0 for _worker, thread in pairs.values())
+    assert manager.fetching_models_active_workers == []
 
 
 def test_shutdown_is_bounded_idempotent_and_cleans_all_workers(manager):

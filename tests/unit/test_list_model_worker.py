@@ -265,3 +265,37 @@ def test_cancel_after_completion_is_a_noop():
     assert len(recorder.finished) == 1
     assert recorder.errors == []
     assert recorder.stopped == 1
+
+
+def test_stopped_is_emitted_even_when_closing_the_loop_raises(monkeypatch):
+    """The thread only quits on ``stopped``, so it must fire on every path."""
+    client = StubClient(models=[make_model("alpha")])
+    worker = make_worker(client)
+    recorder = Recorder(worker)
+
+    real_new_event_loop = asyncio.new_event_loop
+
+    class NoCloseLoop:
+        def __init__(self, loop):
+            self._loop = loop
+
+        def create_task(self, coro):
+            return self._loop.create_task(coro)
+
+        def run_until_complete(self, task):
+            return self._loop.run_until_complete(task)
+
+        def close(self):
+            self._loop.close()
+            raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        asyncio, "new_event_loop", lambda: NoCloseLoop(real_new_event_loop())
+    )
+
+    with pytest.raises(RuntimeError, match="close failed"):
+        worker.run()
+
+    assert len(recorder.finished) == 1
+    assert recorder.errors == []
+    assert recorder.stopped == 1
