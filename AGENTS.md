@@ -47,6 +47,7 @@
 41. В теле PR указывай:
     - Summary
     - Root cause
+    - Impact
     - Changes
     - Tests
     - Trade-offs / residual risk, в том числе риски из п.1
