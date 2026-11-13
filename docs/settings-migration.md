@@ -1,7 +1,7 @@
 # Легаси-pickle в QSettings: миграция и защита старта (BAR-01)
 
-**Статус:** реализовано.
-**Связано:** OWASP-аудит `docs/security/owasp-audit.md` §3 BAR-01 и §8.1; `docs/model-cache-storage.md`.
+**Статус:** реализовано для native/pip-установки (PySide6 ≥ 6.12); во Flatpak остаётся остаточный риск (BAR-28).
+**Связано:** OWASP-аудит `docs/security/owasp-audit.md` §3 BAR-01, §4 BAR-28 и §8.2; `docs/model-cache-storage.md`.
 **Затрагиваемые файлы:** новые `src/barbaros/settings_sanitize.py`, `tests/unit/test_settings_sanitize.py`, `tests/unit/test_model_selection.py`, `tests/system/test_legacy_settings.py`; `src/barbaros/common.py`; `src/barbaros/main.py`; `src/barbaros/main_window.py`; `src/barbaros/features/ocr.py`; `src/barbaros/features/settings.py`; `src/barbaros/widgets/filterable_combobox.py`; `tests/conftest.py`.
 
 ## 1. Симптом
@@ -117,5 +117,14 @@ Only builtin types (dict, list, str, int, ...) are supported.
   на QSettings-файл в приложении нет.
 - Эвристика удаления общая: вырезаются любые значения `PySide::PyObjectWrapper`,
   а не только два известных ключа выбора модели.
+- **Flatpak не получает PySide6 из `pyproject.toml`:** манифест
+  (`flatpak/barbaros.yaml`) собирает приложение на `io.qt.PySide.BaseApp`
+  6.11, т.е. на PySide6 **6.11.3**, где pickle всё ещё десериализуется. Там
+  санация — единственная защита, а она обходится конфигом больше
+  `MAX_SETTINGS_BYTES` (1 МиБ), симлинком или read-only каталогом: санация
+  возвращает `None`/оставляет файл, и `QSettings.value()` выполняет payload.
+  Проверено на установленном BaseApp 6.11.3. Остаток отслеживается как
+  BAR-28; до его исправления Flatpak-сборка не должна считаться защищённой от
+  BAR-01.
 - Правило для ревью: в `QSettings.setValue()` — только примитивы и типы Qt
   (`str`/`int`/`bool`/`QByteArray`); Python-объекты — через JSON.
