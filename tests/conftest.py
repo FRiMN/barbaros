@@ -189,3 +189,32 @@ def write_cache_fixture():
 @pytest.fixture(name="wait_until")
 def wait_until_fixture():
     return wait_until
+
+
+# --- legacy QSettings fixtures (BAR-01) ------------------------------------
+
+# What PySide6 writes for ``QSettings.setValue()`` with a Python object: a
+# QVariant of the ``PySide::PyObjectWrapper`` meta type holding a pickle.  The
+# payload below is a benign pickle of ``ModelSelection`` (older Barbaros
+# versions wrote exactly this shape); no test executes it.
+LEGACY_PICKLE_LINE = (
+    rb"model=@Variant(\0\0\0\x7f\0\0\0\x18PySide::PyObjectWrapper\0\0\0\0}"
+    rb"\x80\x4\x95r\0\0\0\0\0\0\0\x8c$barbaros.widgets.filterable_combobox"
+    rb"\x94\x8c\xeModelSelection\x94\x93\x94)\x81\x94}\x94(\x8c\bprovider"
+    rb"\x94\x8c\bdeepseek\x94\x8c\x5model\x94\x8c\xe\x64\x65\x65pseek-flash\x94ub.)"
+)
+
+LEGACY_PICKLED_CONFIG = (
+    b"[main_window]\n"
+    rb"geometry=@ByteArray(\x1\xd9\xd0\xcb)" b"\n"
+    + LEGACY_PICKLE_LINE
+    + b'\ntarget_language=ru\ntarget_language_list="ar,de,en,ru"\n'
+    b"\n[ocr_feature]\n" + LEGACY_PICKLE_LINE + b"\n"
+)
+
+
+@pytest.fixture(name="legacy_pickled_config")
+def legacy_pickled_config_fixture():
+    """An INI file PySide6 6.12 cannot read until it is sanitized."""
+    return LEGACY_PICKLED_CONFIG
+

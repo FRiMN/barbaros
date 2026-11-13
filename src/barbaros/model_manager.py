@@ -15,6 +15,7 @@ from dataclasses_json import dataclass_json
 from psygnal import Signal
 from PySide6.QtCore import QObject, Qt, QThread, Slot
 
+from barbaros.provider_models import model_entries
 from barbaros.security import KeySecurityManager
 
 if TYPE_CHECKING:
@@ -169,9 +170,15 @@ class ModelManager(dict):
         return ProviderMeta.schema().dump(metas, many=True)
 
     def to_models_dict(self) -> dict[str, list[dict]]:
+        """Snapshot in the cache allowlist shape (``provider_models`` layout).
+
+        ``Model.to_dict()`` mirrors any-llm's model, which may grow fields the
+        app neither needs nor validates; the cache contract is the same
+        allowlist the fetched lists are normalized to.
+        """
         with self._lock:
             return {
-                name: [m.to_dict() for m in client.models]
+                name: model_entries(client.models)
                 for name, client in self.items()
             }
 
@@ -253,8 +260,23 @@ class ModelManager(dict):
         self.error.emit(f"Error on fetching models for `{provider.name}` ({provider.provider_type}): {error_msg}")
 
     def _on_fetching_finished(self, provider: ProviderMeta, marshaled_models: str):
-        models = json.loads(marshaled_models)
-        models = [Model.model_validate(m) for m in models]
+        try:
+            entries = json.loads(marshaled_models)
+        except (TypeError, ValueError):
+            entries = None
+
+        if not isinstance(entries, list):
+            # The hand-off comes from our own worker; a malformed payload is a
+            # programming error, not user input.  Never let it escape a Qt slot:
+            # the exception would abort result handling with no visible cause.
+            logger.warning(
+                "ModelManager: malformed model list payload for provider %s",
+                _short_repr(provider.name),
+            )
+            self._on_fetching_error(provider, "invalid model list payload")
+            return
+
+        models = self._parse_fetched_models(entries, provider.name)
         self.set_models(provider, models)
 
     def set_models(self, provider: ProviderMeta | str, models: Sequence[Model]):
@@ -277,17 +299,12 @@ class ModelManager(dict):
 
     @staticmethod
     def _parse_models(cached: Sequence[dict], provider_name: str) -> list[Model]:
-        models: list[Model] = []
-        skipped = 0
-        for entry in cached:
-            try:
-                # strict=True: a lenient Model coerces ``created`` from bool/float/
-                # numeric strings, which would let malformed cached data resurface
-                # and be written back.  The disk store already rejects those, this
-                # keeps the restore path equally strict for any store implementation.
-                models.append(Model.model_validate(entry, strict=True))
-            except Exception:
-                skipped += 1
+        """Restore cached entries; strict typing keeps the disk format authoritative.
+
+        A lenient ``Model`` coerces ``created`` from bool/float/numeric strings,
+        which would let malformed cached data resurface and be written back.
+        """
+        models, skipped = ModelManager._validate_models(cached)
         if skipped:
             logger.debug(
                 "ModelManager: skipped %d invalid cached model entries for provider %s",
@@ -295,6 +312,34 @@ class ModelManager(dict):
                 _short_repr(provider_name),
             )
         return models
+
+    @staticmethod
+    def _parse_fetched_models(entries: Sequence[object], provider_name: str) -> list[Model]:
+        """Validate the worker→manager hand-off.
+
+        One unusable entry must not drop the whole fetched list (or raise into a
+        Qt slot): keep the valid models, log the rest.
+        """
+        models, skipped = ModelManager._validate_models(entries)
+        if skipped:
+            logger.warning(
+                "ModelManager: skipped %d invalid fetched model entries for provider %s",
+                skipped,
+                _short_repr(provider_name),
+            )
+        return models
+
+    @staticmethod
+    def _validate_models(entries: Sequence[object]) -> tuple[list[Model], int]:
+        """Validate entries strictly, counting (never raising on) invalid ones."""
+        models: list[Model] = []
+        skipped = 0
+        for entry in entries:
+            try:
+                models.append(Model.model_validate(entry, strict=True))
+            except Exception:
+                skipped += 1
+        return models, skipped
 
     def _persist(self) -> None:
         """Write a full snapshot; called under ``self._lock``.

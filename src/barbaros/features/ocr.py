@@ -92,14 +92,24 @@ class OCRFeature(AbstractFeature):
         self._restore_past_model_selection()
 
     def _restore_past_model_selection(self):
-        if past_selection := self.settings.value("model"):
-            if isinstance(past_selection, ModelSelection):
-                self.ocr_model_select.on_selection_changed(past_selection)
-            else:
-                print("Saved OCR model in wrong format: ignore")
+        past_data = self.settings.valueFromJson("model")
+        if past_data is None:
+            return
 
-    def save_choosed_ocr_model(self, model: str):
-        self.settings.setValue("model", model)
+        past_selection = ModelSelection.from_dict(past_data)
+        if past_selection is None:
+            print("Saved OCR model in wrong format: ignore")
+            return
+
+        self.ocr_model_select.on_selection_changed(past_selection)
+
+    def save_choosed_ocr_model(self, selection: ModelSelection | None):
+        """Persist the selection as JSON; ``None`` clears it (BAR-01)."""
+        if selection is None:
+            self.settings.remove("model")
+            return
+
+        self.settings.setValueAsJson("model", selection.to_dict())
 
     def _handle_image_cropped(self):
         """Handle imageCropped signal from ImageManagerWidget"""

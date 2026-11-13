@@ -4,6 +4,8 @@
 **Аудит:** BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, §8 — идентификаторы находок отдельного OWASP-аудита (в этот PR не входит).
 **Затрагиваемые файлы:** новые `src/barbaros/model_cache.py` и `src/barbaros/atomic_file.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/unit/test_atomic_file.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`, `addopts`); `README.md`; `docs/README_RU.md`; этот документ.
 
+> **Обновление 2026-11-12:** BAR-01 исправлен отдельным изменением (`src/barbaros/settings_sanitize.py` + JSON-выборы модели): при успешной санации pickle-ключей больше нет, выборы модели хранятся как JSON. Утверждения ниже о pickle-ключах и о том, что BAR-01 не исправлен, описывают состояние этого PR, а не текущий HEAD. См. `docs/settings-migration.md`.
+
 ## 1. Цель
 
 1. Убрать кэш списка LLM-моделей из `QSettings` (`main_window/llm_by_providers`) в отдельный JSON-файл.
@@ -32,7 +34,7 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 - Запись кэша: `MainWindow.save_models_list()` → `ModelManager.to_models_dict()` (`main_window.py:121-123`, `model_manager.py:103-108`).
 - Чтение: `MainWindow._restore_models_lists()` (`main_window.py:89-99`), пропускает провайдеров, которых нет в конфиге.
 - Сигнал `ModelManager.loaded_list_models` (`model_manager.py:65`) одновременно обновляет UI и сохраняет кэш (`main_window.py:43`).
-- Формат элемента: `{id, created, object, owned_by}` (`workers.py:114`); `any_llm`-модель — `openai.types.model.Model` (pydantic 2, `extra="allow"`).
+- Формат элемента: `{id, created, object, owned_by}`; поля нормализует `provider_models.model_entries()` на границе провайдера (`workers.py`, `ListModelWorker.run`); `any_llm`-модель — `openai.types.model.Model` (pydantic 2, `extra="allow"`).
 - На машине разработчика кэш занимает ~4.4 КБ на 40 моделей/3 провайдера; 25k моделей ≈ 2.1 МБ (замер).
 - Кэш читается в GUI-потоке при старте; пишется из потока воркера (см. §3, п. 3).
 
@@ -45,6 +47,7 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 | `QStandardPaths.AppDataLocation` → native `~/.local/share/barbaros`, Flatpak `~/.var/app/io.github.frimn.barbaros/data/barbaros` (Linux, `<XDG_DATA_HOME>/barbaros`); по документации Qt: Windows `C:/Users/<USER>/AppData/Roaming/<APPNAME>`, macOS `~/Library/Application Support/<APPNAME>`; путь зависит от `setApplicationName` | Путь резолвить один раз в конструкторе хранилища после `setApplicationName` (`main.py:22-24`); пустой путь (защитно) → хранилище отключается |
 | `openai.types.model.Model.model_validate` требует `id: str, created: int, object: "model", owned_by: str`; лишние поля принимает и сохраняет, `to_dict()` их возвращает; `created` приводит `1.0`/`"1"`/`True` к `int` | Нужен строгий allowlist полей и явные проверки типов в хранилище, иначе произвольный JSON из файла будет вечно перезаписываться в кэш |
 | `Model.model_validate` на 25k моделях ≈ 98 мс; `json.loads` 2 МБ ≈ 19 мс; `to_dict()+dumps` ≈ 72 мс | Лимит файла 4 МБ достаточен с запасом; синхронная запись такого размера допустима (фактически она идёт в потоке воркера — см. §4.5) |
+| DeepSeek `GET https://api.deepseek.com/models` (проверено 2026-11-12) не содержит `created`. `openai` SDK собирает ответ лениво (`_strict_response_validation` по умолчанию `False`, `construct_type`), поэтому `any_llm` возвращает `Model` с `created=None`; `BaseOpenAIProvider._convert_list_models_response` пропускает уже созданный `Model` через `isinstance`-проверку, не валидируя его. `Model.model_validate(model_dump())` падает с `created: Input should be a valid integer` | Список провайдера нельзя валидировать/сохранять как есть. Поля нормализуются в `provider_models.py` до маршалинга (`created`, не используемый приложением, → `0`; `owned_by` → `""`; `object` → `"model"`; модели без `id` отбрасываются), а `ModelManager` дополнительно пропускает невалидные элементы без исключения из Qt-слота. Покрыто `tests/unit/test_provider_models.py` и `tests/system/test_model_fetch_normalization.py` |
 | `QSettings` кэширует базовый каталог конфига при первом создании в процессе; `QStandardPaths` — динамичен | `ModelCacheStore` резолвит путь один раз в конструкторе, поэтому окружение (XDG, `applicationName`) должно быть готово до его создания: в тестах XDG-переменные — на import-time conftest, для QSettings — только явный путь |
 | Сигнал Qt, подключённый к методу не-`QObject` получателя (`ModelManager` наследует `dict`), выполняется **в потоке отправителя** (проверено) | `set_models()`/сохранение кэша выполняются в потоке воркера; два воркера могут завершиться одновременно → нужна блокировка и целостный снапшот (§4.5) |
 | `MainWindow` конструируется offscreen; полный `App()` — нет (нужен stub `TrayIcon`, fake keyring) | Системные тесты через `MainWindow`/stub `App`, см. §7 |
