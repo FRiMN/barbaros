@@ -241,7 +241,11 @@ click the reload button next to a provider.
 settings file (the `Settings filepath:` line printed at startup), e.g.
 `model_cache_path=/home/me/.cache/barbaros/models.json`. A leading `~` is expanded;
 empty, relative or non-string values are ignored and the default location is used.
-Point the setting at a dedicated cache file, not at an existing file you want to keep.
+The file is replaced only if it does not exist yet or already holds a Barbaros model
+cache (any format version); a file that is not recognized as a Barbaros model cache is
+left untouched and a warning is logged. To start a fresh cache there, point at a path
+that does not exist or move the old file aside. Until then the model list is not
+persisted across restarts.
 
 ## How It Works
 
