@@ -190,8 +190,11 @@ class ListModelWorker(QObject):
         finally:
             with self._lock:
                 self._task = None
-            loop.close()
-            self.stopped.emit()
+            try:
+                loop.close()
+            finally:
+                # Terminal on every path: the thread only quits on ``stopped``.
+                self.stopped.emit()
 
     async def _fetch_models(self, timeout: float):
         models: Sequence[Model] = await asyncio.wait_for(self.client.alist_models(), timeout=timeout)

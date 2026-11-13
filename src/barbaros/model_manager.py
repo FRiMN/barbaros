@@ -111,6 +111,10 @@ class _FetchResultsDispatcher(QObject):
     def on_finished(self, provider: ProviderMeta, marshaled_models: str) -> None:
         self._manager._apply_worker_result(self._worker, provider, marshaled_models)
 
+    @Slot(ProviderMeta, str)
+    def on_error(self, provider: ProviderMeta, error_msg: str) -> None:
+        self._manager._apply_worker_error(self._worker, provider, error_msg)
+
 
 class ModelManager(dict):
     """
@@ -313,7 +317,7 @@ class ModelManager(dict):
 
         dispatcher = _FetchResultsDispatcher(self, worker)
         worker.finished.connect(dispatcher.on_finished, Qt.ConnectionType.QueuedConnection)
-        worker.error.connect(self._on_fetching_error)
+        worker.error.connect(dispatcher.on_error, Qt.ConnectionType.QueuedConnection)
         thread.destroyed.connect(partial(self._remove_worker, provider.meta.name, thread))
 
         self._fetching_models_workers[provider.meta.name] = (worker, thread)
@@ -365,6 +369,28 @@ class ModelManager(dict):
             return
 
         self._on_fetching_finished(provider, marshaled_models)
+
+    def _apply_worker_error(
+        self,
+        worker: ListModelWorker | None,
+        provider: ProviderMeta,
+        error_msg: str,
+    ) -> None:
+        """Report a fetch failure only for the provider's tracked worker (BAR-23).
+
+        Symmetric to ``_apply_worker_result``: an abandoned or superseded worker
+        that fails later must not raise a dialog for a fetch the user already
+        stopped (cancellation itself never emits ``error``).
+        """
+        entry = self._fetching_models_workers.get(provider.name)
+        if entry is None or entry[0] is not worker:
+            logger.debug(
+                "ModelManager: dropping the error of a stopped fetch for %s",
+                _short_repr(provider.name),
+            )
+            return
+
+        self._on_fetching_error(provider, error_msg)
 
     def _on_fetching_finished(self, provider: ProviderMeta, marshaled_models: str):
         try:
