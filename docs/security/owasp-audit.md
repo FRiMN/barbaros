@@ -331,7 +331,7 @@
 ### BAR-28. Flatpak на PySide6 6.11.3: pickle-RCE сохраняется, санация обходится
 
 - **OWASP:** `Deserialization_Cheat_Sheet.md` → «Python / Clear-box Review»; `Software_Supply_Chain_Security_Cheat_Sheet.md` → «Monitor Deployed Software for Vulnerabilities», «Lockfile/Version Pinning»; `Vulnerable_Dependency_Management_Cheat_Sheet.md`. Top-10: A08:2021/A08:2025 (CWE-502), A06:2021, A03:2025.
-- **Severity:** **High** (для релизного Flatpak-артефакта). Статус: новая, open. Native/pip-установка с PySide6 6.12 не затронута.
+- **Severity:** **High** (для релизного Flatpak-артефакта). Статус: новая, open; issue [#15](https://github.com/FRiMN/barbaros/issues/15). Native/pip-установка с PySide6 6.12 не затронута.
 - **Место:** `flatpak/barbaros.yaml:3` (`runtime-version: "6.11"`), `:6` (`base-version: 6.11`), `:57-60` (PySide6 не устанавливается из pip — «it is provided by BaseApp»); `pyproject.toml:27` (`pyside6-essentials~=6.12.0`) на Flatpak не влияет; `settings_sanitize.py:48` (`MAX_SETTINGS_BYTES = 1024*1024`), `:82-137` (fail-open санация); `main.py:33-46`.
 - **Evidence (2026-11-13, реальный runtime):**
   - Установленный `io.qt.PySide.BaseApp` 6.11.3 содержит `pyside6-6.11.3.dist-info` и `PySide6.__version__ == "6.11.3"` (Python 3.13). В PySide6 6.12.0 отказ от pickle появился, в 6.11.x его нет.
@@ -472,7 +472,7 @@
 23. **BAR-26:** `aboutToQuit.connect(cleanup)` один раз в `App.__init__`; идемпотентный `cleanup`.
 24. **BAR-27:** привести README к фактическому поведению (HTTPS по умолчанию, HTTP только по явной настройке, отправка изображения/буфера провайдеру).
 
-**Организационно (AGENTS.md #27):** для PR ввести обязательный OWASP-проход по diff с меткой `security/owasp-passed` и комментарием-следом; метку ставить только на финальный diff и снимать при новых security-коммитах. Сейчас CI/автоматической проверки нет (BAR-16). Остаток BAR-28 стоит завести отдельным issue с меткой `security/owasp-finding`, чтобы отказ от немедленного исправления не потерялся.
+**Организационно (AGENTS.md #27):** для PR ввести обязательный OWASP-проход по diff с меткой `security/owasp-passed` и комментарием-следом; метку ставить только на финальный diff и снимать при новых security-коммитах. Сейчас CI/автоматической проверки нет (BAR-16). Остаток BAR-28 заведён отдельным issue [#15](https://github.com/FRiMN/barbaros/issues/15) с меткой `security/owasp-finding`, чтобы отказ от немедленного исправления не потерялся.
 
 ## 10. Security-тесты, которые стоит добавить
 
