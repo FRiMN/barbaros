@@ -1,9 +1,10 @@
 """Security tests for the JSON model cache.
 
 Covers docs/model-cache-storage.md §7.2, "Security — tests/system/
-test_model_cache_security.py", items 1-5.  Item 6 (cached ``model.id`` rendered
-as HTML) is deliberately out of scope for this refactoring: it belongs to
-BAR-13.
+test_model_cache_security.py", items 1-5, plus the BAR-19 write guard (item 6,
+also listed in docs/security/owasp-audit.md §10).  Item 6 of the storage plan
+(cached ``model.id`` rendered as HTML) is deliberately out of scope for this
+refactoring: it belongs to BAR-13.
 
 The cache file is untrusted input: it may be replaced by another process and
 may carry fields the application never asked for.  These are system tests
@@ -30,7 +31,7 @@ from any_llm.types.model import Model
 
 import barbaros.model_manager
 from barbaros.main_window import MainWindow
-from barbaros.model_cache import ModelCacheDocument, ModelCacheStore
+from barbaros.model_cache import SETTINGS_KEY, ModelCacheDocument, ModelCacheStore
 
 POSIX_ONLY = pytest.mark.skipif(
     os.name != "posix", reason="file permission bits are POSIX-only"
@@ -335,3 +336,49 @@ def test_log_injection_provider_name_is_escaped_on_one_line(
     # the payload text itself produced a single record.
     assert all(payload not in record.getMessage() for record in caplog.records)
     assert sum("FAKE LOG" in record.getMessage() for record in caplog.records) == 1
+
+
+# --- 6. BAR-19: model_cache_path is not an arbitrary write sink -------------
+
+
+def test_configured_foreign_file_is_never_overwritten(
+    tmp_path, data_home, fake_app, fake_settings
+):
+    """A ``model_cache_path`` pointing at someone else's file is refused.
+
+    This is the user-visible end of BAR-19: before the write guard, the first
+    ``set_models`` atomically replaced the configured file with cache JSON.
+    """
+    victim = tmp_path / "important.conf"
+    victim_bytes = b"IMPORTANT USER DATA\n"
+    victim.write_bytes(victim_bytes)
+    os.chmod(victim, 0o644)
+    fake_settings.setValue(SETTINGS_KEY, str(victim))
+    fake_settings.sync()
+
+    with open_window(fake_app) as window:
+        window.model_manager.set_models("ollama", [allowlisted_model()])
+
+    assert victim.read_bytes() == victim_bytes
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o644
+    assert list(tmp_path.glob(".barbaros-*.tmp")) == []
+    # The refused write did not fall back to the default location either.
+    assert not cache_file(data_home).exists()
+
+
+def test_foreign_file_at_the_default_cache_path_is_never_overwritten(
+    data_home, fake_app
+):
+    """The guard also protects the auto-resolved location, not only overrides."""
+    victim = cache_file(data_home)
+    victim.parent.mkdir(parents=True)
+    victim_bytes = b"IMPORTANT USER DATA\n"
+    victim.write_bytes(victim_bytes)
+    os.chmod(victim, 0o644)
+
+    with open_window(fake_app) as window:
+        window.model_manager.set_models("ollama", [allowlisted_model()])
+
+    assert victim.read_bytes() == victim_bytes
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o644
+    assert [entry.name for entry in victim.parent.iterdir()] == ["models.json"]

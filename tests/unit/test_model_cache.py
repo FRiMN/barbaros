@@ -503,16 +503,21 @@ def test_save_permissions_do_not_depend_on_umask(tmp_path: Path, umask: int) -> 
 
 
 @POSIX_ONLY
-def test_save_tightens_preexisting_file_and_directory(tmp_path: Path) -> None:
-    store = _make_store(tmp_path)
-    store.path.parent.mkdir(parents=True)
-    os.chmod(store.path.parent, 0o755)
-    store.path.write_bytes(b"old")
+def test_save_tightens_preexisting_file_and_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The app-owned default directory is tightened even if it already exists."""
+    base = tmp_path / "appdata"
+    base.mkdir()
+    os.chmod(base, 0o755)
+    _patch_standard_paths(monkeypatch, str(base))
+    store = ModelCacheStore()
+    _write_document(store.path, {"p": [_model()]})
     os.chmod(store.path, 0o644)
 
-    assert store.save({"p": [_model()]}) is True
+    assert store.save({"p": [_model("new")]}) is True
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(store.path.parent.stat().st_mode) == 0o700
+    assert stat.S_IMODE(base.stat().st_mode) == 0o700
 
 
 # --- §7.2 item 9: symlinks -------------------------------------------------
@@ -534,18 +539,250 @@ def test_load_does_not_follow_symlinks(tmp_path: Path) -> None:
 
 
 @POSIX_ONLY
-def test_save_replaces_symlink_without_touching_target(tmp_path: Path) -> None:
+def test_save_refuses_symlink_without_touching_link_or_target(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
     store.path.parent.mkdir(parents=True)
     target = tmp_path / "outside.json"
-    target_bytes = b'{"keep":true}'
+    target_bytes = b'{"version":1,"models":{"p":[]}}'  # even a valid cache target
     target.write_bytes(target_bytes)
     os.symlink(target, store.path)
 
-    assert store.save({"p": [_model("new")]}) is True
-    assert not store.path.is_symlink()
-    assert store.load() == {"p": [_model("new")]}
+    assert store.save({"p": [_model("new")]}) is False
+    assert store.path.is_symlink()
+    assert os.readlink(store.path) == str(target)
     assert target.read_bytes() == target_bytes
+    assert [entry.name for entry in store.path.parent.iterdir()] == ["models.json"]
+
+
+@POSIX_ONLY
+def test_save_refuses_dangling_symlink(tmp_path: Path) -> None:
+    store = _make_store(tmp_path)
+    store.path.parent.mkdir(parents=True)
+    missing_target = tmp_path / "missing.json"
+    os.symlink(missing_target, store.path)
+
+    assert store.save({"p": [_model()]}) is False
+    assert store.path.is_symlink()
+    assert os.readlink(store.path) == str(missing_target)
+    assert not missing_target.exists()
+
+
+# --- BAR-19: write-side target guard ---------------------------------------
+
+_FOREIGN_PAYLOADS = [
+    pytest.param(b'{"keep":true}', id="foreign-json"),
+    pytest.param(b'{"version":"1.0","models":{}}', id="string-version"),
+    pytest.param(b'{"version":true,"models":{}}', id="bool-version"),
+    pytest.param(b'{"version":1,"models":[]}', id="models-not-dict"),
+    pytest.param(b"[]", id="top-level-list"),
+    pytest.param(b'{"version":1,"models":', id="truncated"),
+    pytest.param(b"# ~/.bashrc\nexport PATH=/usr/bin\n", id="shell-config"),
+    pytest.param(b"", id="empty"),
+    pytest.param(b"   \n\t", id="whitespace-only"),
+    pytest.param(b"\xff\xfe\x00\x01", id="non-utf8"),
+]
+
+
+@pytest.mark.parametrize("payload", _FOREIGN_PAYLOADS)
+def test_save_refuses_to_overwrite_non_cache_file(
+    tmp_path: Path, payload: bytes, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = _make_store(tmp_path)
+    _write_raw(store.path, payload)
+    if os.name == "posix":
+        os.chmod(store.path, 0o644)
+
+    with caplog.at_level(logging.WARNING, logger="barbaros.model_cache"):
+        assert store.save({"p": [_model()]}) is False
+
+    assert store.path.read_bytes() == payload
+    assert [entry.name for entry in store.path.parent.iterdir()] == ["models.json"]
+    if os.name == "posix":
+        assert stat.S_IMODE(store.path.stat().st_mode) == 0o644
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "barbaros.model_cache"
+    ]
+    assert any(
+        "not saved" in message and str(store.path) in message
+        for message in messages
+    )
+
+
+@pytest.mark.parametrize("version", [1, 2, 0, 999])
+def test_save_accepts_existing_cache_document_of_any_version(
+    tmp_path: Path, version: int
+) -> None:
+    """The write guard recognizes the envelope, not one specific version."""
+    store = _make_store(tmp_path)
+    _write_document(store.path, {"p": [_model("old")]}, version=version)
+
+    assert store.save({"p": [_model("new")]}) is True
+    assert store.load() == {"p": [_model("new")]}
+    assert json.loads(store.path.read_text(encoding="utf-8"))["version"] == 1
+
+
+def test_save_accepts_cache_envelope_with_invalid_entries(tmp_path: Path) -> None:
+    """Identity is the envelope; loadability is a separate, stricter question."""
+    store = _make_store(tmp_path)
+    _write_document(store.path, {"p": "not-a-list", "q": 42})
+
+    assert store.save({"p": [_model("new")]}) is True
+    assert store.load() == {"p": [_model("new")]}
+
+
+@POSIX_ONLY
+def test_save_replaces_hardlink_entry_without_touching_the_other_link(
+    tmp_path: Path,
+) -> None:
+    """``os.replace`` swaps the directory entry, so a hardlinked file survives."""
+    store = _make_store(tmp_path)
+    _write_document(store.path, {"p": [_model("old")]})
+    other_link = tmp_path / "other.json"
+    os.link(store.path, other_link)
+
+    assert store.save({"p": [_model("new")]}) is True
+    assert store.load() == {"p": [_model("new")]}
+    assert json.loads(other_link.read_text(encoding="utf-8"))["models"] == {
+        "p": [_model("old")]
+    }
+
+
+def test_save_accepts_existing_cache_at_exact_size_limit(tmp_path: Path) -> None:
+    store = _make_store(tmp_path)
+    document = json.dumps(
+        {"version": 1, "models": {"p": [_model("old")]}}, separators=(",", ":")
+    ).encode("utf-8")
+    padded = document + b" " * (store.MAX_FILE_BYTES - len(document))
+    assert len(padded) == store.MAX_FILE_BYTES
+    _write_raw(store.path, padded)
+
+    assert store.save({"p": [_model("new")]}) is True
+    assert store.load() == {"p": [_model("new")]}
+
+
+def test_repeated_save_does_not_reparse_its_own_unchanged_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The write guard memoizes its own file instead of re-reading it per save."""
+    store = _make_store(tmp_path)
+    assert store.save({"p": [_model("old")]}) is True
+
+    parsed: list[object] = []
+
+    def fail_loads(*args: object, **kwargs: object) -> object:
+        parsed.append((args, kwargs))
+        raise AssertionError("an unchanged own cache must not be re-read")
+
+    monkeypatch.setattr(model_cache.json, "loads", fail_loads)
+
+    assert store.save({"p": [_model("new")]}) is True
+    assert parsed == []
+    assert b'"id":"new"' in store.path.read_bytes()
+
+
+def test_external_change_to_the_cache_is_revalidated_before_save(
+    tmp_path: Path,
+) -> None:
+    store = _make_store(tmp_path)
+    assert store.save({"p": [_model()]}) is True
+    store.path.write_text("not a model cache", encoding="utf-8")
+
+    assert store.save({"p": [_model("new")]}) is False
+    assert store.path.read_text(encoding="utf-8") == "not a model cache"
+
+
+def test_repeated_refusal_warns_once_per_reason(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = _make_store(tmp_path)
+    _write_raw(store.path, b"foreign file")
+
+    with caplog.at_level(logging.DEBUG, logger="barbaros.model_cache"):
+        assert store.save({"p": [_model()]}) is False
+        assert store.save({"p": [_model()]}) is False
+
+    records = [
+        record for record in caplog.records if record.name == "barbaros.model_cache"
+    ]
+    warnings = [record for record in records if record.levelno == logging.WARNING]
+    debugs = [
+        record
+        for record in records
+        if record.levelno == logging.DEBUG and "not saved" in record.getMessage()
+    ]
+    assert len(warnings) == 1
+    assert len(debugs) == 1
+
+
+@POSIX_ONLY
+def test_save_refuses_fifo_without_destroying_it(tmp_path: Path) -> None:
+    store = _make_store(tmp_path)
+    store.path.parent.mkdir(parents=True)
+    os.mkfifo(store.path)
+
+    assert store.save({"p": [_model()]}) is False
+    assert stat.S_ISFIFO(store.path.stat().st_mode)
+    assert [entry.name for entry in store.path.parent.iterdir()] == ["models.json"]
+
+
+def test_save_refuses_directory_target(tmp_path: Path) -> None:
+    store = _make_store(tmp_path)
+    store.path.mkdir(parents=True)
+
+    assert store.save({"p": [_model()]}) is False
+    assert store.path.is_dir()
+
+
+def test_save_refuses_oversized_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _make_store(tmp_path)
+    payload = b"x" * (store.MAX_FILE_BYTES + 1)
+    _write_raw(store.path, payload)
+
+    parsed: list[object] = []
+
+    def fail_loads(*args: object, **kwargs: object) -> object:
+        parsed.append((args, kwargs))
+        raise AssertionError("unverified target must not be parsed")
+
+    monkeypatch.setattr(model_cache.json, "loads", fail_loads)
+
+    assert store.save({"p": [_model()]}) is False
+    assert parsed == []
+    assert store.path.read_bytes() == payload
+
+
+@POSIX_ONLY
+def test_save_refuses_unreadable_existing_file(tmp_path: Path) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("root can read a 0000 file; the permission check is untestable")
+    payload = b'{"version":1,"models":{}}'
+    store = _make_store(tmp_path)
+    _write_raw(store.path, payload)
+    os.chmod(store.path, 0o000)
+
+    try:
+        assert store.save({"p": [_model()]}) is False
+        assert store.path.stat().st_size == len(payload)
+    finally:
+        os.chmod(store.path, 0o600)
+
+
+def test_save_refusal_does_not_leak_file_content_to_logs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    secret = "TOP-SECRET-USER-DATA"
+    store = _make_store(tmp_path)
+    _write_raw(store.path, f"# {secret}\n".encode())
+
+    with caplog.at_level(logging.DEBUG, logger="barbaros.model_cache"):
+        assert store.save({"p": [_model()]}) is False
+
+    assert secret not in caplog.text
+    assert str(store.path) in caplog.text
 
 
 # --- §7.2 item 10: NaN, duplicates, huge ints ------------------------------
@@ -957,6 +1194,33 @@ def test_document_from_bytes_rejects_invalid_documents(
     assert excinfo.value.reason == reason
 
 
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        pytest.param(b'{"version":1,"models":{}}', True, id="version-1"),
+        pytest.param(b'{"version":2,"models":{}}', True, id="future-version"),
+        pytest.param(b'{"version":0,"models":{"p":[]}}', True, id="version-0"),
+        pytest.param(b'{"version":2,"models":{},"extra":1}', True, id="extra-keys"),
+        pytest.param(b'{"version":1,"models":[]}', False, id="models-not-dict"),
+        pytest.param(b'{"version":"1","models":{}}', False, id="string-version"),
+        pytest.param(b'{"version":true,"models":{}}', False, id="bool-version"),
+        pytest.param(b'{"version":1.0,"models":{}}', False, id="float-version"),
+        pytest.param(b'{"models":{}}', False, id="missing-version"),
+        pytest.param(b'{"version":1}', False, id="missing-models"),
+        pytest.param(b"[]", False, id="top-level-list"),
+        pytest.param(b"{not json", False, id="invalid-json"),
+        pytest.param(b"\xff\xfe", False, id="not-utf8"),
+        pytest.param(
+            b"\xef\xbb\xbf" + b'{"version":1,"models":{}}', False, id="utf8-bom"
+        ),
+    ],
+)
+def test_document_is_cache_document_accepts_only_the_envelope(
+    payload: bytes, expected: bool
+) -> None:
+    assert ModelCacheDocument.is_cache_document(payload) is expected
+
+
 def test_document_from_bytes_keeps_the_cause_for_logging() -> None:
     with pytest.raises(InvalidDocument) as excinfo:
         ModelCacheDocument.from_bytes(b"{not json")
@@ -1126,11 +1390,11 @@ def test_load_caps_models_per_provider_deterministically(tmp_path: Path) -> None
 
 @POSIX_ONLY
 def test_override_path_does_not_tighten_existing_directory(tmp_path: Path) -> None:
-    """``model_cache_path`` may point into a shared directory; leave its mode."""
+    """An explicit path may point into a shared directory: leave its mode."""
     directory = tmp_path / "shared"
     directory.mkdir()
     os.chmod(directory, 0o755)
-    store = ModelCacheStore(directory / "models.json", tighten_directory=False)
+    store = ModelCacheStore(directory / "models.json")
 
     assert store.save({"p": [_model()]}) is True
 
