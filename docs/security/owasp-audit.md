@@ -1,311 +1,529 @@
 # Barbaros — аудит безопасности по OWASP Cheat Sheet Series
 
-- **Проект:** `/home/nik/code/my/barbaros`, HEAD `71197f8` (2026-11-03).
-- **Предмет:** десктопное PySide6-приложение Barbaros: перевод текста и OCR через `any-llm-sdk`-провайдеров, системный трей, D-Bus/SIGUSR1 IPC, keyring для API-ключей, Flatpak-поставка.
-- **Источник требований:** локальная копия OWASP Cheat Sheet Series — `/home/nik/code/CheatSheetSeries/cheatsheets` (ссылки ниже — на имена файлов и разделы).
-- **Методика:** статический аудит потоков данных (`source → sink`), проверка чек-листов OWASP, эксперименты в `.venv` (PySide6 6.11.1, Python 3.11): offscreen-Qt, `dbus-run-session`, временный `XDG_CONFIG_HOME`, локальный fake OpenAI-совместимый endpoint, fake keyring-бэкенд. Исходный код не изменялся.
-- **Модель угроз:** локальный процесс того же пользователя (в т.ч. скомпрометированное приложение/скрипт), Flatpak-приложение в рамках выданных ему разрешений, поддельный/скомпрометированный LLM-endpoint, подмена/синхронизация файла конфигурации, случайная утечка (бэкапы, скриншоты, логи). Вне модели: root, физический доступ, удалённый сетевой атакующий, полностью доверенный same-uid.
-- **Границы:** не проводились динамический фаззинг, SAST-сканирование зависимостей (CVE), реальная сборка Flatpak и реальные операции с системным Secret Service; выводы по Flatpak/Secret Service основаны на манифесте, коде и документации.
+- **Проект:** репозиторий `barbaros` (корень проекта), HEAD `ea8822c` (2026-11-13). Абсолютные пути с машины аудита в публикуемый документ не включаются (BAR-27); ссылки на строки даны на текущий HEAD.
+- **Предыдущие версии отчёта:** аудит HEAD `71197f8` (2026-11-03, коммит `6dc2a4c`) и аудит HEAD `1e3d17f` (2026-11-09, коммит `77462de`). Второй аудит добавил находки `BAR-19..BAR-27`, но при мерже BAR-01 (`58c92d0`/`ea8822c`) его версия отчёта была вытеснена веткой, базой которой был первый аудит: в `main` осталась только версия `71197f8` плюс статус BAR-01. Здесь восстановлены и повторно проверены оба набора находок; новые находки — `BAR-28+`.
+- **Обновление (2026-11-13):** BAR-28 исправлен: Flatpak ставит PySide6 6.12 из pip поверх BaseApp 6.11 (BaseApp 6.12 на Flathub отсутствует) с build-guard; на PySide6 < 6.12 приложение вообще не читает файл настроек (fail-closed), потому что Qt снимает escaping INI до разбора варианта и сырой скан не может быть границей безопасности. Подробности — в §4 BAR-28 и §11.
+- **Предмет:** десктопное PySide6-приложение Barbaros: перевод текста и OCR через `any-llm-sdk`-провайдеров, системный трей, D-Bus/SIGUSR1 IPC, keyring для API-ключей, Flatpak-поставка. С предыдущего аудита главное изменение — исправление BAR-01 (санация сырого INI `settings_sanitize.py`, JSON вместо pickle для выбора модели, `read_setting`) и пиннинг зависимостей в `pyproject.toml`.
+- **Источник требований:** локальная копия OWASP Cheat Sheet Series (137 читшитов; ссылки ниже — на имена файлов и разделы; путь на машине аудита не публикуется). Маппинг дан на **OWASP Top 10:2021** (для преемственности) и **OWASP Top 10:2025** (актуальная редакция; https://top10.owasp.org/2025/0x00_2025-Introduction/).
+- **Методика:** статический аудит потоков данных (`source → sink`), сверка с чек-листами OWASP, эксперименты в `.venv` (PySide6 6.12.0, any-llm-sdk 1.50.0, Python 3.11): offscreen-Qt, `dbus-run-session`, временные `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_RUNTIME_DIR`, локальный fake OpenAI-совместимый endpoint, fake/in-memory keyring. Дополнительно — запуск **установленного Flatpak BaseApp `io.qt.PySide.BaseApp` 6.11.3** (`flatpak run --command=python3`), в котором PySide6 6.11.3. Исходный код в ходе аудита не изменялся.
+- **Тесты:** полный набор на HEAD — `405 passed, 2 deselected` (`pytest`, slow-NFR исключены `addopts`); с прошлого аудита добавлено 939 строк тестов, в т.ч. `tests/unit/test_settings_sanitize.py`, `tests/unit/test_model_selection.py`, `tests/system/test_legacy_settings.py`.
+- **Модель угроз:** локальный процесс того же пользователя (в т.ч. скомпрометированное приложение/скрипт), Flatpak-приложение в рамках выданных ему разрешений, поддельный/скомпрометированный LLM-endpoint, подмена/синхронизация файла конфигурации, случайная утечка (бэкапы, скриншоты, логи). Вне модели: root, физический доступ, удалённый сетевой атакующий, «полностью доверенный» same-uid. Права файлов `0600`/`0700` рассматриваются как defense-in-depth, а не как граница против same-uid (это же явно признаёт `atomic_file.py:40-44`).
+- **Границы:** не проводились динамический фаззинг, SAST-сканирование зависимостей (CVE), полная сборка/запуск Flatpak-приложения на собственном bundle, реальные операции с системным Secret Service, проверка на реальном X11/Wayland. Выводы по Flatpak основаны на манифесте и **установленном runtime BaseApp** (для проверки версии PySide6 и поведения `QSettings`); выводы по keyring — на fake-бэкендах.
+
+## 0. Что изменилось с предыдущей версии
+
+С прошлого аудита (`1e3d17f`) — **13 коммитов**: исправление BAR-01 (`3e30fa3`), пиннинг зависимостей и пересборка `uv.lock` (`3e7d10d`), нормализация списков моделей (`c5364a8`, `c4388c9`), правки тестов `atomic_file` (`4d43069`) и мержи. В `src/`: 10 файлов, +478/−55; в `tests/`: 7 файлов, +939; в `docs/`: +189 (в основном `docs/settings-migration.md` и `docs/model-cache-storage.md`, плюс `docs/xerj.md` и статус BAR-01 в отчёте).
+
+**Итог ре-проверки:**
+- **BAR-01 исправлен для обычной установки** (PySide6 ≥ 6.12): pickle больше не десериализуется, легаси-значения вычищаются из сырого INI до создания `QSettings`, выбор модели хранится как JSON. Подтверждено: PySide6 6.12.0 в `.venv` на подменённом INI бросает `RuntimeError`, payload не выполняется; `tests/system/test_legacy_settings.py` поднимает реальный `App` на легаси-конфиге.
+- **BAR-01 не покрывал Flatpak-поставку** — это была находка **BAR-28 (High)**: манифест собирал приложение на `io.qt.PySide.BaseApp` 6.11, т.е. на PySide6 **6.11.3**, который по-прежнему делает unpickle; санация обходилась конфигом > 1 МиБ (лимит `MAX_SETTINGS_BYTES`), симлинком или read-only каталогом, и эксперимент с реальным BaseApp 6.11.3 выполнял payload. **Исправлено:** Flatpak ставит `pyside6-essentials==6.12.0`/`shiboken6==6.12.0` из PyPI поверх BaseApp 6.11 с build-guard (BaseApp/Flathub 6.12 пока нет); на PySide6 < 6.12 приложение не читает файл настроек вообще (карантин + настройки в памяти), т.к. Qt снимает escaping INI до разбора варианта и построчный скан обходится escape-формой. Проверено на реальном BaseApp 6.11.3 и в собранном bundle (§4 BAR-28, §11).
+- Остальные 26 находок (`BAR-02..BAR-27`) остаются открытыми. Частичные улучшения: пиннинг зависимостей до minor-линии (BAR-08/16), терпимый `valueFromJson` и `read_setting` (BAR-09), нормализация и strict-валидация списков моделей без падения слота (BAR-24), санация выставляет файлу конфига `0600` при миграции (BAR-10, разово).
+- Новых находок, кроме BAR-28, не добавлено: изменения в `settings_sanitize.py`/`provider_models.py` проверены отдельно (см. §4 и §6).
 
 ## 1. Резюме
 
-Найдено **18 проблем**: 1 High (условно), 7 Medium, 8 Low, 2 Info. Критических проблем, требующих немедленного отзыва ключей или релиза «вчера», не обнаружено; при этом одна находка (pickle-RCE) по формальным критериям OWASP относится к классу RCE и должна быть исправлена в первую очередь.
+На HEAD найдено **28 проблем**: **2 High исправлены (BAR-01 для native-установки, BAR-28 для Flatpak), 9 Medium, 13 Low, 4 Info**. Критических проблем, требующих немедленного отзыва ключей, нет; релизный Flatpak-артефакт больше не выполняется код из подменённого конфига (PySide6 ≥ 6.12 в bundle + fail-closed санация).
 
 **Топ-3:**
-1. **BAR-01 (High, A08):** выбор модели сохраняется в `QSettings` как Python-объект и сериализуется через **pickle**; подмена строки в INI-конфиге приводит к выполнению кода при следующем старте приложения. Подтверждено экспериментально.
-2. **BAR-02 (Medium, A02/A04):** API-ключи не отзываются — `KeySecurityManager.delete()` не вызывается нигде; удаление провайдера оставляет ключ в keyring, а добавление нового провайдера с тем же именем может отправить старый ключ на новый `api_base`.
-3. **BAR-04 (Medium, A01/A04):** D-Bus-метод `popup_and_translate` не проверяет вызывающего; любой процесс того же uid может заставить приложение прочитать буфер обмена и отправить текст выбранному (в т.ч. облачному) провайдеру. На HEAD путь сломан регрессией (BAR-15), т.е. риск латентный — но исправление регрессии «включит» его.
+1. **BAR-28 (High, A08, fixed):** Flatpak-сборка использовала BaseApp 6.11.3 с PySide6 6.11.3, который десериализует `PySide::PyObjectWrapper` через pickle; санация обходилась конфигом > 1 МиБ, симлинком или read-only каталогом. Было подтверждено на реальном runtime (payload создал файл-маркер; в PySide6 6.12.0 — `RuntimeError` без выполнения). Теперь Flatpak ставит PySide6 6.12 из pip с build-guard, а на PySide6 < 6.12 приложение не читает файл настроек вообще (карантин + настройки в памяти).
+2. **BAR-19 (Medium, A04/A08):** `model_cache_path` из конфига не проверяется на «это наш файл кэша». `os.replace` заменяет **любой** user-writable файл (`.bashrc`, конфиг другого приложения, FIFO) содержимым кэша; старые данные теряются без предупреждения. Переживает исправление BAR-01.
+3. **BAR-02 (Medium, A02/A04):** API-ключи не отзываются — `KeySecurityManager.delete()` не вызывается нигде; удаление провайдера оставляет ключ в keyring, а добавление нового провайдера с тем же именем может отправить старый ключ на новый `api_base`. Связка: **BAR-04 (Medium, латентная)** — D-Bus-метод `popup_and_translate` не проверяет вызывающего; сейчас путь падает на BAR-15 до отправки, но исправление регрессии «включит» риск без изменения дизайна.
+
+**Отдельно по доступности:** **BAR-22 (Medium, A10:2025)** — на чистой установке (модель ещё не выбрана) нажатие «Translate» навсегда заклинивает вкладку: кнопка скрыта/disabled, прогресс крутится, Stop падает с `AttributeError`; лечится только перезапуском. Тот же fail-open — в OCR-вкладке и при отсутствующем API-ключе (`MissingApiKeyError` из `AnyLLM.create`). Это не RCE/утечка, но нарушает AGENTS.md #14 и воспроизводится без атакующего.
 
 ## 2. Сводная таблица
 
-| ID | Severity | OWASP (cheat sheet / Top-10) | Находка | Ключевые места |
-|---|---|---|---|---|
-| BAR-01 | **High*** | Deserialization / A08:2021 | pickle-десериализация `ModelSelection` из `QSettings` → RCE при чтении подменённого конфига | `main_window.py:105-106,200-206`, `ocr.py:94-102` |
-| BAR-02 | Medium | Secrets Management §2.7 / A02, A04 | Нет отзыва и очистки API-ключей; stale-ключ может уйти новому endpoint | `security.py:19-24`, `provider_dialog.py:47,111-113,229-232`, `model_manager.py:47` |
-| BAR-03 | Medium | Transport Layer Security / A02 | `http://` разрешён для любого хоста → ключ и текст в cleartext | `common.py:66-77`, `provider_dialog.py:95-98`, `tests/test_common.py:6-16` |
-| BAR-04 | Medium | Authorization / A01, A04 | D-Bus `popup_and_translate` без аутентификации вызывающего | `ipc.py:169-172,211-213`, `main.py:50-59` |
-| BAR-05 | Medium | Attack Surface / A05 | Flatpak: полный `--socket=session-bus` + неверный `--own-name` | `flatpak/barbaros.yaml:21,23` |
-| BAR-06 | Medium | XSS/Injection / A03 | HTML-инъекция из ошибки провайдера в `QMessageBox` (`AutoText`, `openExternalLinks=True`) | `main_window.py:76-87`, `common.py:89-93`, `text.py:131`, `ocr.py:213` |
-| BAR-07 | Medium | Input Validation (Regex) / A04 | Квадратичный regex `pop_think` в GUI-потоке + нет лимита ответа → зависание UI | `features/text.py:104-110,119-126` |
-| BAR-08 | Medium | Supply Chain / A06, A08 | Flatpak-зависимости не запинены и без хэшей; `uv.lock` в сборке не участвует | `flatpak/requirements-flatpak.txt:1-5`, `flatpak/barbaros.yaml:58` |
-| BAR-09 | Low | Input Validation / A04, A05 | Конфиг — недоверенный вход: `api_base` не валидируется, битый JSON/тип роняет старт | `main_window.py:44-49,89-99`, `model_manager.py:23-29` |
-| BAR-10 | Low | Key Management / A05 | Права QSettings-файла определяются umask (0664/0644); нет `0600` | `main.py:26-27` |
-| BAR-11 | Low | Secrets Management §2.9 / A04 | `NoKeyringError` не обрабатывается: без Secret Service падение на старте | `security.py:11-24`, `providers_card.py:30,132` |
-| BAR-12 | Low | Authorization/Logging / A04, A09 | Хрупкий SIGUSR1-fallback: `name=None` → краш, сигнал чужому процессу, `assert`/bare `except`/`print` | `ipc.py:127-150,24-31,77-90` |
-| BAR-13 | Low | Output encoding / A03 | Rich text из внешних имён и ответа LLM (`QLabel`, `LinkLabel`, `QTextEdit.setText`) | `filterable_combobox.py:70,358`, `providers_card.py:66,106`, `text.py:125`, `ocr.py:198,203` |
-| BAR-14 | Low | Input Validation / A04 | Нет лимитов на текст/изображение/ответ; невалидированный `ChatCompletion` (`choices=[]`, `content=None`) | `features/text.py:119-126`, `workers.py:69,102`, `image_manager.py:80-92` |
-| BAR-15 | Low | Secure Code Review / A04, A09 | Регрессия `process_translation_request`: popup-перевод сломан, ошибка маскируется как успех | `main.py:50-59`, `main_window.py` (нет `orig_text`) |
-| BAR-16 | Low | Supply Chain / A06, A08 | CI отключён, нет Dependabot/pip-audit/`SECURITY.md`, bundle не подписан | `.github/workflows/flatpak.yml.off`, `tasks.py:39-71` |
-| BAR-17 | Info | Logging / A09 | Логирование через `print()`: нет структуры/экранирования; секреты не логируются | `workers.py:123,138,141`, `model_manager.py:121,129,173` |
-| BAR-18 | Info | User Privacy / A04 | Скриншот (по умолчанию весь экран) и clipboard уходят провайдеру без in-app уведомления | `image_manager.py:162-173`, `main.py:50-59` |
+| ID | Severity | Статус | OWASP (cheat sheet / Top-10) | Находка | Ключевые места (HEAD) |
+|---|---|---|---|---|---|
+| BAR-01 | **High** | **fixed (native)**; остаток — BAR-28 | Deserialization / A08:2021, A08:2025 | pickle-десериализация `ModelSelection` из `QSettings` → RCE на PySide6 < 6.12; исправлено JSON-форматом и санацией сырого INI, но не во Flatpak | `main.py:33-56`; `settings_sanitize.py:82-200`; `main_window.py:118-125,214-223`; `features/ocr.py:94-112` |
+| BAR-02 | Medium | open | Secrets Management §2.7 / A02, A04 | Нет отзыва и очистки API-ключей; stale-ключ может уйти новому endpoint | `security.py:17-25`; `provider_dialog.py:43-48,111-113,218-232`; `model_manager.py:54` |
+| BAR-03 | Medium | open | Transport Layer Security / A02 | `http://` разрешён для любого хоста → ключ и текст в cleartext | `common.py:108-127`; `provider_dialog.py:96-98`; `tests/test_common.py:6-29` |
+| BAR-04 | Medium\* | open | Authorization / A01, A04, A06 | D-Bus `popup_and_translate` без аутентификации вызывающего; практический риск латентный из-за BAR-15 | `ipc.py:13,164-167,207-208`; `main.py:75-89` |
+| BAR-05 | Medium | open | Attack Surface / A05, A02:2025 | Flatpak: полный `--socket=session-bus` + неверный `--own-name` | `flatpak/barbaros.yaml:21,23` |
+| BAR-06 | Medium | open | XSS/Injection / A03 | HTML-инъекция из ошибки провайдера в `QMessageBox` (`AutoText`, `openExternalLinks=True`) | `main_window.py:91-102`; `common.py:135-140`; `features/text.py:131`; `features/ocr.py:223` |
+| BAR-07 | Medium | open | Input Validation (Regex) / A04 | Квадратичный regex `pop_think` в GUI-потоке + нет лимита ответа → зависание UI | `features/text.py:104-110,119-126`; `workers.py:73,106` |
+| BAR-08 | Medium | open (partial) | Supply Chain / A06, A08, A03:2025 | Flatpak-зависимости не запинены и без хэшей; `uv.lock` в сборке не участвует (в `pyproject.toml` пиннинг появился) | `flatpak/requirements-flatpak.txt:1-5`; `flatpak/barbaros.yaml:58`; `pyproject.toml:24-33` |
+| BAR-09 | Low | open (partial) | Input Validation / A04, A05, A10:2025 | Конфиг — недоверенный вход: `api_base`/схема не валидируются, JSON верной формы, но неверного типа роняет старт | `common.py:55-70`; `main_window.py:45-66,190-195`; `model_manager.py:31-35` |
+| BAR-10 | Low | open (partial) | Key Management / A05 | Права QSettings-файла определяются umask; `0600` выставляется только при разовой миграции | `main.py:33-56`; `atomic_file.py:242` |
+| BAR-11 | Low | open | Secrets Management §2.9 / A04, A10:2025 | `NoKeyringError` не обрабатывается: без Secret Service падение на старте | `security.py:17-25`; `providers_card.py:132-134`; `provider_dialog.py:47,180` |
+| BAR-12 | Low | open | Authorization/Logging / A04, A09, A10:2025 | Хрупкий SIGUSR1-fallback: `name=None` → краш, сигнал чужому процессу, `assert`/bare `except`/`print` | `ipc.py:25,31-32,79,89,130-145,164-167,204` |
+| BAR-13 | Low | open | Output encoding / A03 | Rich text из внешних имён и ответа LLM (`QLabel`, `QTextEdit.setText`); источник — `model.id` из кэша | `filterable_combobox.py:70-72,378-381`; `providers_card.py:66,106`; `features/text.py:125`; `features/ocr.py:208,213` |
+| BAR-14 | Low | open | Input Validation / A04 | Нет лимитов на текст/изображение/ответ; невалидированный `ChatCompletion` (`choices=[]`, `content=None`) | `features/text.py:61-76,119-126`; `features/ocr.py:150-213`; `workers.py:73,95-99,106`; `image_manager.py:76-92,107-132` |
+| BAR-15 | Low | open | Secure Code Review / A04, A09, A10:2025 | Регрессия `process_translation_request`: popup-перевод сломан, ошибка маскируется как успех | `main.py:75-89`; `features/text.py:41,45` |
+| BAR-16 | Low | open (partial) | Supply Chain / A06, A08, A03:2025 | CI отключён, нет Dependabot/pip-audit/`SECURITY.md`, bundle не подписан | `.github/workflows/flatpak.yml.off`; `tasks.py:41,46,63,71` |
+| BAR-17 | Info | open (частично улучшено) | Logging / A09 | Логирование через `print()`: нет структуры/экранирования; секреты не логируются; добавлены print пути конфига/бэкапа | `main.py:36,41,47,49,99`; `ipc.py:137,141,144,204`; `main_window.py:53`; `model_manager.py:187` |
+| BAR-18 | Info | open | User Privacy / A04 | Скриншот (по умолчанию весь экран) и clipboard уходят провайдеру без in-app уведомления | `image_manager.py:162-173,180-181`; `workers.py:95-99`; `main.py:75-89`; `README.md:33` |
+| **BAR-19** | **Medium\*\*** | open | Secure Code Review (file path sink) / A04, A08 | `model_cache_path` — произвольный sink записи: замена/уничтожение любого user-writable файла; `chmod` каталога сквозь симлинк | `main_window.py:45-56`; `model_cache.py:51-100`; `atomic_file.py:247-259,283-312` |
+| **BAR-20** | Low | open | Denial of Service / A04 | Кэш читается/парсится заново на каждого `RESTORE`-провайдера в GUI-потоке: 100 провайдеров + 4 МиБ ≈ 7.2 с старта | `main_window.py:61-66`; `model_manager.py:133-151,344-357`; `model_cache.py:325-337` |
+| **BAR-21** | Low | open | Input Validation / A08, A02:2025 | Кэш в общем каталоге читается без проверки владельца/прав (defense-in-depth, вне формальной модели) | `atomic_file.py:118-155`; `model_cache.py:299-321` |
+| **BAR-22** | **Medium** | open | Error Handling/DoS / A10:2025 (A04:2021) | Исключение в GUI-слоте после установки «загрузочного» состояния → вкладка заклинена навсегда; Stop падает | `features/text.py:61-76,86-90`; `features/ocr.py:155-160,180-181`; `workers.py:63,88,121`; `model_manager.py:54` |
+| **BAR-23** | Low | open | DoS/Threading / A10:2025 (A04:2021) | `QThread.terminate()` + `wait()` без таймаута, нет сетевых таймаутов → зависание GUI при остановке/выходе | `model_manager.py:192-207`; `workers.py:124-140` |
+| **BAR-24** | Low | open (partial) | LLM output validation/DoS / A06:2025 (A04:2021) | Неограниченный ответ `list_models` от endpoint (нормализация и strict-валидация добавлены, лимитов нет) | `workers.py:127-140`; `model_manager.py:262-271,344-357`; `filterable_combobox.py:263-273` |
+| **BAR-25** | Low | open | LLM multimodal/Privacy / A10:2025 (A04:2021) | OCR fail-open: после «провайдер не поддерживает изображения» изображение всё равно уходит провайдеру | `workers.py:90-110` (особенно `:91-92`) |
+| **BAR-26** | Info | open | Error Handling/Logging / A10, A09:2025 | `aboutToQuit.connect(cleanup)` внутри `save_language` → при обычном выходе shutdown не вызывается | `main.py:68-73,97-101,177-188` |
+| **BAR-27** | Info | open | Privacy/Honesty / A09:2025 | Гигиена документации: README обещает «Secure API calls», хотя `http://` разрешён, а уведомлений о передаче нет | `README.md:33,273`; `docs/` |
+| **BAR-28** | **High** | **fixed** | Deserialization / Supply Chain / A08, A06:2021, A03:2025 | Flatpak собирался на BaseApp 6.11.3 (PySide6 6.11.3), который unpickle-ит `QSettings`; санация обходилась конфигом > 1 МиБ, симлинком, read-only каталогом и квотированной формой значения → RCE; исправлено пином PySide6 6.12 в bundle + отказом читать файл настроек на старом PySide6 | `flatpak/barbaros.yaml`; `flatpak/bar28_guard.py`; `settings_sanitize.py`; `main.py` |
 
-\* BAR-01 — High по OWASP/CWE-502 (RCE), но для эксплуатации нужна запись в конфиг пользователя; при модели угроз «same-uid полностью доверенный» — Medium. Обоснование в разделе 3.
+\* BAR-04 — Medium как дефект дизайна; в текущем состоянии (BAR-15 открыт) практическая severity — Low: D-Bus-вызов приводит только к показу окна и `AttributeError` до отправки. После исправления BAR-15 без изменения дизайна риск станет реальным (clipboard → облачный провайдер).
+\*\* BAR-19 — Medium, потому что impact — тихая деструктивная запись (integrity/availability), отдельный класс от RCE. Прямой эскалации относительно BAR-01 нет; Medium отражает, что sink переживёт исправление BAR-01 и что «данные конфига едут между машинами» (dotfiles/sync/бэкап).
 
 ---
 
-## 3. Детали находок
+## 3. Детали: повторная проверка BAR-01..BAR-18
 
 ### BAR-01. pickle-десериализация `ModelSelection` из `QSettings` → RCE
 
-- **Статус (2026-11-12): исправлено.** Санация сырого INI выполняется до
-  создания `QSettings` (`src/barbaros/settings_sanitize.py`), выбор модели
-  хранится как JSON, а `read_setting()` страхует старт, если санация
-  невозможна. PySide6 6.12 дополнительно не десериализует pickle, поэтому
-  старый конфиг перестал быть RCE-вектором, но без миграции ронял старт
-  (`RuntimeError: Failed to deserialize Python object from QDataStream`).
-  Детали, миграция и тесты — `docs/settings-migration.md`. Известное
-  следствие: старый выбор модели не импортируется и сбрасывается при первом
-  запуске. Ссылки на строки в этом разделе — на HEAD аудита (`71197f8`), не на
-  текущий HEAD; отклонение срабатывает на первом чтении каждой INI-секции с
-  pickled-значением, а не только на самом ключе.
-- **OWASP:** `Deserialization_Cheat_Sheet.md` → «Python / Clear-box Review»: *«Unpickling can execute arbitrary code; never unpickle untrusted data»*; «Using Alternative Data Formats»; `Secure_Code_Review_Cheat_Sheet.md` → «Deserialization Vulnerabilities». Top-10: A08:2021 Software and Data Integrity Failures (CWE-502).
-- **Место:**
-  - запись: `src/barbaros/main_window.py:105-106` (`save_choosed_model` → `self.settings.setValue("model", selection)`); `src/barbaros/features/ocr.py:101-102` (`save_choosed_ocr_model`);
-  - чтение: `src/barbaros/main_window.py:200-206` (`self.settings.value("model")`); `src/barbaros/features/ocr.py:94-99`;
-  - тип: `src/barbaros/widgets/filterable_combobox.py:164-168` — `@dataclass class ModelSelection`.
-- **Evidence (экспериментально):**
-  - `QSettings` в PySide6 сериализует Python-объект через `PySide::PyObjectWrapper` с pickle protocol 4. Строка в INI выглядит как `model=@Variant(...PySide::PyObjectWrapper..., \x80\x04...)`; на машине аудита такие значения уже присутствуют в реальных конфигах native- и Flatpak-установки.
-  - В отдельном процессе создан конфиг с `model`, содержащим pickle-payload (`os.system("touch …/PWNED")`), после чего **свежий** процесс, выполнивший только `settings.value("model")`, создал файл-маркер. Код выполнился до какой-либо проверки `isinstance` — проверка в `restore_model` стоит *после* десериализации и бесполезна.
-  - **Уточнение (проверено на PySide6 6.11.1):** unpickle срабатывает не только при чтении самого pickled-ключа, но и при чтении **любого ключа из той же группы** (`main_window`/`ocr_feature`), а также при `remove()`, `setValue()`, `allKeys()`, `contains()`, `childKeys()` — эти операции загружают/перезаписывают группу или файл. Безопасны только `fileName()`, `sync()`, `status()` без предварительного чтения; `value(..., type=str)` **не** защищает. Практически это значит, что штатный старт приложения, читающий `main_window/llm_providers` из той же группы, что и `model`, уже запускает unpickle — отдельное чтение `model` не требуется.
-- **Сценарий:** злоумышленник получает запись в `~/.config/io.github.frimn/barbaros.conf` (Flatpak: `~/.var/app/io.github.frimn.barbaros/config/...`) — например, вредоносное приложение с доступом к `$HOME`, синхронизация dotfiles/бэкап, восстановление чужого конфига, group-writable файл на shared-машине. При следующем запуске Barbaros (в т.ч. автозапуск из трея) выполняется произвольный код с правами пользователя. Payload персистентный — срабатывает при каждом чтении настройки.
-- **Влияние:** локальное выполнение кода, персистентность, обход любых проверок формата; в Flatpak-сценарии — выход за пределы ожидаемого уровня доверия между приложениями.
-- **Почему High\*:** по OWASP/CWE это RCE-класс. Практическая эксплуатация требует записи в конфиг; если считать «процесс того же uid» полностью доверенным, это Medium, потому что такой процесс и так может выполнить код. Но «запись файла → выполнение кода» — нежелательная цепочка (бэкапы/синхронизация/другие sandbox-приложения), поэтому в отчёте она помечена High с оговоркой.
-- **Рекомендация (KISS):**
-  1. Хранить выбор как данные: `settings.setValueAsJson("model_selection", {"provider": …, "model": …})` или два строковых ключа (`model_provider`, `model_name`). Чтение — через `valueFromJson`.
-  2. **Не пытаться «прочитать/удалить» легаси-ключ через `QSettings`:** в PySide6 6.11.1 `remove()`, `setValue()`, `allKeys()`, `contains()` и чтение любого ключа из группы с pickled-значением уже вызывают unpickle. Миграция должна начинаться **до** первого обращения к `QSettings`: прочитать сырой INI-файл как текст (путь из `QStandardPaths`), при наличии `PyObjectWrapper`/`@Variant` — сохранить бэкап и удалить/санитизировать файл без разбора `QSettings`, затем стартовать с дефолтами. Бесшовный вариант — вообще заменить `QSettings` на собственный JSON-стор (см. ниже), а старый файл переименовать.
-  3. Правило: в `QSettings.setValue` — только `str`/`int`/`bool`/`QByteArray` (геометрия `saveGeometry()` — корректный Qt-тип). Добавить проверку в ревью/линт.
-  4. Тест: сохранение и чтение выбора без `pickle` (в файле конфига нет `PyObjectWrapper`); тест, что `restore_model` не падает на легаси-ключе.
+- **OWASP:** `Deserialization_Cheat_Sheet.md` → «Python / Clear-box Review»: *«Unpickling can execute arbitrary code; never unpickle untrusted data»*; «Using Alternative Data Formats»; `Secure_Code_Review_Cheat_Sheet.md` → «Deserialization Vulnerabilities». Top-10: A08:2021 / A08:2025 Software or Data Integrity Failures (CWE-502).
+- **Статус (2026-11-13): исправлено для native/pip-установки; во Flatpak остаётся BAR-28.** Исправление в `3e30fa3`:
+  1. `settings_sanitize.sanitize_pickled_settings()` читает сырой INI до создания `QSettings` и удаляет строки, значение которых начинается с `@Variant(` и содержит `PySide::PyObjectWrapper`; оригинал сохраняется рядом как бэкап `0600` (`settings_sanitize.py:82-200`).
+  2. Выбор модели хранится как JSON (`ModelSelection.to_dict/from_dict`, `main_window.py:118-125,214-223`, `features/ocr.py:94-112`); в `QSettings.setValue` больше не передаются Python-объекты.
+  3. `common.read_setting()` переживает `RuntimeError` от PySide6 6.12 (отказ от pickle) и восстанавливает соседние ключи секции (`common.py:11-43`).
+  4. `pyproject.toml:27` пиннит `pyside6-essentials~=6.12.0`; `uv.lock` пересобран.
+- **Место (HEAD):** запись — `main_window.py:118-125`, `features/ocr.py:106-112`; чтение — `main_window.py:214-223`, `features/ocr.py:94-104`; тип — `filterable_combobox.py:165-185`; санация — `main.py:33-46`, `settings_sanitize.py:51-200`.
+- **Evidence (2026-11-13):**
+  - В `.venv` (PySide6 **6.12.0**) на подменённом INI с `PySide::PyObjectWrapper` чтение `QSettings.value()` бросает `RuntimeError: Failed to deserialize Python object from QDataStream…`, pickle-payload **не выполняется** (маркер не создан).
+  - Реальный `App()` на легаси-конфиге стартует, конфиг очищается, бэкап на месте, соседние ключи живы (`tests/system/test_legacy_settings.py`).
+  - Ограничение: под PySide6 6.11.x `read_setting` не спасает — версия unpickle-ит, а не бросает исключение; это был путь BAR-28, теперь закрытый fail-closed санацией и пином PySide6 6.12 (см. §4).
+- **Сценарий (для PySide6 < 6.12 / Flatpak):** см. BAR-28. Для native-установки с 6.12 — запись в конфиг больше не даёт выполнения кода; остаточный impact — только потеря легаси-выбора модели.
+- **Остаточные замечания:** санация эвристична (вырезает любое значение с маркером после `@Variant(`, а не два известных ключа), но теперь видит и квотированную форму `"@Variant(...` (BAR-28: QSettings квотирует значения с запятой — обычным байтом pickle). При ошибке очистки на PySide6 < 6.12 файл уносится от `QSettings`; бэкап/карантин с payload остаётся на диске, но приложением не читается. См. BAR-28 и §6.
+- **Рекомендация:** остаток закрыт через BAR-28 (PySide6 6.12 в Flatpak + fail-closed санация). Долгосрочно — отказаться от `QSettings` для выбора модели в пользу JSON-стора (механика уже есть в `atomic_file.py`).
 
 ### BAR-02. Неполный жизненный цикл API-ключей
 
 - **OWASP:** `Secrets_Management_Cheat_Sheet.md` §2.7.3 «Revocation», §2.7.2 «Rotation», §2.6 «Auditing»; `Key_Management_Cheat_Sheet.md` → «Zeroization and Destruction». Top-10: A02, A04.
-- **Место:** `src/barbaros/security.py:19-24` (`delete()` реализован), `src/barbaros/widgets/provider_dialog.py:47` (предзаполнение ключа), `:111-113` (запись только непустого), `:229-232` (удаление провайдера), `src/barbaros/model_manager.py:47` (чтение ключа для клиента), `model_manager.py:86-89` (`remove()`).
-- **Evidence:** `KeySecurityManager.delete()` **не вызывается нигде** (`grep` по `delete_password|api_key_manager.delete` даёт только определение). Эксперимент с in-memory keyring: после `ModelManager.remove("audit-provider")` ключ остаётся доступным. Очистка поля ключа в диалоге редактирования + сохранение оставляет старый ключ в keyring (`get()` возвращает старое значение).
-- **Сценарий:**
-  1. Пользователь удаляет облачного провайдера, считая, что ключ отозван, — секрет остаётся в keyring пользователя (вне приложения).
-  2. Пользователь переиспользует имя провайдера для нового аккаунта/локального шлюза, не вводя ключ: `ProviderClient.client()` возьмёт старый ключ и отправит его на новый `api_base` — облачный ключ уйдёт стороне, которой пользователь его не давал.
-  3. Сменить endpoint, оставив провайдера, нельзя без перезаписи ключа: «пусто» трактуется как «оставить старый».
+- **Статус:** open, Medium (без изменений).
+- **Место:** `security.py:17-25` (`get`/`delete`), `provider_dialog.py:43-48` (предзаполнение ключа), `:111-113` (запись только непустого), `:218-232` (удаление провайдера), `model_manager.py:54` (чтение ключа для клиента), `model_manager.py:153-158` (`remove()`).
+- **Evidence:** `KeySecurityManager.delete()` **не вызывается нигде** (`grep` по `api_key_manager.delete` даёт только определение). Fake in-memory keyring: после `ModelManager.remove("audit-provider")` ключ остаётся доступным. Очистка поля ключа в диалоге редактирования + сохранение оставляет старый ключ (`get()` возвращает старое значение). `delete()` по-прежнему ловит только `PasswordDeleteError`, не `KeyringError`.
+- **Сценарий:** (1) пользователь удаляет облачного провайдера, считая, что ключ отозван, — секрет остаётся в keyring; (2) пользователь переиспользует имя провайдера для нового аккаунта/локального шлюза, не вводя ключ: `ProviderClient.client()` возьмёт старый ключ и отправит его на новый `api_base`; (3) сменить endpoint, оставив провайдера, нельзя без перезаписи ключа: «пусто» трактуется как «оставить старый».
 - **Рекомендация:** вызывать `api_key_manager.delete()` при удалении провайдера (после подтверждения), но **не** при `ModelManager.update()` (иначе редактирование сотрёт ключ). Добавить явную кнопку «Удалить сохранённый ключ» с подтверждением. В `delete()` ловить `keyring.errors.KeyringError`, а не только `PasswordDeleteError`. Тест с fake backend: «удалил провайдера / очистил ключ → в хранилище пусто».
 
 ### BAR-03. `http://` допускается для любого хоста → cleartext
 
-- **OWASP:** `Secrets_Management_Cheat_Sheet.md` §2.8 «TLS Everywhere»: *«Never transmit secrets via plaintext»*; `Transport_Layer_Security_Cheat_Sheet.md` → «Use TLS For All Pages»: *«API-only endpoints should disable HTTP altogether…»*. Top-10: A02.
-- **Место:** `src/barbaros/common.py:66-77` (`^https?://`), `src/barbaros/widgets/provider_dialog.py:95-98` (единственная проверка URL), `tests/test_common.py:6-16` (тесты закрепляют `http://google.com`, `http://192.168.0.1:1234` как валидные), `src/barbaros/model_manager.py:47` (URL уходит в `AnyLLM.create`).
-- **Evidence:** `is_valid_url('http://evil.example.com') == True`, `is_valid_url('http://169.254.169.254/…') == True`. При custom OpenAI-совместимом endpoint `api_base` становится `base_url` httpx; в открытом виде уходят `Authorization: Bearer <ключ>` и весь переводимый текст. Для `api_base=None` any-llm использует HTTPS по умолчанию — проблема только при явном `http`-эндпоинте.
-- **Рекомендация:** один helper (например, `api_base_problem(url)`) с `urllib.parse`: разрешать `https` для любых хостов; `http` — только `localhost`/`127.0.0.0/8`/`::1`; при не-loopback `http` — отказ (проще и предсказуемее, чем предупреждение). Применять его и в диалоге, и при загрузке из конфига (BAR-09). Обновить `tests/test_common.py`.
+- **OWASP:** `Secrets_Management_Cheat_Sheet.md` §2.8 «TLS Everywhere»; `Transport_Layer_Security_Cheat_Sheet.md` → «Use TLS For All Pages». Top-10: A02.
+- **Статус:** open, Medium (без изменений).
+- **Место:** `common.py:108-127` (шаблон `^https?://` на `:113`), `provider_dialog.py:96-98` (единственная проверка URL), `tests/test_common.py:6-29` (тесты закрепляют `http://google.com`, `http://192.168.0.1:1234` как валидные), `model_manager.py:54` (URL уходит в `AnyLLM.create`).
+- **Evidence:** `is_valid_url('http://evil.example.com') == True`, `is_valid_url('http://169.254.169.254/…') == True`, `http://192.168.0.1:1234/v1` → True. `ftp://`, `javascript:`, `user:pass@host` → False; `http://[::1]:8080` → False (IPv6-loopback не поддержан). При custom OpenAI-совместимом endpoint `api_base` становится `base_url` httpx; в открытом виде уходят `Authorization: Bearer <ключ>` и весь переводимый текст. Для `api_base=None` any-llm использует HTTPS по умолчанию.
+- **Рекомендация:** один helper (например, `api_base_problem(url)`) с `urllib.parse`: разрешать `https` для любых хостов; `http` — только `localhost`/`127.0.0.0/8`/`::1`; при не-loopback `http` — отказ. Применять и в диалоге, и при загрузке из конфига (BAR-09). Обновить `tests/test_common.py`.
 
 ### BAR-04. D-Bus `popup_and_translate` без проверки вызывающего
 
-- **OWASP:** `Authorization_Cheat_Sheet.md` → «Deny by Default», «Validate Permissions on Every Request», «Enforce Least Privileges»; `Attack_Surface_Analysis_Cheat_Sheet.md` → «Identifying and Mapping the Attack Surface»; `User_Privacy_Protection_Cheat_Sheet.md` → «Honesty & Transparency». Top-10: A01, A04.
-- **Место:** `src/barbaros/ipc.py:12` (`SERVICE_NAME`), `:169-172` (`registerService` + `registerObject(..., ExportAllSlots)` на пути `/`), `:211-213` (`@Slot()` → `app.process_translation_request()`), `src/barbaros/main.py:50-59` (чтение clipboard + программный клик «Translate»).
-- **Evidence:** экспериментально под `dbus-run-session` с минимальным аналогом адаптера: клиент с **пустым** именем интерфейса (`QDBusInterface(SERVICE_NAME, "/", "", bus)`) успешно вызывает метод; `gdbus introspect` показывает `popup_and_translate()`; никакой проверки PID/uid/имени вызывающего, токена, подтверждения или rate limit нет. Метод без аргументов и возврата — данных через D-Bus не передаётся, но действие чувствительное.
-- **Сценарий:** любая программа того же пользователя (вне sandbox или Flatpak с разрешением на `talk-name=io.github.frimn.barbaros`) вызывает метод; либо просто запускает `barbaros --popup`. Запущенный экземпляр читает буфер обмена и отправляет текст облачному провайдеру без явного действия пользователя; повторные вызовы — платные API-запросы и перекрытие окна. Прямого канала «прочитать буфер атакующим» нет (метод `void`), но при подмене `api_base` (запись конфига) данные можно направить на свой endpoint.
-- **Оговорка:** на HEAD `process_translation_request` падает с `AttributeError` до отправки (BAR-15), поэтому сейчас риск латентный; в v2025.9.2 цепочка работала. Исправление регрессии без изменения дизайна включит риск.
+- **OWASP:** `Authorization_Cheat_Sheet.md` → «Deny by Default», «Validate Permissions on Every Request», «Enforce Least Privileges»; `Attack_Surface_Analysis_Cheat_Sheet.md`; `User_Privacy_Protection_Cheat_Sheet.md` → «Honesty & Transparency». Top-10: A01, A04, A06.
+- **Статус:** open, Medium (практическая — Low, пока BAR-15 открыт). Без изменений.
+- **Место:** `ipc.py:13` (`SERVICE_NAME`), `:164-167` (`registerService`, `registerObject(..., ExportAllSlots)` на пути `/`), `:207-208` (`@Slot()` → `app.process_translation_request()`), `main.py:75-89` (чтение clipboard + программный клик «Translate»).
+- **Evidence:** под `dbus-run-session` сторонний процесс вызывает экспортированный слот; сервер-заглушка реально выполнил обработчик, клиент получил `ReplyMessage` без ошибки. Никакой проверки PID/uid/имени вызывающего, токена, подтверждения или rate limit нет. `QDBusInterface(SERVICE_NAME, "/", "", bus)` на PySide6 6.11/6.12 невалиден; Qt экспортирует интерфейс, производный от Python-класса (для приложения — `local.barbaros.ipc.IPCService`), вызов делается с этим именем или через `gdbus`.
+- **Сценарий:** любая программа того же пользователя (вне sandbox или Flatpak с разрешением `talk-name`) вызывает метод; запущенный экземпляр читает буфер обмена и отправляет текст облачному провайдеру без явного действия пользователя; повторные вызовы — платные API-запросы и перекрытие окна. Прямого канала «прочитать буфер атакующим» нет (`void`), но при подмене `api_base` данные можно направить на свой endpoint.
+- **Оговорка:** на HEAD `process_translation_request` падает с `AttributeError` до отправки (BAR-15) — сейчас риск латентный. Если обработчик бросает исключение, клиент всё равно получает валидный ответ — сбой неотличим от успеха.
 - **Рекомендация:** разделить «показать окно» и «перевести из буфера»: IPC/`--popup` должны только фокусировать окно; перевод из clipboard — только по явному действию пользователя в UI. Если автоперевод нужен — подтверждение в UI с указанием провайдера, rate limit/дедупликация, проверка вызывающего (`QDBusContext`/`GetConnectionUnixProcessID` + сверка `/proc/<pid>/exe`), узкий D-Bus-интерфейс вместо `ExportAllSlots` на `/`.
 
 ### BAR-05. Flatpak: полный `--socket=session-bus` и неверный `--own-name`
 
-- **OWASP:** `Authorization_Cheat_Sheet.md` → «Enforce Least Privileges», «Deny by Default»; `Attack_Surface_Analysis_Cheat_Sheet.md` → сокращение поверхности. Top-10: A05.
-- **Место:** `flatpak/barbaros.yaml:16-23`, `src/barbaros/ipc.py:12`.
-- **Evidence:** `--socket=session-bus` отключает фильтрацию xdg-dbus-proxy и даёт приложению нефильтрованный доступ ко всей сессии (Flatpak docs называют это security risk, которое следует избегать). Строка `--own-name=org.frimn.barbaros` не совпадает с app-id/`SERVICE_NAME` `io.github.frimn.barbaros`; имя app-id разрешено по умолчанию, это разрешение лишнее и вводит в заблуждение. `--talk-name=org.freedesktop.secrets` нужен для keyring и сам по себе не даёт чужих секретов.
-- **Влияние:** расширение blast radius при компрометации приложения (доступ к D-Bus-интерфейсам других приложений, имперсонация свободных имён); нарушение least privilege; потенциальные вопросы при ревью для Flathub. Прямой уязвимости без code execution нет.
-- **Рекомендация:** убрать `--socket=session-bus`; оставить `--talk-name=org.freedesktop.secrets`; убрать `--own-name=org.frimn.barbaros` (при необходимости исправить на `io.github.frimn.barbaros`, но app-id namespace и так разрешён). Проверить IPC после изменения (`flatpak run --log-session-bus …`). `--share=ipc` и `--device=dri` — стандартные для X11/GL, не находка; `--filesystem=home` закомментирован — хорошо.
+- **OWASP:** `Authorization_Cheat_Sheet.md` → «Enforce Least Privileges», «Deny by Default»; `Attack_Surface_Analysis_Cheat_Sheet.md`. Top-10: A05, A02:2025.
+- **Статус:** open, Medium (без изменений).
+- **Место:** `flatpak/barbaros.yaml:21` (`--socket=session-bus`), `:23` (`--own-name=org.frimn.barbaros`); `ipc.py:13`.
+- **Evidence:** `--socket=session-bus` отключает фильтрацию xdg-dbus-proxy и даёт приложению нефильтрованный доступ ко всей сессии (Flatpak docs называют это security risk). Строка `--own-name=org.frimn.barbaros` не совпадает с app-id/`SERVICE_NAME` `io.github.frimn.barbaros`; имя app-id разрешено по умолчанию, это разрешение лишнее. `--talk-name=org.freedesktop.secrets` нужен для keyring и сам по себе не даёт чужих секретов.
+- **Рекомендация:** убрать `--socket=session-bus`; оставить `--talk-name=org.freedesktop.secrets`; убрать `--own-name=org.frimn.barbaros`. Проверить IPC после изменения (`flatpak run --log-session-bus …`).
 
 ### BAR-06. HTML-инъекция из ошибки провайдера в `QMessageBox`
 
-- **OWASP:** `Cross_Site_Scripting_Prevention_Cheat_Sheet.md` → «Output Encoding for HTML Contexts», «HTML Sanitization», «Safe Sinks»; `Injection_Prevention_Cheat_Sheet.md` → «Rule #3 (contextually escape)»; `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «HTML and Markdown Injection». Top-10: A03.
-- **Место:** `src/barbaros/main_window.py:76-87` (`msg = url_to_html_links(msg)` → `QMessageBox.critical`), `src/barbaros/common.py:89-93` (`url_to_html_links` **без** `html.escape`), источники ошибок: `model_manager.py:181-182`, `workers.py:72-73,106`, `features/text.py:131`, `features/ocr.py:213`.
-- **Evidence:** `QMessageBox` использует `Qt.TextFormat.AutoText` и рендерит HTML; метка текста имеет `openExternalLinks=True` (замер на PySide6 6.11.1). `<img src="file://…">` загружается, клик по `<a href="file://…">` приводит к `QDesktopServices`/`xdg-open`. Доставка недоверенного текста подтверждена локальным fake-endpoint: `any_llm` кладёт тело HTTP-ошибки в `str(exception)`, оно уходит в `error.emit(...)` и в `QMessageBox.critical` без экранирования. `url_to_html_links` ломает атрибут на кавычке и пропускает произвольные теги (нет escape/sanitize).
-- **Влияние:** UI-spoofing в системном модальном окне (поддельный текст «ключ истёк, войдите заново»), фишинговая ссылка, открытие локальных `file://`-путей, отображение локальных картинок. JavaScript/команд не исполняется (Qt rich text без скриптов), но это тот же класс «untrusted data → HTML sink».
+- **OWASP:** `Cross_Site_Scripting_Prevention_Cheat_Sheet.md` → «Output Encoding for HTML Contexts», «HTML Sanitization», «Safe Sinks»; `Injection_Prevention_Cheat_Sheet.md` → «Rule #3»; `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «HTML and Markdown Injection». Top-10: A03, A05:2025.
+- **Статус:** open, Medium (без изменений).
+- **Место:** `main_window.py:91-102` (`msg = url_to_html_links(msg)` → `QMessageBox.critical`), `common.py:135-140` (`url_to_html_links` **без** `html.escape`); источники ошибок: `model_manager.py:259-261`, `workers.py:77,110`; независимые sink'и: `features/text.py:131`, `features/ocr.py:223`.
+- **Evidence:** `url_to_html_links('<b>quota</b> <a href="file:///etc/passwd">x</a> https://…')` сохраняет живые теги и линкификацию. `QMessageBox` использует `Qt.TextFormat.AutoText` и `openExternalLinks=True`; `<img src="file://…">` загружается, клик по `<a href="file://…">` приводит к `QDesktopServices`/`xdg-open`. Доставка недоверенного текста подтверждена локальным fake-endpoint: `any_llm` кладёт тело HTTP-ошибки в `str(exception)`, оно уходит в `error.emit(...)` и в `QMessageBox.critical` без экранирования.
+- **Влияние:** UI-spoofing в системном модальном окне (поддельный текст «ключ истёк, войдите заново»), фишинговая ссылка, открытие локальных `file://`-путей. JavaScript/команд не исполняется (Qt rich text без скриптов).
 - **Рекомендация:** для ошибок — plain text: `box.setTextFormat(Qt.TextFormat.PlainText)` (или `setTextInteractionFlags` без ссылок), не использовать `url_to_html_links` для недоверенных сообщений. Если ссылки нужны — сначала `html.escape(text, quote=True)`, затем линкификация по экранированному тексту с экранированием URL в `href`; ограничить длину сообщения.
 
 ### BAR-07. Квадратичный `pop_think` regex в GUI-потоке
 
-- **OWASP:** `Input_Validation_Cheat_Sheet.md` → «Regular Expressions (Regex)» (bound input length, avoid excessive backtracking); `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «Output Monitoring and Validation». Top-10: A04.
-- **Место:** `src/barbaros/features/text.py:104-110` (`re.search(r"<think>.*?<\/think>", text, MULTILINE|DOTALL)`), вызов в GUI-слоте `:119-126`; нет `max_tokens`/лимита ответа (`workers.py:69,102`).
-- **Evidence (замеры):** худший случай — строка из повторяющихся `<think>` без закрывающего тега; рост ~×4 на удвоение длины: 5 КБ — 16 мс, 10 КБ — 68 мс, 20 КБ — 292 мс, 40 КБ — 1.5 с, 80 КБ — 5.8 с, 160 КБ — 20.7 с (квадратично). Regex выполняется в главном потоке; 1 МБ ≈ 13 минут зависания UI. Дополнительно `text = text[len(think_text):]` режет не по позиции блока, а по его длине (логическая ошибка при `<think>` не в начале).
-- **Влияние:** локальный DoS интерфейса: вредоносный/скомпрометированный провайдер, «болтливая» reasoning-модель или prompt injection могут вернуть большой ответ с `<think>`-маркерами. RCE нет.
+- **OWASP:** `Input_Validation_Cheat_Sheet.md` → «Regular Expressions (Regex)»; `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «Output Monitoring and Validation». Top-10: A04, A06:2025.
+- **Статус:** open, Medium (без изменений).
+- **Место:** `features/text.py:104-110` (`re.search(r"<think>.*?<\/think>", text, MULTILINE|DOTALL)`), вызов в GUI-слоте `:119-126`; нет `max_tokens`/лимита ответа (`workers.py:73,106`).
+- **Evidence (замеры):** худший случай — строка из повторяющихся `<think>` без закрывающего тега; рост ~×4 на удвоение длины: 5 КБ — 13.2 мс, 10 КБ — 54.8 мс, 20 КБ — 211.7 мс, 40 КБ — 784.7 мс, 80 КБ — 3165 мс, 160 КБ — **17.7 с** (квадратично). Regex выполняется в главном потоке; 1 МБ ≈ минуты зависания UI. Дополнительно `text = text[len(think_text):]` режет не по позиции блока, а по его длине (логическая ошибка при `<think>` не в начале).
 - **Рекомендация:** заменить regex на линейный `str.find("<think>")`/`find("</think>")`; жёстко ограничить длину ответа до обработки (1–2 МБ) и reasoning; передавать `max_tokens` в `acompletion`; добавить не функциональный тест на время обработки большого ответа.
 
 ### BAR-08. Непинованные зависимости Flatpak / невоспроизводимая сборка
 
-- **OWASP:** `Software_Supply_Chain_Security_Cheat_Sheet.md` → «Lockfile/Version Pinning», «Understand and Monitor Software Dependencies»; `Vulnerable_Dependency_Management_Cheat_Sheet.md` → «Tools». Top-10: A06, A08.
-- **Место:** `flatpak/requirements-flatpak.txt:1-5`, `flatpak/barbaros.yaml:58` (`pip3 install -r requirements-flatpak.txt`), `pyproject.toml:22-30`; `uv.lock` в сборке Flatpak не используется.
-- **Evidence:** в requirements нет версий и `--require-hashes`; сборка резолвит последние версии PyPI на момент сборки. `uv.lock` (≈150 пакетов, ≈1963 sha256-хэша) фиксирует только dev-окружение. `any-llm-sdk[all]` тянет SDK всех провайдеров — широкая транзитивная поверхность.
-- **Влияние:** подмена/новая вредоносная версия зависимости попадает в релизный артефакт; сборка невоспроизводима; невозможно проверить соответствие артефакта проверенному lock-файлу.
+- **OWASP:** `Software_Supply_Chain_Security_Cheat_Sheet.md` → «Lockfile/Version Pinning»; `Vulnerable_Dependency_Management_Cheat_Sheet.md`; `Dependency_Graph_SBOM_Cheat_Sheet.md`. Top-10: A06:2021, A08:2021 / A03:2025.
+- **Статус:** open, Medium, **частично улучшено.** В `pyproject.toml:24-33` зависимости запинены до minor-линии (`pyside6-essentials~=6.12.0`, `any-llm-sdk[all]~=1.50.0`, …), `uv.lock` пересобран. Но Flatpak-сборка не использует ни `pyproject.toml`, ни `uv.lock`.
+- **Место:** `flatpak/requirements-flatpak.txt:1-5` (`psutil`, `any-llm-sdk[all]`, `keyring>=25.7.0`, `psygnal>=0.15.1`, `dataclasses-json>=0.6.7` — без версий/хэшей), `flatpak/barbaros.yaml:58` (`pip3 install -r requirements-flatpak.txt`), `:60` (`pip3 install --no-deps barbaros`).
+- **Evidence:** `--require-hashes` нет; сборка резолвит последние версии PyPI на момент сборки. `uv.lock` фиксирует native/dev-окружение (167 пакетов, 2575 `sha256`-хэшей), но не Flatpak-сборку. `any-llm-sdk[all]` тянет SDK всех провайдеров — широкая транзитивная поверхность. Пиннинг в `pyproject.toml` на сборку не влияет.
 - **Рекомендация:** генерировать hashed-requirements из `uv.lock` (`uv export --format requirements-txt --hashes` / `uv pip compile --generate-hashes`) и ставить `pip3 install --require-hashes -r …`; собирать wheel в CI из зафиксированного lock; добавить SBOM (`uv export`/Syft).
 
 ### BAR-09. Конфиг как недоверенный вход: нет валидации и fail-safe старта
 
-- **OWASP:** `Input_Validation_Cheat_Sheet.md` → «Parse Safely, Then Validate»; `Secure_Code_Review_Cheat_Sheet.md` → «Configuration & Deployment». Top-10: A04, A05.
-- **Место:** `src/barbaros/common.py:20-24` (`valueFromJson` → `json.loads` без обработки ошибок), `src/barbaros/main_window.py:44-49` (`ProviderMeta.from_dict` в цикле), `:89-99` (кэш моделей), `src/barbaros/model_manager.py:23-29`; `restore_target_languages` (`main_window.py:176-181`).
-- **Evidence:** `ProviderMeta.from_dict({"name":"x","provider_type":"ollama","api_base":"http://evil.example.com"})` принимается без проверки; `api_base=123` тоже принимается (позже `len(int)` падает при построении карточки); неизвестный `provider_type` → `ValueError`; обрезанный JSON → `JSONDecodeError`. Всё это — в `MainWindow.__init__`, т.е. приложение не стартует.
-- **Влияние:** подмена конфига перенаправляет ключ/текст на чужой `api_base`; повреждённый конфиг (после некорректного завершения/заполнения диска) вызывает цикл падений при автозапуске — противоречит AGENTS.md п.14 («приложение должно падать и подниматься»).
-- **Рекомендация:** обернуть загрузку в `try/except (json.JSONDecodeError, ValueError, TypeError)`: логировать, удалять проблемный ключ, стартовать с `default_providers`; валидировать `api_base` (`str | None` + BAR-03 helper), `name`, `language`, `target_language_list`; проверять `QSettings.status()`. Тест: битый конфиг → приложение стартует, валидные провайдеры загружены.
+- **OWASP:** `Input_Validation_Cheat_Sheet.md` → «Parse Safely, Then Validate»; `Secure_Code_Review_Cheat_Sheet.md` → «Configuration & Deployment»; `Error_Handling_Cheat_Sheet.md`. Top-10: A04, A05, A10:2025.
+- **Статус:** open, Low, **частично улучшено.** `valueFromJson` теперь ловит `json.JSONDecodeError`/`TypeError`/`RecursionError` и возвращает default (`common.py:55-70`), поэтому битый JSON и глубоко вложенное значение больше не роняют старт. Схема данных по-прежнему не валидируется.
+- **Место:** `common.py:55-70`; `main_window.py:45-66` (`model_cache_path`, `llm_providers`), `:190-195` (`target_language_list`), `:214-223` (выбор модели); `model_manager.py:31-35` (`ProviderMeta`).
+- **Evidence (изолированный XDG):** обрезанный JSON теперь не роняет старт, но JSON **верной формы, неверного типа** — роняет: `llm_providers` = число/строка → `TypeError`/итерация по символам; `llm_providers` = объект → итерация по ключам → `ProviderMeta.from_dict(str)` → `AttributeError`; `api_base="http://evil.example.com"` из конфига принимается (валидатор URL — только в диалоге, `provider_dialog.py:96`). `api_base=123` коэрцится `dataclasses_json` в `"123"`. `model_cache_path` валидируется формально (`model_cache.py:51-100`: только непустой абсолютный путь), но это узкое улучшение (и BAR-19).
+- **Влияние:** подмена конфига перенаправляет ключ/текст на чужой `api_base`; повреждённый конфиг (после некорректного завершения/заполнения диска) вызывает цикл падений при автозапуске — противоречит AGENTS.md #14.
+- **Рекомендация:** валидировать **схему**, а не только JSON: `llm_providers` — список объектов с известными полями; `api_base` (`str | None` + helper из BAR-03), `name`, `language`, `target_language_list`; ограничить число провайдеров; при ошибке логировать, удалять проблемный ключ и стартовать с `default_providers`. Тест: конфиг с неверными типами → приложение стартует.
 
 ### BAR-10. Права файла настроек по umask
 
-- **OWASP:** `Key_Management_Cheat_Sheet.md` → «Storage»; `Logging_Cheat_Sheet.md` → «Data to exclude» (внутренние адреса/имена). Top-10: A05.
-- **Место:** `src/barbaros/main.py:26-27`; в `src/` нет `chmod`/`umask`.
-- **Evidence:** режим `QSettings`-файла = `0666 & ~umask`: наблюдалось `0644` при umask 022 и `0664` при umask 002; повторная запись не ужесточает. На машине аудита файл `0664`, каталог `0775`, но `$HOME` — `0700`, что блокирует доступ. Секретов в конфиге нет (ключи — в keyring), но есть полные `api_base`, имена и кэш моделей.
-- **Влияние:** на машинах с проходимым `$HOME` и permissive-umask/общей группой другой пользователь прочитает метаданные провайдеров и внутренние адреса; запись в конфиг в связке с BAR-09/BAR-01 даёт больше. Defense-in-depth.
-- **Рекомендация:** после создания `QSettings` выставлять `os.chmod(settings.fileName(), 0o600)` и при необходимости `0700` на каталог (в `try/except OSError`, no-op на Windows); сохранить инвариант «секреты никогда не пишутся в QSettings» и закрыть его тестом.
+- **OWASP:** `Key_Management_Cheat_Sheet.md` → «Storage»; `Logging_Cheat_Sheet.md` → «Data to exclude». Top-10: A05, A02:2025.
+- **Статус:** open, Low, **частично улучшено.** При разовой миграции BAR-01 файл перезаписывается атомарно с `0600` (`atomic_file.py:242`). Но последующие записи `QSettings` снова создают файл с правами по umask, и это прямо зафиксировано в `docs/settings-migration.md` §6.
+- **Место:** `main.py:33-56`; в `src/` нет `chmod`/`umask` для QSettings после записи.
+- **Evidence:** режим `QSettings`-файла = `0666 & ~umask`: umask 022 → `0644`, umask 002 → `0664`, umask 077 → `0600`; повторная запись не ужесточает. Новый файл кэша моделей — исключение (`0600`/`0700`, `atomic_file.py:242,250,293`), но это другой файл.
+- **Влияние:** на машинах с проходимым `$HOME` и permissive-umask/общей группой другой пользователь прочитает метаданные провайдеров и внутренние адреса; запись в конфиг в связке с BAR-28/BAR-09 даёт больше. Defense-in-depth.
+- **Рекомендация:** после каждой записи (или при старте после sanitize) выставлять `os.chmod(settings.fileName(), 0o600)` и при необходимости `0700` на каталог (в `try/except OSError`, no-op на Windows); сохранить инвариант «секреты никогда не пишутся в QSettings» и закрыть его тестом.
 
 ### BAR-11. `NoKeyringError` не обрабатывается
 
-- **OWASP:** `Secrets_Management_Cheat_Sheet.md` §2.9 «Downtime, Break-glass, Backup and Restore»; `Key_Management_Cheat_Sheet.md` → «Storage» (fallback в plaintext отсутствует — это хорошо). Top-10: A04.
-- **Место:** `src/barbaros/security.py:11-24`, `src/barbaros/widgets/providers_card.py:30,132` (чтение keyring при конструировании карточки), `provider_dialog.py:113,180`.
-- **Evidence:** без рабочего Secret Service `keyring.get_keyring()` возвращает `fail.Keyring`, вызовы бросают `NoKeyringError`. С fake `fail.Keyring` конструирование `ProvidersCard` упало — приложение не стартует даже без настроенных провайдеров (из-за дефолтного `ollama`). В Flatpak доступ к `org.freedesktop.secrets` объявлен, поэтому проблема маловероятна.
-- **Влияние:** на минимальных окружениях (WM без gnome-keyring/KWallet, сломанный Secret Service) — падение при старте или молчаливое несохранение ключа. Утечки нет: fallback в plaintext не происходит.
-- **Рекомендация:** обернуть вызовы в `try/except keyring.errors.KeyringError`, возвращать типизированный результат/`None`; при старте проверить `keyring.get_keyring()` и показать неблокирующее предупреждение; не читать keyring в конструкторе `ProvidersCard`; в `delete()` ловить `KeyringError`. **Не** добавлять plaintext-fallback.
+- **OWASP:** `Secrets_Management_Cheat_Sheet.md` §2.9; `Key_Management_Cheat_Sheet.md` → «Storage» (fallback в plaintext отсутствует — это хорошо). Top-10: A04, A10:2025.
+- **Статус:** open, Low (без изменений).
+- **Место:** `security.py:17-25`; `providers_card.py:132-134` (чтение keyring при конструировании карточки); `provider_dialog.py:47,180`.
+- **Evidence:** при `keyring.set_keyring(fail.Keyring())` вызовы бросают `NoKeyringError`; реальный `App(...)` падает при старте — traceback через `security.py:19` из построения `ProvidersCard` (дефолтный `ollama`). В Flatpak доступ к `org.freedesktop.secrets` объявлен, поэтому проблема маловероятна.
+- **Рекомендация:** обернуть вызовы в `try/except keyring.errors.KeyringError`, возвращать типизированный результат/`None`; при старте проверять `keyring.get_keyring()` и показывать неблокирующее предупреждение; не читать keyring в конструкторе `ProvidersCard`; в `delete()` ловить `KeyringError`. **Не** добавлять plaintext-fallback.
 
 ### BAR-12. Хрупкий SIGUSR1-fallback и обработка ошибок IPC
 
-- **OWASP:** `Authorization_Cheat_Sheet.md` → «Deny by Default», «Exit Safely when Authorization Checks Fail»; `Attack_Surface_Analysis_Cheat_Sheet.md`; `Logging_Cheat_Sheet.md` → «Event collection». Top-10: A04, A09.
-- **Место:** `src/barbaros/ipc.py:127-150` (перебор `psutil.process_iter`, `os.kill` по имени), `:48,67-68,100-106` (обработчик любого SIGUSR1), `:24-31` (`assert` как проверка), `:77-90` (bare `except:`), `:142,146,149` и `main.py:27` (`print`); `ipc.py:169-170` (занятое имя → необработанный `Exception`, fallback только при отсутствии bus).
-- **Evidence:** `proc.info['name']` может быть `None` (psutil `ad_value=None` при `AccessDenied`/`ZombieProcess`) → `None.lower()` → `AttributeError` в `barbaros --popup`. Сравнение только по имени и первый матч (сортировка по PID): процесс, назвавшийся `barbaros`, может получить SIGUSR1 вместо приложения — default action SIGUSR1 = terminate. Занятие имени `io.github.frimn.barbaros` другим процессом → `registerService` = False → падение при старте (DoS), fallback не срабатывает. `assert` исчезают под `python -O`.
-- **Влияние:** доступность popup/приложения, потенциальное завершение чужого процесса с именем `barbaros`, отсутствие диагностируемых логов. RCE нет: сигнал фиксирован, данных нет.
+- **OWASP:** `Authorization_Cheat_Sheet.md` → «Deny by Default», «Exit Safely when Authorization Checks Fail»; `Logging_Cheat_Sheet.md`; `Error_Handling_Cheat_Sheet.md`. Top-10: A01, A09, A10:2025.
+- **Статус:** open, Low (без изменений).
+- **Место:** `ipc.py:25,31-32` (`assert` как проверка), `:79` (`contextlib.suppress(BaseException)`), `:89` (bare `except:`), `:130-145` (перебор `psutil.process_iter`, `None.lower()` на `:134`, `os.kill` по имени на `:136`, `print` на `:137,141,144`), `:164-167` (занятое имя → необработанный `Exception` на `:165`), `:204` (`print`).
+- **Evidence:** `proc.info['name']` может быть `None` → `AttributeError` в `barbaros --popup`. Сравнение только по имени и первый матч: процесс, назвавшийся `Barbaros`, может получить SIGUSR1 вместо приложения (default action SIGUSR1 = terminate). Занятие `SERVICE_NAME` другим процессом → `registerService` = False → `raise Exception('')` → падение при старте, fallback не срабатывает. `assert` исчезают под `python -O`.
 - **Рекомендация:** убрать сканирование процессов; для single-instance использовать lock-файл в `$XDG_RUNTIME_DIR/app/<app-id>/` (`O_CREAT|O_EXCL`, 0600) и/или `AF_UNIX`-сокет с `SO_PEERCRED`; при fallback — `name = proc.info.get("name") or ""`, проверка uid/exe/cmdline; не падать на конфликте имени, а логировать и работать без D-Bus; `assert` → явные проверки; `except:` → конкретные исключения + `logging`; `print` → `logging`.
 
 ### BAR-13. Rich text из внешних имён и ответа LLM
 
-- **OWASP:** `Cross_Site_Scripting_Prevention_Cheat_Sheet.md` → «Output Encoding», «Safe Sinks»; `Input_Validation_Cheat_Sheet.md` → «Validating Rich User Content»; `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «HTML and Markdown Injection». Top-10: A03.
-- **Место:** `filterable_combobox.py:70` (`display_label.setText(elided_text)`), `:358` (выбранная модель), `providers_card.py:66,106` (`QLabel(text)`/`QLabel(name)`), `text.py:125` и `ocr.py:198,203` (`QTextEdit.setText(ответ LLM)`); промпт `resources/translation_agent_prompt.md:36` прямо просит сохранять HTML.
-- **Evidence:** `QLabel`/`LinkLabel` по умолчанию `AutoText`; id модели с разметкой (`<img src="file://…">`, 80pt-текст) рендерится как rich text, локальные PNG загружаются. `QTextEdit.setText` тоже парсит HTML. Ссылки при этом **не кликабельны** (`LinkLabel` переопределяет `mousePressEvent`, у read-only `QTextEdit` нет `LinksAccessibleByMouse`), remote-картинки Qt не грузит — поэтому Low, а не Medium.
-- **Влияние:** визуальный спуфинг/искажение UI, отображение локальных изображений, раздувание виджетов; возможен поддельный «перевод» при HTML в ответе модели. Кода/ссылок нет.
+- **OWASP:** `Cross_Site_Scripting_Prevention_Cheat_Sheet.md` → «Output Encoding», «Safe Sinks»; `Input_Validation_Cheat_Sheet.md` → «Validating Rich User Content»; `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «HTML and Markdown Injection». Top-10: A03, A05:2025.
+- **Статус:** open, Low (без изменений).
+- **Место:** `filterable_combobox.py:70-72` (`display_label.setText(elided_text)` + tooltip), `:378-381` (выбранная модель); `providers_card.py:66,106` (`QLabel(text)`/`QLabel(name)`); `features/text.py:125` и `features/ocr.py:208,213` (`QTextEdit.setText(ответ LLM)`); промпт `resources/translation_agent_prompt.md` просит сохранять HTML. Новый источник: `model.id` из JSON-кэша (недоверенный файл, `MAX_MODEL_ID_LEN=1024`).
+- **Evidence:** `QLabel`/`LinkLabel` по умолчанию `AutoText`; `QLabel('<img src="file://…"><h1>PWN</h1>…')` реально рендерится, локальный PNG грузится, `sizeHint` меняется (184×289 против 72×17). `QTextEdit.setText` тоже парсит HTML (`toHtml()` содержит `img`/`h1`). Ссылки **не кликабельны**, но не из-за `LinkLabel` (в `link_label.py` нет `mousePressEvent`), а из-за переназначения `display_label.mousePressEvent` (`filterable_combobox.py:37,342`); у read-only `QTextEdit` нет `LinksAccessibleByMouse`. Remote-картинки Qt не грузит.
 - **Рекомендация:** для всех меток с внешними именами (`model.id`, `provider.name`, `api_base`, `provider_type`) — `setTextFormat(Qt.TextFormat.PlainText)`; tooltip тоже plain text; ответ LLM выводить через `setPlainText()` либо рендерить allowlist после `html.escape` (переносы, bold/italic; без `img/a/style`); согласовать с промптом отказ от «сохранять HTML».
 
 ### BAR-14. Нет лимитов и валидации ответа модели
 
-- **OWASP:** `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «Input Validation and Sanitization» («limit input length»), «Output Monitoring and Validation»; `File_Upload_Cheat_Sheet.md` → «Upload and Download Limits», «File Content Validation». Top-10: A04.
-- **Место:** `features/text.py:61-76`, `features/ocr.py:127-139` (весь текст без лимита), `workers.py:69,102` (`acompletion` без `max_tokens`), `image_manager.py:80-92,107-132` (PNG без ограничений), `workers.py:90-96` (base64); `text.py:119-126`, `ocr.py:195-203` (`resp.choices[0]` / `content` без валидации).
-- **Evidence:** `max_tokens` не передаётся; Qt ограничивает декодирование 256 МБ (`QImageReader.allocationLimit()`), но PNG 8192×8192 весом 64 КиБ декодируется в 64 МиБ, после чего кодируется в base64 и уходит в запрос; `ChatCompletion(choices=[])` → `IndexError`, `content=None` → `AttributeError`, слот падает до `setText` — пользователь видит пустой результат без ошибки.
-- **Влияние:** пики памяти/сеть/стоимость у платного провайдера, длинная блокировка UI, тихие сбои при нестандартном ответе. Не RCE.
+- **OWASP:** `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «Input Validation and Sanitization», «Output Monitoring and Validation»; `File_Upload_Cheat_Sheet.md` → «Upload and Download Limits», «File Content Validation». Top-10: A04, A06:2025.
+- **Статус:** open, Low (без изменений).
+- **Место:** `features/text.py:61-76,119-126`; `features/ocr.py:150-213`; `workers.py:73,106` (`acompletion` без `max_tokens`), `:95-99` (base64 без лимита); `image_manager.py:76-92,107-132` (PNG без ограничений).
+- **Evidence:** `max_tokens` не передаётся. `QImageReader.allocationLimit()` = 256 МБ — только грубая защита Qt; PNG 8192×8192 весом 64 КиБ декодируется в 64 МиБ, после чего кодируется в base64 и уходит в запрос; downscale нет. `ChatCompletion(choices=[])` → `IndexError`; `content=None` → `TypeError` в `pop_think` — слот падает до `setText`, пользователь видит пустой результат без ошибки.
 - **Рекомендация:** лимиты на текст (например, 100–200 тыс. символов), изображение (≤20 Мп и ≤10 МБ после декодирования, downscale перед base64), `max_tokens`, таймауты; при превышении — понятная ошибка, а не отправка. Валидировать `resp.choices`, `content or ""`, `finish_reason`; тесты на пустой/None-ответ.
 
 ### BAR-15. Регрессия `process_translation_request`
 
-- **OWASP:** `Secure_Code_Review_Cheat_Sheet.md`; `Authorization_Cheat_Sheet.md` → «Exit Safely when Authorization Checks Fail»; `Logging_Cheat_Sheet.md` → «Event collection». Top-10: A04, A09.
-- **Место:** `src/barbaros/main.py:50-59`; `src/barbaros/main_window.py` — атрибутов `orig_text`/`translate_button` нет (они у `TextFeature`: `features/text.py:41,45`). В v2025.9.2 `MainWindow` их имел (`git show v2025.9.2:src/barbaros/main_window.py`), регрессия появилась при рефакторинге.
-- **Evidence:** D-Bus-вызов слота, который бросает исключение, возвращает клиенту **валидный ответ** (`void`), сервер печатает traceback и продолжает работу: сбой обработчика неотличим от успеха. В дереве нет тестов IPC (`tests/components/test_ipc.py` отсутствует, остался только `__pycache__`).
+- **OWASP:** `Secure_Code_Review_Cheat_Sheet.md`; `Authorization_Cheat_Sheet.md` → «Exit Safely when Authorization Checks Fail»; `Error_Handling_Cheat_Sheet.md`; `Logging_Cheat_Sheet.md`. Top-10: A04, A09, A10:2025.
+- **Статус:** open, Low (без изменений).
+- **Место:** `main.py:75-89`; у `MainWindow` атрибутов `orig_text`/`translate_button` нет (они у `TextFeature`: `features/text.py:41,45`). В v2025.9.2 `MainWindow` их имел — регрессия появилась при рефакторинге.
+- **Evidence:** живой запуск: `app.process_translation_request()` → `AttributeError: 'MainWindow' object has no attribute 'orig_text'`. D-Bus-вызов слота, который бросает исключение, возвращает клиенту **валидный ответ** (`void`), сервер печатает traceback и продолжает работу: сбой неотличим от успеха. В дереве нет тестов IPC (остался только `__pycache__`).
 - **Влияние:** заявленный popup-перевод не работает; ошибка маскируется (вызывающий считает вызов успешным). Security-последствие: пока путь сломан, BAR-04 не эксплуатируется; при исправлении — включится, если не поменять дизайн.
-- **Рекомендация:** вынести операцию в публичный метод `App`/`MainWindow` (например, `App.translate_from_text(text)`), не лазить в виджеты через `MainWindow`; D-Bus-метод должен возвращать явный статус/ошибку, а не `void`; добавить тест `process_translation_request` с подменённым clipboard и мок-провайдером.
+- **Рекомендация:** вынести операцию в публичный метод `App`/`MainWindow` (например, `App.translate_from_text(text)`); D-Bus-метод должен возвращать явный статус/ошибку, а не `void`; добавить тест `process_translation_request` с подменённым clipboard и мок-провайдером.
 
 ### BAR-16. CI/supply-chain: отключённый workflow, отсутствие мониторинга, неподписанный bundle
 
-- **OWASP:** `Software_Supply_Chain_Security_Cheat_Sheet.md` → «Harden Build Tools», «Enforce Code Signing», «Leverage Security Automation», «Monitor Deployed Software for Vulnerabilities»; `Vulnerable_Dependency_Management_Cheat_Sheet.md` → «Responsible disclosure», «Tools». Top-10: A06, A08.
-- **Место:** `.github/` (только `workflows/flatpak.yml.off`), `tasks.py:39-46` (только pytest/ruff), `tasks.py:63,71` (ccache, bundle без `--gpg-sign`); отсутствуют `SECURITY.md`, `.github/dependabot.yml`, конфигурация pip-audit/renovate.
-- **Evidence:** workflow отключён суффиксом `.off`, ссылается на несуществующий `flatpak/io.github.frimn.barbaros.yml`; actions — mutable major-теги (`actions/checkout@v4`, `actions/setup-python@v5`, `svenstaro/upload-release-action@v2`); `pip install build` без версии; `flatpak build-bundle` без подписи; `overwrite: true` для release-ассетов. Автоматической сборки/проверки нет.
-- **Влияние:** нет обнаружения CVE в зависимостях и канала ответственного раскрытия; пользователь не может проверить целостность `.flatpak`; компрометация CI/подмена релиза.
+- **OWASP:** `Software_Supply_Chain_Security_Cheat_Sheet.md` → «Harden Build Tools», «Enforce Code Signing», «Leverage Security Automation»; `CI_CD_Security_Cheat_Sheet.md`; `Vulnerable_Dependency_Management_Cheat_Sheet.md`. Top-10: A06:2021, A08:2021 / A03:2025.
+- **Статус:** open, Low, **частично улучшено** (появился пиннинг зависимостей в `pyproject.toml`, но CI/подписи/monitoring не появились).
+- **Место:** `.github/workflows/flatpak.yml.off`; `tasks.py:41` (pytest), `:46` (ruff), `:63` (ccache), `:71` (bundle без `--gpg-sign`); отсутствуют `SECURITY.md`, `.github/dependabot.yml`, pip-audit/renovate.
+- **Evidence:** workflow отключён суффиксом `.off`, ссылается на несуществующий `flatpak/io.github.frimn.barbaros.yml`; actions — mutable major-теги (`actions/checkout@v4`, `actions/setup-python@v5`, `svenstaro/upload-release-action@v2`); `pip install build` без версии; `overwrite: true` для release-ассетов. Автоматической сборки/проверки нет.
 - **Рекомендация:** включить workflow и исправить путь манифеста; пинить actions по полному SHA; пинить build-tools; подписывать bundle (`--gpg-sign`) и публиковать SHA256/SLSA-provenance; не перезаписывать release-ассеты; для релизных сборок — чистый эфемерный раннер без `--ccache`; Dependabot/Renovate + `pip-audit`/`uv audit` в `tasks.py` и CI; `SECURITY.md`.
 
 ### BAR-17. Логирование через `print()` (Info)
 
 - **OWASP:** `Logging_Cheat_Sheet.md` → «Log Injection», «Data to exclude», «Event attributes». Top-10: A09.
-- **Место:** `workers.py:123,138,141`; `model_manager.py:121,129,173`; `main_window.py:95`; `features/settings.py:108`; `main.py:27`; `ipc.py:142,146,149`.
-- **Evidence:** `print()` без структуры и экранирования; имя провайдера из пользовательского ввода/конфига может содержать CR/LF (log injection), служебные сообщения без уровней/времени. Содержимое буфера, OCR-текст, ответы LLM и ключи **не** печатаются — утечки нет. В Flatpak stdout уходит в journald.
-- **Влияние:** низкая наблюдаемость инцидентов, возможность подделки локальных логов; не самостоятельная уязвимость.
-- **Рекомендация:** `logging` вместо `print`, структурированные записи, `%r`/truncate для внешних строк, уровни, исключение недоверенных значений из шаблонов; не логировать содержимое перевода/OCR/clipboard.
+- **Статус:** open (частично улучшено в новом коде), Info. Добавление BAR-01 добавило print'ы пути конфига и бэкапа.
+- **Место:** `main.py:36,41,47,49,99`; `ipc.py:137,141,144,204`; `main_window.py:53,211,222`; `model_manager.py:187,196,204,251`; `workers.py:125,138,141`; `features/ocr.py:101`; `features/settings.py:109`; `filterable_combobox.py:60,401,406,413`. Новые `model_cache.py`/`atomic_file.py`/`settings_sanitize.py` и часть `model_manager.py` используют `logging` с `%r`+truncate.
+- **Evidence:** служебные сообщения без уровней/времени; имя провайдера из пользовательского ввода/конфига может содержать CR/LF (log injection). Содержимое буфера, OCR-текст, ответы LLM и ключи **не** печатаются — утечки нет. Путь к конфигу/кэшу (имя пользователя, приватные каталоги) уходит в journald/терминал; `!r` экранирует CR/LF.
+- **Рекомендация:** `logging` вместо `print`, структурированные записи, `%r`/truncate для внешних строк, уровни, исключение недоверенных значений из шаблонов; путь к кэшу/конфигу — `DEBUG`, не INFO; не логировать содержимое перевода/OCR/clipboard.
 
 ### BAR-18. Приватность: скриншот/clipboard уходят провайдеру без in-app уведомления (Info)
 
 - **OWASP:** `User_Privacy_Protection_Cheat_Sheet.md` → «Honesty & Transparency»; `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` → «Multimodal Injection», «Data Exfiltration». Top-10: A04.
-- **Место:** `image_manager.py:162-173` (`_take_screenshot` — весь экран; кроп по умолчанию = весь снимок), `:80-92` + `workers.py:90-96` (PNG → base64 → провайдер), `main.py:50-59` (clipboard → перевод).
-- **Evidence:** по коду скриншот по умолчанию — весь экран, уведомления/подтверждения перед отправкой нет; README честно описывает отправку облачным провайдерам (`README.md:70`), но в UI этого нет. Вредоносной телеметрии не найдено: сеть только через `any_llm` к настроенному провайдеру.
-- **Влияние:** непреднамеренная передача персональных данных/секретов третьей стороне (скриншот с открытым менеджером паролей, скопированный секрет); юридические/приватностные последствия.
+- **Статус:** open, Info (без изменений).
+- **Место:** `image_manager.py:162-173` (`_take_screenshot` — весь экран), `:180-181`; `workers.py:95-99` (PNG → base64 → провайдер); `main.py:75-89` (clipboard → перевод); `README.md:33` (честное раскрытие, но не в UI).
+- **Evidence:** по коду скриншот по умолчанию — весь экран, уведомлений/подтверждения перед отправкой нет; автоперевод из clipboard по IPC/`--popup` вызывается без явного действия пользователя в UI. Вредоносной телеметрии не найдено: сеть только через `any_llm` к настроенному провайдеру.
 - **Рекомендация:** уведомление при первом запуске и при отправке («текст/изображение уходит в <provider> (<api_base>)»), предупреждение о полноэкранном захвате, локальный провайдер по умолчанию, возможность отключить автоперевод из clipboard, показ того, что именно отправляется (превью кропа уже есть).
 
 ---
 
-## 4. Что уже сделано хорошо
+## 4. Новые находки (BAR-19..BAR-28)
+
+### BAR-19. `model_cache_path` — произвольный sink записи: замена/уничтожение чужого файла
+
+- **OWASP:** `Secure_Code_Review_Cheat_Sheet.md` → «Injection Vulnerabilities» (unsafe file path construction), «Data Flow Analysis» (sink: file write); `Input_Validation_Cheat_Sheet.md` → «Parse Safely, Then Validate»; `Attack_Surface_Analysis_Cheat_Sheet.md`. Top-10: A04, A08 (CWE-73, CWE-15).
+- **Severity:** Medium\*\* (см. сноску в §2). Статус: open.
+- **Место:** `main_window.py:45-56` — путь из `QSettings` передаётся в `ModelCacheStore(path=...)`; `model_cache.py:51-100` (`cache_path_from_config`) — принимается любой абсолютный путь (`~`/`~user` раскрываются; относительные/нестроковые отвергаются); `atomic_file.py:283-312` (`_atomic_write`) — `parent.mkdir(...)`, `mkstemp`, `os.replace(temp, path)` без проверки, что `path` — файл кэша; `atomic_file.py:247-259` (`_tighten_directory`) — `os.chmod(directory, 0o700)` следует по симлинку.
+- **Evidence (эксперименты):**
+  1. Замена существующего файла: файл `0o644` с содержимым `IMPORTANT USER DATA` после `save()` стал `0o600` и содержит `{"version":1,"models":{…}}`; исходные данные потеряны. `cache_path_from_config('~/.bashrc')` → `~/.bashrc`, `cache_path_from_config('/etc/passwd')` → `/etc/passwd`.
+  2. Симлинк-цель на записи: `os.replace` заменяет саму ссылку, а не цель. Симлинк-**родитель** + `tighten_directory=True`: запись уходит по ссылке в чужой каталог, а `chmod 0700` меняет режим чужого каталога (0755 → 0700).
+  3. FIFO как цель: `save() == True`, специальный файл уничтожен; `/dev/full` → `False`; каталог-цель → `False`; read-only каталог/ENOSPC/сбой `os.replace`/сбой сериализации → `False`, старый файл цел, temp удалён.
+  4. Матрица `cache_path_from_config`: абсолютный/`~`/`~user` → `Path`; относительный/пустой/`file://`/не-строка/неизвестный `~user` → `None` (fail-safe); NUL-путь/перевод строки принимаются на этапе валидации и безопасно падают позже.
+- **Сценарий:** конфиг Barbaros попадает на машину из dotfiles/бэкапа/другой установки либо правится скомпрометированным same-uid приложением; в нём `model_cache_path=<путь к чужому файлу>`. При первом же `set_models`/`remove` приложение атомарно заменяет указанный файл (или FIFO) содержимым кэша. «Случайная» версия: пользователь по ошибке указал существующий файл.
+- **Влияние:** безвозвратная потеря данных в произвольном user-writable файле, порча конфигов других приложений, уничтожение специальных файлов. RCE/утечки секретов нет: содержимое ограничено схемой кэша, файл `0600` (не executable), ключи/`api_base` не пишутся.
+- **Рекомендация (KISS):**
+  1. Перед первой записью: если `path` существует и (`path.is_symlink()` или не regular file или не парсится `ModelCacheDocument.from_bytes`) — отказаться (`WARNING`, `return False`), не удаляя файл.
+  2. `_tighten_directory`: не ходить по симлинкам (`os.chmod(..., follow_symlinks=False)` или не chmod-ить, если `directory.is_symlink()`); убрать `tighten_directory` из публичного API.
+  3. В README/докстринге не обещать «указывайте файл кэша» — подкрепить guard'ом из п.1.
+  4. В UI давать предупреждение при нестандартном пути (или не выносить это в конфиг вовсе — YAGNI).
+- **Тест:** `test_save_refuses_to_overwrite_non_cache_file` (существующий `.bashrc`/FIFO/симлинк → `save() is False`, файл байт-в-байт тот же, temp нет); `test_tighten_directory_does_not_follow_symlink`.
+
+### BAR-20. DoS/подвисание: полный разбор кэша на каждого провайдера на старте
+
+- **OWASP:** `Denial_of_Service_Cheat_Sheet.md` → «Input validation»; `Input_Validation_Cheat_Sheet.md` → «Parse Safely, Then Validate». Top-10: A04 (CWE-400, CWE-770).
+- **Severity:** Low. Статус: open.
+- **Место:** `main_window.py:61-66` — цикл `for provider in past_providers: add(p, cache_policy=RESTORE)`; число провайдеров из конфига ничем не ограничено. `model_manager.py:133-151` — `add(RESTORE)` вызывает `self._cache.load()` **на каждый вызов**; `model_manager.py:344-357` — `_persist` (сериализация + `os.replace` + `fsync`) под `RLock` из GUI-потока.
+- **Evidence (замеры):** один разбор 4 МиБ (1000 провайдеров, 77 000 записей) — 69 мс без tracemalloc (366 мс с ним), пик Python-памяти 32.6 МиБ (амплификация файла ~8–10×); 100 × `load()` 4 МиБ = **7.48 с**. Реальный `MainWindow.__init__` (offscreen, fake keyring), кэш 2.7 МиБ: 1 провайдер — 17.9 мс, 3 — 145 мс, 20 — 1353 мс, 100 — **7221 мс**. `save` 4 МиБ ≈ 77–83 мс на tmpfs.
+- **Дополнительно:** `docs/model-cache-storage.md` в абзацах о записи «в потоке воркера» противоречит коду после `e47ba99`: и чтение, и запись идут в GUI-потоке.
+- **Рекомендация (KISS):** грузить кэш **один раз** (`cached = store.load()` в `MainWindow` или `ModelManager.add_all(providers, cache_policy=RESTORE)`); ограничить число провайдеров из конфига (например, ≤50) и логировать отказ; исправить устаревшие абзацы документа; NFR-тест «100 провайдеров + 2 МиБ кэш → бюджет старта».
+
+### BAR-21. Кэш в общем каталоге читается без проверки владельца/прав (defense-in-depth)
+
+- **OWASP:** `Input_Validation_Cheat_Sheet.md` → «Parse Safely, Then Validate»; `Attack_Surface_Analysis_Cheat_Sheet.md`. Top-10: A08, A02:2025 (CWE-345, CWE-732).
+- **Severity:** Low (вне формальной модели «другой uid»; defense-in-depth). Статус: open.
+- **Место:** `atomic_file.py:118-155` — у файла проверяются только `S_ISREG` и размер; `st_uid`/`st_gid`/биты записи (`0o022`) не проверяются. При этом `model_cache.py:299-321` и `docs/model-cache-storage.md` допускают путь «в существующем shared-каталоге»; `main_window.py:47-53` отключает только chmod каталога.
+- **Evidence:** в shared-каталоге `0777` запись создаётся `0600` (чужие учётки файл не прочитают/не изменят **после** первого сохранения). Но **до** первого сохранения файл может создать/подменить другой пользователь; приложение прочитает его без проверки владельца. Подмена кэша → подмена списка моделей в селекторе (строки `id`), далее BAR-13.
+- **Рекомендация (KISS):** в `_read_capped` после `fstat`: если `info.st_uid != os.geteuid()` или `info.st_mode & 0o022` — `WARNING` и `return None`. Тест: «файл кэша с чужим uid/режимом 0666 игнорируется».
+
+### BAR-22. Исключение в GUI-слоте после установки «загрузочного» состояния заклинивает вкладку
+
+- **OWASP:** `Error_Handling_Cheat_Sheet.md` §Objective; `Denial_of_Service_Cheat_Sheet.md` §Application attacks → «Handle exceptions», «Threading»; `AI_Agent_Security_Cheat_Sheet.md` §8. Top-10: A10:2025, в 2021 — A04 Insecure Design.
+- **Severity:** Medium. Статус: open (изменения `workers.py` касаются только списка моделей и этот путь не закрывают).
+- **Место:** `features/text.py:61-76` — `translate()` сначала скрывает/disable Translate, показывает прогресс и Stop и только затем вызывает `_threaded_translate`; `:86-90` — `selected_item = self.parent.model.selected_item` / `model_manager[selected_item.provider]` (`AttributeError` при `None`, `KeyError` при удалённом провайдере); `workers.py:63,88,121` — создание клиента в GUI-потоке; `model_manager.py:54` — `AnyLLM.create` → `MissingApiKeyError` для openai/anthropic без ключа; `features/ocr.py:155-160,180-181` — та же схема.
+- **Evidence (воспроизведено, offscreen, fake keyring):** нет выбранной модели → `AttributeError: 'NoneType' object has no attribute 'provider'`; после исключения: Translate `hidden=True, enabled=False`, прогресс виден, Stop виден; клик Stop → `AttributeError: 'TextFeature' object has no attribute 'worker'`; `handle_clear_button()` состояние не сбрасывает. Провайдер openai без ключа → `MissingApiKeyError`, состояние идентичное.
+- **Сценарий:** свежая установка (дефолтный ollama, список моделей ещё не загружен): пользователь вставляет текст и жмёт «Translate» → вкладка навсегда в состоянии «переводит», Stop не работает; восстановление только перезапуском. Тот же путь — в OCR-вкладке и при «Reload models» без ключа.
+- **Рекомендация (KISS):** (1) валидировать предпосылки (`selected_item`, наличие провайдера, `provider.client()`) **до** смены UI — в `try` с показом ошибки и возвратом без disable/hide; (2) обернуть операцию в `try/finally`, где `finally` восстанавливает кнопки/прогресс, либо перенести создание клиента в рабочий поток; (3) в `handle_stop_button` — `getattr(self, "worker", None)`; (4) `MissingApiKeyError`/`KeyringError` показывать как «задайте ключ провайдера», а не traceback.
+- **Тест:** «translate без выбранной модели → кнопка снова доступна, прогресс скрыт, Stop не падает»; «openai без ключа → видимое сообщение, вкладка работоспособна»; «reload models без ключа → сообщение, нет traceback».
+
+### BAR-23. `terminate()` + `wait()` без таймаута и отсутствие сетевых таймаутов
+
+- **OWASP:** `Denial_of_Service_Cheat_Sheet.md` §Application attacks → «Handle exceptions», «Threading»; `Secure_AI_Model_Ops_Cheat_Sheet.md` §4. Top-10: A10:2025 (2021: A04).
+- **Severity:** Low. Статус: open.
+- **Место:** `model_manager.py:192-207` — `stop_fetching_models`: `thread.terminate()` (`:205`) + `thread.wait()` **без аргумента** (`:206`); вызывается из `remove()` (`:153-158`), `shutdown()` (`:185-190`), `_start_fetching_models` (`:222`). `workers.py:124-140` — синхронный `client.list_models()` без таймаута.
+- **Evidence (воспроизведено):** поток в Python-цикле: `terminate()` возвращается мгновенно, затем `wait(2000)` не вернулся за >20 с; Qt-документация предупреждает, что `QThread::terminate()` может не завершить поток. Контроль: поток в C-`sleep(60)` завершается terminate за 0.001 с. Таймауты сети приложение не задаёт: у `AnyLLM` дефолт `Timeout(connect=5, read=600, write=600, pool=600)` — endpoint может держать чтение до 10 минут.
+- **Рекомендация:** не использовать `terminate()`: кооперативная отмена (`QThread.requestInterruption()` + флаг; для HTTP — asyncio-задача/таймаут), `wait(ms)` с таймаутом и логированием; явные connect/read/total таймауты и лимит размера ответа `list_models`; `shutdown()` не должен блокировать GUI дольше N мс.
+
+### BAR-24. Неограниченный ответ `list_models` в GUI-потоке
+
+- **OWASP:** `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` §Output Monitoring and Validation, §Input Validation and Sanitization; `AI_Agent_Security_Cheat_Sheet.md` §5; `Denial_of_Service_Cheat_Sheet.md` §Input validation. Top-10: A06:2025 (2021: A04).
+- **Severity:** Low. Статус: open, **частично улучшено.** В `provider_models.model_entries()` ответ нормализуется к allowlist (`id/created/object/owned_by`), непригодные записи отбрасываются; `_parse_fetched_models` валидирует strict и не роняет слот. Лимитов на количество/размер по-прежнему нет.
+- **Место:** `workers.py:127-140` — `list_models()` + `json.dumps` всего списка без лимита; `model_manager.py:262-271` — `json.loads` + валидация **всех** моделей в GUI-потоке; `model_manager.py:344-357` — `_persist` тоже в GUI-потоке; `widgets/filterable_combobox.py:263-273` — `QTreeWidgetItem` на каждую модель; лимит есть только у диска-кэша (`model_cache.py:307` `MAX_FILE_BYTES = 4 MiB`, `:157` `MAX_MODELS_PER_PROVIDER = 10_000`).
+- **Evidence (замеры):** 20 000 моделей = 1.5 МБ, `json.loads`+`Model.model_validate` 0.066 с + `QTreeWidgetItem` 0.096 с; 100 000 моделей = 7.7 МБ, 0.330 + 0.309 = **0.64 с** только GUI-часть (1 млн ≈ 6.4 с и сотни МБ объектов). Размер ответа ограничен только памятью.
+- **Рекомендация:** лимит на количество/длину элементов сразу после `list_models()` (те же константы, что в кэше: ≤10 000 моделей, `id` ≤1024), отбрасывать/усекать лишнее с сообщением; парсинг/валидацию и построение дерева — батчами или с проверкой размера до `json.loads`.
+
+### BAR-25. OCR `fail-open`: изображение уходит провайдеру после ошибки «не поддерживает изображения»
+
+- **OWASP:** `LLM_Prompt_Injection_Prevention_Cheat_Sheet.md` §Multimodal Injection, §Data Exfiltration; `AI_Agent_Security_Cheat_Sheet.md` §8; `Error_Handling_Cheat_Sheet.md` §Objective (fail-closed). Top-10: A10:2025 (2021: A04).
+- **Severity:** Low. Статус: open.
+- **Место:** `workers.py:90-110`:
+  ```python
+  if not self.client.SUPPORTS_COMPLETION_IMAGE:
+      self.error.emit(f"Provider '{self.model.provider}' ... not supports images")
+  # нет return
+  try:
+      ... base64_img ... acompletion(...)   # изображение всё равно отправляется
+      self.done.emit(resp)
+  ```
+- **Evidence (воспроизведено, stub-клиент с `SUPPORTS_COMPLETION_IMAGE=False`):** один вызов `error` и один `done`; `acompletion called: 1 -> image sent despite unsupported: True`. `SUPPORTS_COMPLETION_IMAGE` читается вне `try` — отсутствие атрибута даст `AttributeError` в `run_task` без сигналов.
+- **Рекомендация:** после `error.emit(...)` — сразу `return` (guard clause); проверку поддержки и наличие атрибута — внутри `try`; отправлять изображение только после успешной проверки; тест: неподдерживающий клиент → `acompletion` не вызван, ровно один `error`.
+
+### BAR-26. `aboutToQuit.connect(cleanup)` внутри `save_language` — shutdown обычно не выполняется (Info)
+
+- **Статус:** open, Info (без изменений).
+- **OWASP:** `Error_Handling_Cheat_Sheet.md` §Objective. Top-10: A10:2025, A09:2025.
+- **Место:** `main.py:68-73` (`save_language`) — единственная точка подключения `aboutToQuit`; `main.py:97-101` (`cleanup` → `ModelManager.shutdown`); `main.py:177-188` (`main()`).
+- **Evidence (статика):** если пользователь не менял язык, `save_language()` не вызывается → `cleanup` не подключён; при выходе `ModelManager.shutdown()` не вызывается, QThread-воркеры/сеть остаются живыми до завершения интерпретатора (`QThread: Destroyed while thread is still running`); при каждом изменении языка подключение дублируется.
+- **Рекомендация:** подключать `aboutToQuit` один раз в `App.__init__`; идемпотентный `cleanup`; тест «выход без смены языка → shutdown вызван».
+
+### BAR-27. Гигиена документации и расхождение README с поведением (Info)
+
+- **Статус:** open, Info (без изменений; в этой версии отчёта абсолютные пути уже убраны).
+- **OWASP:** `User_Privacy_Protection_Cheat_Sheet.md` §Honesty & Transparency. Top-10: A09:2025 (информационная гигиена).
+- **Место:** `README.md:33` («Privacy-First»), `README.md:273` («Secure API calls»), при `common.py:108-127` разрешён `http://` (BAR-03) и уведомления о передаче нет (BAR-18).
+- **Evidence:** заголовок предыдущей версии отчёта содержал абсолютные пути и имя пользователя; в этой версии они убраны. README утверждает «secure API calls», хотя выбранный пользователем `api_base` может быть `http://`. `docs/settings-migration.md` больше не содержит абсолютных путей.
+- **Рекомендация:** не публиковать абсолютные пути и имена пользователя в docs; в README заменить «Secure API calls» на «HTTPS по умолчанию; HTTP допустим только по явной настройке» и добавить строку, что изображение/буфер отправляются выбранному провайдеру.
+
+### BAR-28. Flatpak на PySide6 6.11.3: pickle-RCE через обход санации (исправлено)
+
+- **OWASP:** `Deserialization_Cheat_Sheet.md` → «Python / Clear-box Review»; `Software_Supply_Chain_Security_Cheat_Sheet.md` → «Monitor Deployed Software for Vulnerabilities», «Lockfile/Version Pinning»; `Vulnerable_Dependency_Management_Cheat_Sheet.md`. Top-10: A08:2021/A08:2025 (CWE-502), A06:2021, A03:2025.
+- **Severity:** **High** (для релизного Flatpak-артефакта). Статус: **fixed**; issue [#15](https://github.com/FRiMN/barbaros/issues/15). Native/pip-установка с PySide6 6.12 не затронута.
+- **Место:** `flatpak/barbaros.yaml:3` (`runtime-version: "6.11"`), `:6` (`base-version: 6.11`), `:57-60` (PySide6 не устанавливается из pip — «it is provided by BaseApp»); `pyproject.toml:27` (`pyside6-essentials~=6.12.0`) на Flatpak не влияет; `settings_sanitize.py:48` (`MAX_SETTINGS_BYTES = 1024*1024`), `:82-137` (fail-open санация); `main.py:33-46`.
+- **Evidence (2026-11-13, реальный runtime):**
+  - Установленный `io.qt.PySide.BaseApp` 6.11.3 содержит `pyside6-6.11.3.dist-info` и `PySide6.__version__ == "6.11.3"` (Python 3.13). В PySide6 6.12.0 отказ от pickle появился, в 6.11.x его нет.
+  - Двухпроцессный тест под BaseApp 6.11.3: writer пишет `Evil.__reduce__` через `QSettings.setValue`, reader в новом процессе делает `QSettings.value("main_window/model")` → payload выполнился (создан файл-маркер). В `.venv` (PySide6 6.12.0) на том же конфиге — `RuntimeError: Failed to deserialize Python object from QDataStream…`, маркер не создан.
+  - Обход санации: файл конфига увеличен до **1 048 817 байт** (pickle-значение сохранено). `sanitize_pickled_settings()` вернул `None` с WARNING «file too large» (лимит 1 МиБ) и не тронул файл; чтение под BaseApp 6.11.3 выполнило payload. Симлинк на конфиг и read-only каталог тоже дают `None`, но механизм разный: при симлинке `read_regular_file_limited` отказывается от чтения (O_NOFOLLOW), а при read-only каталоге файл читается, но `_write_backup`/атомарная запись не могут его заменить (`docs/settings-migration.md` §3 и §4). В обоих случаях под 6.11.3 `read_setting` не спасает — unpickle происходит до проверки.
+  - При конфиге ≤ 1 МиБ, без симлинка и при записываемом каталоге санация удаляет pickled-строки, и Flatpak-путь защищён — уязвим именно обходной сценарий.
+- **Сценарий:** атакующий с записью в `$HOME` (dotfiles-синхронизация, бэкап, скомпрометированное same-uid приложение — всё в модели угроз) кладёт в `~/.var/app/io.github.frimn.barbaros/config/io.github.frimn/barbaros.conf` (или в конфиг native-установки) pickle-payload и добивает файл до > 1 МиБ (либо делает конфиг симлинком). При следующем запуске Flatpak-сборки выполняется произвольный код с правами пользователя. Payload персистентен.
+- **Влияние:** RCE в релизном Flatpak-артефакте; обходит именно тот фикс, который закрыл BAR-01 в native-сборке. Это тот же класс/CWE, что BAR-01, но отдельный путь эксплуатации, поэтому отдельный ID и статус.
+- **Рекомендация (P0):**
+  1. Обновить Flatpak на PySide6 ≥ 6.12 (`base-version: 6.12`, когда BaseApp 6.12 доступен) или ставить `pyside6-essentials` из pip с пином в Flatpak-модуле; проверить `PySide6.__version__` внутри собранного bundle.
+  2. Сделать санацию **fail-closed** для случая PySide6 < 6.12: если файл не удалось очистить (размер, симлинк, права, ошибка записи), не подпускать `QSettings` к этому файлу — переместить/переименовать его и стартовать с чистыми настройками (потеря настроек лучше RCE), либо полностью заменить `QSettings` JSON-стором.
+  3. Убрать обход по размеру: потоковый скан INI без чтения всего файла в память (или санация+отказ при превышении лимита, а не «оставить как есть»); обрабатывать симлинк через санацию цели.
+  4. Добавить регрессионный тест на **реальном Flatpak runtime**: конфиг > 1 МиБ/симлинк с pickle → payload не выполняется.
+- **Тест:** «BaseApp 6.11 + oversize/symlink config → sanitize returns None, QSettings не читает файл (fail-closed); marker отсутствует»; «собранный Flatpak-report содержит PySide6 ≥ 6.12».
+- **Исправление (2026-11-13):**
+  1. **Flatpak на PySide6 6.12.** `io.qt.PySide.BaseApp` 6.12 на Flathub отсутствует (ветки только до `branch/6.11`), поэтому манифест остаётся на BaseApp 6.11, но barbaros-модуль ставит `pyside6-essentials==6.12.0` + `shiboken6==6.12.0` из PyPI поверх base app. Отдельный build-guard `flatpak/bar28_guard.py` валит сборку, если импортируемый PySide6 < 6.12 **или** если `QSettings` не отказался от pickle; версия проверяется и в собранном bundle.
+  2. **Fail-closed для PySide6 < 6.12: файл настроек не читается вообще.** Первая версия фикса (санация → карантин только неочищенного файла) была обойдена: Qt снимает `\xHH`-escapes и кавычки INI **до** того, как решает, что значение — `@Variant(...)`, поэтому `\x40Variant(...` или escape байта маркера не видны построчному сканеру, а на 6.11 выполняется unpickle (подтверждено на реальном BaseApp 6.11.3). Итоговое решение: `prepare_settings_file()` на PySide6 < 6.12 **никогда** не отдаёт `QSettings` файл из пути, доступного атакующему — существующий файл уносится как `*.unsafe-<UTC>-<random>` (0600; симлинк переименовывается сам, цель не трогается), а приложение использует `MemoryBackedSettings` (настройки сессии в памяти, ничего не читается и не пишется). Одноразовый *файл* сознательно не используется: same-uid процесс может подменить любой файл, доступный приложению на чтение, поэтому отсутствие файла — единственная граница без гонок. Скан сырых байт остаётся только миграцией на ≥ 6.12, где Qt сам отказывается десериализовать.
+  3. **Обход по размеру/симлинку/escape больше не даёт RCE:** на старом runtime все они попадают в ветку «файл не читается», потоковый скан не понадобился.
+  4. **Найдены дополнительные обходы сканера (для миграции на ≥ 6.12):** QSettings квотирует значение, если escaped-payload содержит запятую (`0x2c` — обычный байт pickle): `model="@Variant(...`. Старый скан искал `@Variant(` в начале значения и пропускал такую строку. `_is_pickled_variant()` теперь снимает необязательную ведущую кавычку. Но границей безопасности скан не является: escape-форма (см. п. 2) обходит и его — поэтому на < 6.12 решение принимается без скана.
+  5. **Тесты:** `tests/system/test_flatpak_pyside.py` (opt-in, `-m slow`) на **реальном** BaseApp 6.11.3: два негативных контроля (обычная и escaped-форма действительно выполняют payload при прямом чтении), а путь приложения уносит small/big/escaped-конфиги и не выполняет код. `tests/unit/test_settings_sanitize.py` — fail-closed по версии, карантин любого существующего файла, `MemoryBackedSettings` (значения, группы, `QByteArray`, `sync`), escaped/квотированная форма (скан говорит «чисто», но решение не меняется); `tests/system/test_legacy_settings.py` — реальный `App` в subprocess с симуляцией PySide6 < 6.12 (включая escape-форму и настройки в памяти); `tests/unit/test_flatpak_manifest.py` — статическая проверка пина PySide6 ≥ 6.12 и вызова build-guard.
+- **Остаточный риск:** на PySide6 < 6.12 `QSettings` не открывает ни одного файла (сессия in-memory), поэтому ни скан, ни гонка подмены файла не дают выполнения кода; цена — сброс настроек на таком runtime. Для релизной сборки и native-установки (≥ 6.12) этот путь не задействован. Полное закрытие класса — JSON-стор вместо `QSettings` (отдельная задача, `docs/settings-migration.md` §6).
+
+---
+
+## 5. Что уже сделано хорошо
 
 1. **API-ключи — в OS keyring**, не в конфиге/исходниках/логах; сервис неймспейснут (`barbaros:providers_api_keys`), имя провайдера — username; hardcoded-секретов в репозитории нет (`git grep` чист).
 2. **`ProviderMeta` не сериализует ключ:** `api_key_manager` создаётся в `__post_init__` и не является dataclass-полем; `schema().dump()` даёт только `name/provider_type/api_base`; `from_dict` игнорирует лишние поля.
-3. **UI маскирует секреты:** `EchoMode.Password`, в таблице/карточках — только `truncate_key` (≤4 последних символа); копирование из password-поля блокируется Qt (проверено).
+3. **UI маскирует секреты:** `EchoMode.Password`, в таблице/карточках — только `truncate_key` (≤4 последних символа); копирование из password-поля блокируется Qt.
 4. **Валидатор URL отклоняет не-http(s) схемы и userinfo** (`javascript:`, `file:`, `user:pass@host` — False).
-5. **Вставка в `CustomTextEdit` — plain text** (`insertPlainText`): HTML/MIME из буфера не парсится.
-6. **Rich-text ссылки в `LinkLabel`/`QTextEdit` не кликабельны**; Qt rich text не исполняет JS и не загружает remote-картинки (проверено); `QImageReader.allocationLimit()=256MB` защищает от грубых decompression-bomb, `isNull()` корректно обрабатывается.
+5. **Вставка в `CustomTextEdit` — обычно plain text** (`insertPlainText`): HTML/MIME из буфера не парсится. При HTML-only буфере Qt-фолбэк `insertFromMimeData` вставляет rich text — это класс BAR-13 (JS не исполняется), а не отдельная уязвимость.
+6. **Rich-text ссылки в `LinkLabel`/`QTextEdit` не кликабельны**; Qt rich text не исполняет JS и не загружает remote-картинки; `QImageReader.allocationLimit()=256MB` защищает от грубых decompression-bomb.
 7. **IPC-поверхность минимальна:** только сессионный bus, один `void`-слот без аргументов/возврата; данные/ключи через D-Bus не ходят; `deleteLater` и прочие слоты `QObject` не экспортируются.
 8. **Flatpak без `--filesystem=home`** и без `--device=all`; cleanup убирает тесты/`__pycache__`/webengine; `--talk-name=org.freedesktop.secrets` нужен для keyring.
-9. **`uv.lock` с точными версиями и sha256** — хорошая база для исправления BAR-08.
-10. **Нет телеметрии:** сеть только через `any_llm` к настроенному провайдеру; README раскрывает отправку облачным провайдерам (часть `User_Privacy_Protection` → «Honesty & Transparency»).
+9. **`uv.lock` с точными версиями и sha256; с этого аудита `pyproject.toml` пинит зависимости до minor-линии** — хорошая база для исправления BAR-08 и защита от «неожиданного» мажорного обновления (как PySide6 6.12).
+10. **Нет телеметрии:** сеть только через `any_llm` к настроенному провайдеру; README раскрывает отправку облачным провайдерам.
+11. **Новый кэш моделей — plain JSON, не pickle:** `json.loads` без `object_hook`, allowlist полей `id/created/object/owned_by`, лимит 4 МиБ до разбора; `ModelCacheDocument` не даёт лишним полям/секретам/`api_base` попасть в файл.
+12. **Файловая механика кэша безопасна по механике:** `O_NOFOLLOW` + `S_ISREG` (симлинк/FIFO/device/каталог не читаются, FIFO не блокирует), лимит `limit+1`, `0600`/`0700` независимо от umask, атомарный `os.replace`, старый файл цел при любой обработанной ошибке, temp удаляется.
+13. **Fail-safe границы:** `load`/`save` не бросают исключений (кроме `BaseException`), битый/огромный/невалидный кэш не ломает старт, кэш не удаляется.
+14. **Логирование нового кода — `logging` с `%r` и усечением:** путь/имя провайдера не дают log injection, содержимое файла и ключи не логируются.
+15. **Новый код не тянет новых зависимостей** (stdlib: `json`, `os`, `tempfile`, `threading`, `stat`, `logging`); `atomic_file` не импортирует Qt/keyring/any_llm.
+16. **Тесты нового PR проверяют безопасность:** symlink/FIFO/oversized/allowlist/права/fail-safe/секреты/log-injection.
+17. **BAR-01-фикс для native-установки корректно закрывает вектор:** санация до `QSettings`, JSON-формат выбора, `read_setting` как страховка, `pyproject.toml` держит PySide6 ≥ 6.12; подтверждено тестами и экспериментом (PySide6 6.12.0 не выполняет payload).
+18. **Санация INI безопасна по механике:** читает regular file без симлинка, потолок 1 МиБ, бэкап `0600` с уникальным именем, атомарная запись, никогда не бросает (fail-safe для старта), идемпотентна (повторный запуск файл не трогает).
+19. **Нормализация списков моделей** вынесена на границу провайдера (`provider_models.py`) и согласована с allowlist кэша; strict-валидация не даёт мусору из ответа провайдера перезаписывать кэш.
+20. **`valueFromJson` терпим к повреждённому JSON** (включая `RecursionError`), старт не зависит от целостности всех настроек.
 
-## 5. Проверено и не является уязвимостью
+## 6. Проверено и не является уязвимостью
 
-- **Path traversal через настройку `language`** (`i18n.load_translator`): обязательный префикс `barbaros_` делает первым компонентом пути литеральное имя (`barbaros_..`), таких каталогов нет; `lang="../../../etc/passwd"` → `None`, абсолютный `lang` даёт относительный путь. Не эксплуатируется (остаточное замечание: `language` не сверяется с `available_languages()`).
-- **RCE/десериализация через D-Bus:** метод без аргументов и возврата; `deleteLater` не экспортируется (проверено); данных нет.
+- **Path traversal через настройку `language`** (`i18n.load_translator`): обязательный префикс `barbaros_` делает первым компонентом пути литеральное имя (`barbaros_..`); `lang="../../../etc/passwd"` → `None`. Не эксплуатируется.
+- **RCE/десериализация через D-Bus:** метод без аргументов и возврата; `deleteLater` не экспортируется; данных нет.
 - **Подмена D-Bus-сервиса:** сквоттер получает только `void`-вызов; максимум — DoS/имитация успеха, не утечка.
-- **Flatpak-приложение без `--talk-name=io.github.frimn.barbaros`** не может вызвать Barbaros; `--socket=session-bus` у *вызывающего* — отдельное разрешение.
-- **SIGUSR1:** фиксированный номер сигнала, нет payload; RCE/повреждения памяти нет; максимум — вызов IPC-пути или завершение процесса с именем `barbaros`.
+- **SIGUSR1:** фиксированный номер сигнала, нет payload; RCE/повреждения памяти нет.
 - **Командные/SQL/NoSQL/OS-инъекции:** в `src/barbaros` нет `subprocess`, `os.system`, `eval`/`exec`, unsafe YAML/pickle-импортов; `tasks.py`-команды — build-time, не runtime.
 - **SSRF:** URL провайдера выбирает пользователь, серверной стороны нет; link-local адреса в валидаторе — слабость (BAR-03), но без подмены конфига самостоятельной эксплуатации нет.
-- **Qt rich text XSS:** JavaScript/обработчики событий не исполняются; remote `http(s)`-картинки не загружаются; клики в `LinkLabel`/`QTextEdit` не открывают ссылки (проблема только у `QMessageBox`, BAR-06).
-- **Секреты в конфиге/логах/репозитории:** не обнаружены (ключи — в keyring; `print` без ключей; `git grep` секрет-паттернов чист).
+- **Qt rich text XSS:** JavaScript/обработчики событий не исполняются; remote `http(s)`-картинки не загружаются; клики не открывают ссылки (проблема только у `QMessageBox`, BAR-06).
+- **Секреты в конфиге/логах/репозитории:** не обнаружены (ключи — в keyring; `print`/`logging` без ключей; `git grep` секрет-паттернов чист).
 - **Plaintext-fallback keyring:** отсутствует; без backend — fail-closed (`NoKeyringError`), а не запись в файл.
 - **`--share=ipc`:** стандартное разрешение для X11/MIT-SHM, находкой не является.
 - **Расхождение `--own-name` ↔ `SERVICE_NAME`:** не ломает IPC (app-id namespace разрешён по умолчанию), это лишнее/неверное разрешение (BAR-05).
 - **`assert` в IPC:** не является границей безопасности; удаление под `-O` не даёт новых прав (гигиена — BAR-12).
 - **`--popup`/`--opened`:** аргументы только сравниваются `in sys.argv`, в команды/пути не подставляются — инъекции нет.
+- **Новый кэш:** не вызывает pickle, не читает symlink/FIFO/device/каталог, не выходит за `limit+1`/4 МиБ, не пишет секреты/`api_base`, не подменяет `api_base`/имя/тип провайдера, не удаляет битый файл; безопасен при ENOSPC/read-only/сбое `replace`/сериализации; гонки load/save не дают частичного файла (кроме BAR-19 path-override).
+- **`cache_path_from_config`:** относительные/пустые/нестроковые/`file://`/`$HOME`-значения отвергаются, `~unknownuser`/NUL-путь не роняют приложение; запись в cwd не происходит.
+- **Импортная гигиена:** `atomic_file` не импортирует Qt/keyring/any_llm/barbaros; новых рантайм-зависимостей нет.
+- **Санация конфига, остаточные наблюдения (не отдельные находки):** бэкап содержит исходный pickle, но приложением не читается; эвристика вырезает любое значение с маркером (потенциально — пользовательскую строку с этим текстом), но писать в конфиг может только сам пользователь/тот же uid; конкурентный запуск второго экземпляра во время read→replace может потерять его параллельную запись настроек (описано в `docs/settings-migration.md` §6). Всё это — ограничения дизайна санации, а не самостоятельные уязвимости; RCE-остаток вынесен в BAR-28.
+- **PySide6 6.12 и pickle:** проверено, что `QSettings.value()` на INI с `PySide::PyObjectWrapper` бросает `RuntimeError` и не выполняет payload; `read_setting` переживает это и восстанавливает соседние ключи.
 
-## 6. Соответствие OWASP Top 10 (2021)
+## 7. Соответствие OWASP Top 10
+
+### 7.1 OWASP Top 10:2021
 
 | Категория | Применимость | Находки |
 |---|---|---|
 | A01 Broken Access Control | Да (локальный IPC) | BAR-04, BAR-12 |
 | A02 Cryptographic Failures | Да (транспорт, секреты) | BAR-02, BAR-03 |
 | A03 Injection | Да (HTML/rich text; prompt injection — без исполнения) | BAR-06, BAR-13 |
-| A04 Insecure Design | Да | BAR-02, BAR-04, BAR-07, BAR-09, BAR-14, BAR-15, BAR-18 |
+| A04 Insecure Design | Да | BAR-02, BAR-04, BAR-07, BAR-09, BAR-11, BAR-14, BAR-15, BAR-18, BAR-19, BAR-20, BAR-22, BAR-23, BAR-24, BAR-25 |
 | A05 Security Misconfiguration | Да | BAR-05, BAR-09, BAR-10 |
-| A06 Vulnerable and Outdated Components | Да | BAR-08, BAR-16 |
+| A06 Vulnerable and Outdated Components | Да | BAR-08, BAR-16, BAR-28 |
 | A07 Identification and Authentication Failures | Нет (нет аккаунтов/сессий; аутентификация ОС/keyring) | — |
-| A08 Software and Data Integrity Failures | Да | BAR-01, BAR-08, BAR-16 |
-| A09 Security Logging and Monitoring Failures | Частично | BAR-12, BAR-15, BAR-17 |
+| A08 Software and Data Integrity Failures | Да | BAR-01, BAR-08, BAR-16, BAR-19, BAR-21, BAR-28 |
+| A09 Security Logging and Monitoring Failures | Частично | BAR-12, BAR-15, BAR-17, BAR-26, BAR-27 |
 | A10 Server-Side Request Forgery (SSRF) | Нет (клиентское приложение; URL задаёт пользователь) | — |
 
-## 7. План исправлений
+### 7.2 OWASP Top 10:2025 (актуальная редакция)
+
+| Категория | Применимость | Находки |
+|---|---|---|
+| A01 Broken Access Control (вкл. SSRF) | Да (локальный IPC; SSRF — нет) | BAR-04, BAR-12 |
+| A02 Security Misconfiguration | Да | BAR-05, BAR-09, BAR-10, BAR-21 |
+| A03 Software Supply Chain Failures | Да | BAR-08, BAR-16, BAR-28 |
+| A04 Cryptographic Failures | Да (транспорт, секреты) | BAR-02, BAR-03 |
+| A05 Injection | Да (HTML/rich text) | BAR-06, BAR-13 |
+| A06 Insecure Design | Да | BAR-02, BAR-04, BAR-07, BAR-14, BAR-15, BAR-18, BAR-19, BAR-20, BAR-22, BAR-23, BAR-24, BAR-25 |
+| A07 Authentication Failures | Нет (нет аккаунтов/сессий) | — |
+| A08 Software or Data Integrity Failures | Да | BAR-01, BAR-08, BAR-16, BAR-19, BAR-21, BAR-28 |
+| A09 Security Logging & Alerting Failures | Частично | BAR-12, BAR-15, BAR-17, BAR-26, BAR-27 |
+| A10 Mishandling of Exceptional Conditions | Да (fail-open, bare except, падение старта, маскировка ошибок) | BAR-09, BAR-11, BAR-12, BAR-15, BAR-22, BAR-23, BAR-25, BAR-26 |
+
+## 8. Поправки к предыдущим версиям отчёта
+
+1. **Версия отчёта из `77462de` потерялась при мерже BAR-01.** `58c92d0`/`ea8822c` разрешили конфликт в пользу ветки, базой которой был аудит `71197f8`, поэтому в `main` осталась старая версия (27 находок → 18). В этой версии `BAR-19..BAR-27` восстановлены и перепроверены; добавлена `BAR-28`.
+2. **BAR-01: статус «исправлено» был неполным.** Исправление `3e30fa3` верно для native/pip-установки с PySide6 ≥ 6.12, но Flatpak собирается на BaseApp 6.11.3 (PySide6 6.11.3) и не ставит PySide6 из `pyproject.toml`. Санация обходится конфигом > 1 МиБ/симлинком/read-only. Остаток вынесен в BAR-28 (High); в §3 статус BAR-01 изменён на «fixed (native)».
+3. **BAR-04, способ вызова.** Утверждение первого аудита «`QDBusInterface(SERVICE_NAME, "/", "", bus)` успешно вызывает метод» неверно для PySide6 6.11/6.12: такой интерфейс невалиден; Qt экспортирует интерфейс, производный от Python-класса (`local.barbaros.ipc.IPCService`). Отсутствие авторизации подтверждено.
+4. **BAR-13, атрибуция некликабельности.** В `widgets/link_label.py` нет `mousePressEvent`; некликабельность обеспечивает присваивание `display_label.mousePressEvent` в `filterable_combobox.py:37,342`.
+5. **BAR-09, `api_base=123`.** `ProviderMeta.from_dict` через `dataclasses_json` приводит значение к строке; краш воспроизводится только при прямом `ProviderMeta(..., api_base=123)`. Оценка не меняется: JSON неверного типа по-прежнему роняет старт.
+6. **BAR-12, bare `except`.** Один из двух заменён на `contextlib.suppress(BaseException)` (`ipc.py:79`); bare `except:` остался в `_handle_signal_from_socket` (`ipc.py:89`).
+7. **BAR-01, первый триггер.** При штатном старте первый unpickle давал чтение `target_language_list` (`main_window.py:190-193`), а не `model`.
+8. **BAR-17/18, строки.** `README.md:70` → `README.md:33`; `main_window.py:95` → `:53,211,222`; `ipc.py:142,146,149` → `:137,141,144`; `model_manager.py:121,129,173` → `:187,196,204,251`. Точные строки сдвинулись после рефакторингов — в тексте даны текущие.
+9. **Внутренняя документация.** `docs/model-cache-storage.md` цитирует устаревшие строки прошлого аудита; абзацы о записи «в потоке воркера» устарели (BAR-20). После миграции BAR-01 путь санации описан в `docs/settings-migration.md`; в этой версии его §6 дополнен описанием Flatpak-остатка (BAR-28).
+10. **Неточность в разделе «Что уже сделано хорошо» #5.** Вставка обычного текста — plain text, но при HTML-only буфере Qt-фолбэк вставляет rich text; JS не исполняется, в LLM уходит `toPlainText()`.
+11. **Абсолютные пути в публикуемом отчёте.** Прошлая версия содержала локальные абсолютные пути и имя пользователя (BAR-27); в этой версии они удалены, ссылки даны относительно корня проекта.
+12. **Версии PySide6.** В прошлой версии смешаны 6.11.1 (эксперименты) и текущий пиннинг. Уточнение: `.venv` на HEAD — PySide6 **6.12.0**; Flatpak BaseApp 6.11.3 — PySide6 **6.11.3**; поведение `QSettings` проверено на обеих версиях.
+
+## 9. План исправлений
 
 **P0 — до следующего релиза:**
-1. **BAR-01:** убрать pickle из `QSettings` (JSON/два строковых ключа); миграция — санитизация сырого INI до первого обращения к `QSettings` либо полный переход на JSON-стор; тест на отсутствие `PyObjectWrapper` в конфиге. **Сделано:** см. `docs/settings-migration.md`.
+1. ~~**BAR-28:**~~ **выполнено (2026-11-13):** Flatpak ставит `pyside6-essentials==6.12.0`/`shiboken6==6.12.0` поверх BaseApp 6.11 с build-guard; на PySide6 < 6.12 файл настроек не читается вообще (карантин + настройки в памяти), поэтому размер/симлинк/escape не дают RCE; добавлены opt-in тест на реальном Flatpak runtime и статический тест манифеста. Остаток — потеря настроек на PySide6 < 6.12 (страховочная ветка, в релизе не задействована) и возможный переход на JSON-стор.
 2. **BAR-02:** вызывать `api_key_manager.delete()` при удалении провайдера + явная очистка ключа в диалоге; обрабатывать `KeyringError`; тест с fake backend.
 3. **BAR-06:** `QMessageBox` для ошибок — plain text; `url_to_html_links` переписать как `escape → linkify` или удалить.
-4. **BAR-04/BAR-15:** IPC/`--popup` только фокусирует окно; перевод из clipboard — только по явному действию пользователя; D-Bus-метод возвращает явный статус; rate limit/проверка вызывающего.
+4. **BAR-04/BAR-15:** IPC/`--popup` только фокусирует окно; перевод из clipboard — только по явному действию пользователя; D-Bus-метод возвращает явный статус; rate limit/проверка вызывающего; тест IPC.
 5. **BAR-03:** HTTPS обязателен, кроме loopback; применить и при загрузке конфига.
+6. **BAR-19:** guard «не заменять не-кэш-файл» перед первой записью; не chmod-ить через симлинк; ужесточить формулировки README.
 
 **P1 — в ближайший цикл:**
-6. **BAR-05:** убрать `--socket=session-bus` и неверный `--own-name`; проверить IPC в Flatpak.
-7. **BAR-08:** hashed-requirements из `uv.lock` + `--require-hashes`; SBOM в релиз.
-8. **BAR-07:** линейный парсер `<think>` + лимит ответа/`max_tokens`.
-9. **BAR-09:** fail-safe загрузка конфига, валидация `api_base`/провайдеров.
-10. **BAR-12:** убрать сканирование процессов (lock-файл/сокет с `SO_PEERCRED`), явные исключения и логирование.
+7. **BAR-05:** убрать `--socket=session-bus` и неверный `--own-name`; проверить IPC в Flatpak.
+8. **BAR-08:** hashed-requirements из `uv.lock` + `--require-hashes`; SBOM в релиз.
+9. **BAR-07:** линейный парсер `<think>` + лимит ответа/`max_tokens`.
+10. **BAR-09:** валидировать схему конфига (`llm_providers`, `api_base`, `language`, `target_language_list`), лимит числа провайдеров, fail-safe старт.
+11. **BAR-12:** убрать сканирование процессов (lock-файл/сокет с `SO_PEERCRED`), явные исключения и логирование.
+12. **BAR-20:** один `load()` кэша на старте; NFR-тест на 100 провайдеров; поправить `docs/model-cache-storage.md`.
+13. **BAR-22:** валидировать предпосылки до смены UI + `try/finally` rollback кнопок; создание клиента — в рабочем потоке; `getattr` в Stop; понятные сообщения о ключе.
+14. **BAR-23:** убрать `QThread.terminate()`, кооперативная отмена + `wait(ms)` с таймаутом, явные сетевые таймауты и лимит размера ответа.
+15. **BAR-24:** лимит количества/длины моделей сразу после `list_models()` (те же константы, что в кэше); парсинг/построение дерева — не в одном GUI-шаге.
+16. **BAR-25:** `return` после `error.emit`; проверка поддержки изображений внутри `try`; fail-closed.
 
 **P2 — гигиена и defense-in-depth:**
-11. **BAR-10:** `chmod 0600` на QSettings.
-12. **BAR-11:** предупреждение при недоступном keyring, без plaintext-fallback.
-13. **BAR-13/BAR-14:** plain-text для внешних имён и ответа LLM; лимиты текста/изображения/ответа; валидация `ChatCompletion`.
-14. **BAR-16:** включить CI, пинить actions/build-tools, подписывать bundle, Dependabot/pip-audit, `SECURITY.md`.
-15. **BAR-17/BAR-18:** `logging` без чувствительных данных; in-app уведомление о передаче данных провайдеру.
+17. **BAR-10:** `chmod 0600` на QSettings после каждой записи.
+18. **BAR-11:** предупреждение при недоступном keyring, без plaintext-fallback.
+19. **BAR-13/BAR-14:** plain-text для внешних имён и ответа LLM; лимиты текста/изображения/ответа; валидация `ChatCompletion`.
+20. **BAR-16:** включить CI, пинить actions/build-tools, подписывать bundle, Dependabot/pip-audit, `SECURITY.md`.
+21. **BAR-17/BAR-18:** `logging` без чувствительных данных; in-app уведомление о передаче данных провайдеру.
+22. **BAR-21:** проверка `st_uid`/битов записи кэша (если shared-каталог остаётся поддерживаемым сценарием).
+23. **BAR-26:** `aboutToQuit.connect(cleanup)` один раз в `App.__init__`; идемпотентный `cleanup`.
+24. **BAR-27:** привести README к фактическому поведению (HTTPS по умолчанию, HTTP только по явной настройке, отправка изображения/буфера провайдеру).
 
-## 8. Security-тесты, которые стоит добавить
+**Организационно (AGENTS.md #27):** для PR ввести обязательный OWASP-проход по diff с меткой `security/owasp-passed` и комментарием-следом; метку ставить только на финальный diff и снимать при новых security-коммитах. Сейчас CI/автоматической проверки нет (BAR-16). Остаток BAR-28 был заведён отдельным issue [#15](https://github.com/FRiMN/barbaros/issues/15) с меткой `security/owasp-finding` и закрыт исправлением (fail-closed + PySide6 6.12 в Flatpak); issue остаётся ссылкой-следом.
 
-1. `QSettings`-round-trip выбора модели не содержит pickle (`PyObjectWrapper`); санитизация/удаление легаси-конфига выполняется без вызова `QSettings.value/remove/setValue`.
+## 10. Security-тесты, которые стоит добавить
+
+1. `QSettings`-round-trip выбора модели не содержит pickle (`PyObjectWrapper`); санация/удаление легаси-конфига выполняется без вызова `QSettings.value/remove/setValue`; старт с подменённым INI не выполняет код. *(частично есть: `tests/unit/test_settings_sanitize.py`, `tests/unit/test_model_selection.py`, `tests/system/test_legacy_settings.py`)*
 2. Удаление провайдера и очистка ключа удаляют секрет из keyring (fake/in-memory backend); `NoKeyringError` не роняет старт.
 3. `is_valid_url`/`api_base_problem`: `http` вне loopback отклоняется, `http://localhost` разрешён, `https` разрешён; конфиг с `http://evil` не загружается.
-4. Битый/подменённый конфиг: приложение стартует с дефолтами, валидные провайдеры загружены.
+4. Битый/подменённый конфиг: приложение стартует с дефолтами, валидные провайдеры загружены; число провайдеров ограничено; JSON неверного типа не роняет старт.
 5. IPC: `popup_and_translate` не инициирует отправку без действия пользователя; метод возвращает статус; ошибка обработчика видна вызывающему.
 6. Rich text: `model.id`/`provider.name` рендерятся как plain text; ошибка провайдера с HTML не создаёт ссылок/картинок.
 7. `pop_think`: линейное время на большом ответе (нефункциональный тест), большой ответ усекается с сообщением.
 8. `ChatCompletion(choices=[])` / `content=None`: пользователь видит ошибку, приложение не падает.
 9. Лимиты на размер текста/изображения; `max_tokens` передаётся.
 10. В логах/сериализованных провайдерах нет API-ключей.
+11. **BAR-19:** `save()` отказывается заменять существующий не-кэш-файл (`.bashrc`, FIFO, симлинк) и не меняет его; `chmod` не идёт по симлинку.
+12. **BAR-20:** NFR «100 провайдеров + 2 МиБ кэша → старт в бюджете»; кэш читается один раз.
+13. **BAR-21:** файл кэша с чужим uid/режимом `0666` игнорируется с WARNING.
+14. **BAR-22:** «translate без выбранной модели → кнопка снова доступна, прогресс скрыт, Stop не падает»; «openai без ключа → видимое сообщение, вкладка работоспособна»; «reload models без ключа → сообщение, нет traceback».
+15. **BAR-23:** NFR «stop/shutdown при зависшем fake-провайдере возвращается < 2 с, приложение закрывается»; unit «wait вызывается с таймаутом».
+16. **BAR-24:** «endpoint вернул 100 001 модель → загружено ≤10 000, UI отвечает, в логе предупреждение»; NFR времени обработки 10 000 моделей.
+17. **BAR-25:** OCR с неподдерживающим изображения клиентом → `acompletion` не вызван, ровно один `error`.
+18. **BAR-26:** «выход без смены языка → shutdown вызван»; **BAR-27:** в публикуемых docs/README нет абсолютных путей и заявлений, расходящихся с поведением.
+19. **BAR-28:** `tests/system/test_flatpak_pyside.py` (opt-in `-m slow`, реальный BaseApp 6.11.3): два негативных контроля (обычная и escaped-форма выполняют payload при прямом чтении); путь приложения — любой существующий конфиг (мелкий, oversize, escaped, симлинк) уносится, `memory_backed=True`, `QSettings` не открывает ни одного файла, код не выполняется. Плюс проверка `PySide6.__version__` внутри собранного bundle ≥ 6.12 (build-guard `flatpak/bar28_guard.py`).
+20. **Пиннинг:** `pyproject.toml` содержит `pyside6-essentials~=6.12.0`; Flatpak-модуль в `flatpak/barbaros.yaml` ставит точный пин `pyside6-essentials==6.12.0`/`shiboken6==6.12.0`, а `flatpak/bar28_guard.py` на сборке проверяет версию, соответствие PySide6 ↔ Qt и отказ от pickle. Статический тест `tests/unit/test_flatpak_manifest.py` проверяет пин ≥ 6.12, вызов и поставку guard в манифесте и что guard проходит.
 
-## 9. Воспроизводимость и ограничения
+## 11. Воспроизводимость и ограничения
 
-**Ключевые эксперименты:**
-- **Pickle-RCE:** writer пишет `ModelSelection` через `QSettings`; в INI-строку `model=` вставлен pickle-payload; reader в свежем процессе делает только `settings.value("model")` и создаёт файл-маркер (код выполнен). Дополнительно проверено на PySide6 6.11.1: unpickle вызывают `value("geometry")` (любой ключ той же группы), `remove()`, `setValue()`, `allKeys()`, `contains()`, `childKeys()`; `value(..., type=str)` не помогает; `value` из другой группы, `fileName()`, `sync()`, `status()` — безопасны. В реальных native/Flatpak-конфигах на машине аудита уже есть `@Variant(...PySide::PyObjectWrapper,\x80\x04...)`.
-- **D-Bus:** под `dbus-run-session` минимальный `QObject` с `@Slot()` + `registerService`/`registerObject(..., ExportAllSlots)`; вызов `popup_and_translate` с пустым именем интерфейса/через `gdbus` успешен; `deleteLater` не экспортируется; при исключении в слоте клиент получает `valid=True`.
-- **Qt rich text:** `QT_QPA_PLATFORM=offscreen`; инспекция `QMessageBox.findChildren(QLabel)` (`textFormat`, `openExternalLinks`, `textInteractionFlags`), клик `QTest.mouseClick` → `QDesktopServices`; `<img src="file://…">` реально грузится в `QLabel`/`QMessageBox`/`QTextEdit`; remote-картинки не грузятся; ссылки в `LinkLabel`/`QTextEdit` не кликабельны.
-- **Доставка ошибки:** локальный `ThreadingHTTPServer` как OpenAI-совместимый endpoint возвращает `401` с HTML в теле; `any_llm` кладёт тело в `str(exception)` → `error.emit` → `QMessageBox`.
-- **`pop_think`:** замеры `re.search` на `<think>`-повторениях без закрывающего тега (5–160 КБ) — квадратичный рост.
-- **Keyring:** fake/in-memory и `fail.Keyring`; отсутствие вызовов `delete()`; очистка поля ключа; `ProviderMeta.from_dict` с произвольным `api_base`; `QSettings`-режимы при umask 022/002.
+**Ключевые эксперименты (HEAD `ea8822c`, изолированные XDG/HOME в temp, offscreen Qt, fake keyring):**
+- **Pickle-RCE (BAR-01/BAR-28):**
+  - PySide6 6.12.0 (`.venv`): INI с `@Variant(...PySide::PyObjectWrapper...)` → `QSettings.value()` бросает `RuntimeError: Failed to deserialize Python object from QDataStream…`, payload не выполняется.
+  - BaseApp `io.qt.PySide.BaseApp` 6.11.3 (`flatpak run --command=python3`, PySide6 6.11.3, Python 3.13): writer пишет `Evil.__reduce__` через `QSettings.setValue`, reader в отдельном процессе читает `main_window/model` → payload выполняется (файл-маркер создан).
+  - Обход санации (до исправления): конфиг увеличен до 1 048 817 байт; `sanitize_pickled_settings()` вернул `None` (WARNING «file too large», лимит 1 МиБ) и файл не тронул; чтение под BaseApp 6.11.3 выполнило payload. Симлинк/read-only дают тот же `None` по коду санации. Дополнительно найдено, что квотированная форма `model="@Variant(...` (QSettings квотирует значения с запятой) обходила построчный скан и давала `removed == 0`.
+  - **Дополнительно (найдено ревью, до финального фикса):** escape-форма `model=\x40Variant(...` и `PySide::PyObject\x57rapper` невидима построчному сканеру, но Qt снимает escapes до разбора варианта — на реальном BaseApp 6.11.3 такая форма выполняла payload даже в первой версии fail-closed. Поэтому итоговый фикс не полагается на скан: на < 6.12 файл просто не читается.
+  - **После исправления (реальный BaseApp 6.11.3):** `tests/system/test_flatpak_pyside.py` — оба негативных контроля (обычная и escaped-форма) выполнили payload при прямом чтении, но `prepare_settings_file()` унёс small/big/escaped-конфиги и `QSettings` payload не выполнил; в собранном Flatpak bundle импортируется PySide6 6.12.0 и fresh-process чтение даёт `RuntimeError` без выполнения (см. build-guard).
+- **D-Bus (BAR-04/12/15):** `dbus-run-session`, `IPCService(as_server=True, app=Stub)`; `gdbus introspect` → интерфейс `local.barbaros.ipc.IPCService`, метод `popup_and_translate()`; сторонний клиент → `ReplyMessage`, обработчик выполнен; исключение в слоте → клиенту `ReplyMessage` без error; второй сервер → `Exception('')` при `registerService`.
+- **Qt rich text (BAR-06/13):** `QT_QPA_PLATFORM=offscreen`; инспекция `QMessageBox.findChildren(QLabel)` (`textFormat`, `openExternalLinks`), `<img src="file://…">` грузится в `QLabel`/`QMessageBox`/`QTextEdit`; remote-картинки не грузятся; ссылки не кликабельны.
+- **Keyring (BAR-02/11):** fake/in-memory backend и `fail.Keyring`; отсутствие вызовов `delete()`; `NoKeyringError` на старте; plaintext-fallback отсутствует.
+- **`pop_think` (BAR-07):** замеры `re.search` на `<think>`-повторениях без закрывающего тега (5–160 КБ) — квадратичный рост.
+- **Конфиг (BAR-09):** повреждённый JSON теперь не роняет старт (`valueFromJson` → default); JSON верной формы неверного типа (число/объект) роняет; `api_base="http://evil"` из конфига принимается.
+- **Кэш (BAR-19/20/21):** матрица `cache_path_from_config`; замена существующего файла/FIFO/symlink-цели; `chmod` сквозь symlink-родителя; отказ при read-only/ENOSPC/сбое replace с сохранением старого файла; symlink/FIFO/device/каталог не читаются, ровно `limit+1`; права `0600`/`0700` при umask 000/022/077; 100×`load()` 4 МиБ = 7.48 с; реальный `MainWindow` 3/20/100 провайдеров = 145/1353/7221 мс.
+- **GUI fail-open (BAR-22):** `TextFeature` на fake-parent (offscreen): нет выбранной модели → `AttributeError`, Translate скрыт/disabled, прогресс крутится, Stop падает; для openai без ключа — `MissingApiKeyError` (из `any_llm` через `AnyLLM.create`), состояние то же; Clear не сбрасывает.
+- **Потоки/сеть (BAR-23):** `QThread.terminate()` на Python-цикле → `wait(2000)` не вернулся >20 с; на C-`sleep(60)` — 0.001 с; у `AnyLLM` дефолтные таймауты `Timeout(connect=5, read=600, write=600, pool=600)`.
+- **Размер `list_models` (BAR-24):** 20 000 моделей = 1.5 МБ, parse+validate+`QTreeWidgetItem` ≈ 0.16 с; 100 000 = 7.7 МБ / 0.64 с GUI; 1 млн — линейно ≈ 6.4 с.
+- **OCR fail-open (BAR-25):** stub-клиент с `SUPPORTS_COMPLETION_IMAGE=False` → `error` и `done` одновременно, `acompletion` вызван один раз.
+- **Exit/docs (BAR-26/27):** статическая проверка единственной точки `aboutToQuit.connect`; `grep` абсолютных путей в `docs/` и сверка README с `common.py:108-127`/BAR-18.
 
-**Ограничения:** не выполнялись полная Flatpak-сборка/запуск, реальные операции с системным Secret Service (чтобы не создавать записи), проверка на реальном X11/Wayland; не проводился SAST зависимостей (CVE) и фаззинг. Выводы по Flatpak основаны на манифесте и документации; выводы по keyring — на fake-бэкендах. Исходный код в ходе аудита не изменялся.
+**Ограничения:** не выполнялись полная Flatpak-сборка/запуск собственного bundle, реальные операции с системным Secret Service, проверка на реальном X11/Wayland; не проводился SAST зависимостей (CVE) и фаззинг. Вывод по Flatpak-BaseApp сделан на установленном runtime 6.11.3 и его PySide6 6.11.3; вывод по общему каталогу (BAR-21) — на POSIX-семантике и коде (живой тест с другой учётной записью не проводился). Выводы по `QThread.terminate()` — на PySide6 6.12.0/Qt 6.12. Исходный код в ходе аудита не изменялся; полный набор тестов на HEAD — `405 passed, 2 deselected`.

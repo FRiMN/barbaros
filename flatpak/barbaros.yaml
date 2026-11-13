@@ -54,8 +54,15 @@ modules:
     build-commands:
       - echo ${FLATPAK_DEST} # /app
       - echo ${PWD} # /run/build/barbaros
-      # Install dependencies (without PySide6, since it is provided by BaseApp)
+      # Install dependencies (PySide6 itself is pinned below, see BAR-28)
       - pip3 install --verbose --prefix=${FLATPAK_DEST} -r requirements-flatpak.txt
+      # BAR-28: io.qt.PySide.BaseApp has no 6.12 branch on Flathub; its PySide6
+      # 6.11 still unpickles QSettings values. Override the base app's copy with
+      # an exact PyPI pin so the Flatpak release refuses the BAR-01/BAR-28
+      # payload just like the native install (issue #15 rec. 1 fallback).
+      # bar28_guard.py fails the build if the override did not take effect.
+      - pip3 install --no-deps --verbose --prefix=${FLATPAK_DEST} "pyside6-essentials==6.12.0" "shiboken6==6.12.0"
+      - python3 bar28_guard.py
       # Install the application with pip without pulling in dependencies
       - pip3 install --no-deps --verbose --exists-action=i --find-links="file://${PWD}/dist" --prefix=${FLATPAK_DEST} "barbaros"
       # Copy files
@@ -69,6 +76,8 @@ modules:
         dest: dist/
       - type: file
         path: requirements-flatpak.txt
+      - type: file
+        path: bar28_guard.py
       # Data files (.desktop, icons) must also be included
       - type: file
         path: io.github.frimn.barbaros.desktop

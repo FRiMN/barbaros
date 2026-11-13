@@ -12,7 +12,11 @@ from .common import read_setting
 from .i18n import load_translator, resolve_language
 from .ipc import IPCService
 from .main_window import MainWindow
-from .settings_sanitize import sanitize_pickled_settings, settings_file_path
+from .settings_sanitize import (
+    MemoryBackedSettings,
+    prepare_settings_file,
+    settings_file_path,
+)
 
 
 class App(QApplication):
@@ -30,22 +34,45 @@ class App(QApplication):
         # still holds a pickled Python object.  The raw INI has to be cleaned
         # before the QSettings instance exists: QSettings snapshots the file in
         # its constructor, so a later rewrite would not be visible to it.
+        # BAR-28: on a PySide6 that still unpickles (< 6.12) no on-disk
+        # settings are read at all - the preparation step quarantines an
+        # existing file (best effort) and the session uses in-memory settings.
         settings_path = settings_file_path()
-        removed = sanitize_pickled_settings(settings_path)
-        if removed is None:
+        prepared = prepare_settings_file(settings_path)
+
+        if prepared.removed:
+            print(
+                f"Settings: removed {prepared.removed} legacy pickled value(s); "
+                f"backup next to {settings_path!s}"
+            )
+        if prepared.quarantined is not None:
+            print(
+                "Warning: this PySide6 executes pickled QSettings values, so the "
+                "settings file was not read; it was moved to "
+                f"{prepared.quarantined!s}. Settings are kept in memory."
+            )
+        if prepared.memory_backed:
+            print(
+                "Warning: settings are kept in memory for this session; "
+                "preferences are not persisted by this PySide6 version (BAR-28)"
+            )
+        if prepared.removed is None and prepared.quarantined is None and not prepared.memory_backed:
             print(
                 "Warning: could not sanitize the settings file; "
                 "legacy values may remain"
             )
-        elif removed:
-            print(
-                f"Settings: removed {removed} legacy pickled value(s); "
-                f"backup next to {settings_path!s}"
-            )
 
-        self.settings = QSettings(QSettings.Scope.UserScope)
+        if prepared.memory_backed:
+            self.settings = MemoryBackedSettings()
+        else:
+            self.settings = QSettings(QSettings.Scope.UserScope)
+
         print(f"Settings filepath: {self.settings.fileName()}")
-        if settings_path is not None and Path(self.settings.fileName()) != settings_path:
+        if (
+            not prepared.memory_backed
+            and settings_path is not None
+            and Path(self.settings.fileName()) != settings_path
+        ):
             print(
                 "Warning: QSettings path does not match the sanitized one: "
                 f"{settings_path!s}"

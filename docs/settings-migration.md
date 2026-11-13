@@ -1,8 +1,8 @@
 # Легаси-pickle в QSettings: миграция и защита старта (BAR-01)
 
-**Статус:** реализовано.
-**Связано:** OWASP-аудит `docs/security/owasp-audit.md` §3 BAR-01 и §8.1; `docs/model-cache-storage.md`.
-**Затрагиваемые файлы:** новые `src/barbaros/settings_sanitize.py`, `tests/unit/test_settings_sanitize.py`, `tests/unit/test_model_selection.py`, `tests/system/test_legacy_settings.py`; `src/barbaros/common.py`; `src/barbaros/main.py`; `src/barbaros/main_window.py`; `src/barbaros/features/ocr.py`; `src/barbaros/features/settings.py`; `src/barbaros/widgets/filterable_combobox.py`; `tests/conftest.py`.
+**Статус:** реализовано для native/pip-установки (PySide6 ≥ 6.12) и для Flatpak (BAR-28: PySide6 6.12 из pip в bundle + fail-closed санация для PySide6 < 6.12).
+**Связано:** OWASP-аудит `docs/security/owasp-audit.md` §3 BAR-01, §4 BAR-28 и §8.2; `docs/model-cache-storage.md`.
+**Затрагиваемые файлы:** новые `src/barbaros/settings_sanitize.py`, `tests/unit/test_settings_sanitize.py`, `tests/unit/test_model_selection.py`, `tests/system/test_legacy_settings.py`, `tests/system/test_flatpak_pyside.py`; `flatpak/barbaros.yaml`; `flatpak/bar28_guard.py`; `src/barbaros/common.py`; `src/barbaros/main.py`; `src/barbaros/main_window.py`; `src/barbaros/features/ocr.py`; `src/barbaros/features/settings.py`; `src/barbaros/widgets/filterable_combobox.py`; `tests/conftest.py`.
 
 ## 1. Симптом
 
@@ -44,13 +44,31 @@ Only builtin types (dict, list, str, int, ...) are supported.
    `@Variant(` и содержит `PySide::PyObjectWrapper`. Остальные строки не
    меняются. Это вызывается из `App.__init__` перед созданием QSettings;
    расхождение вычисленного и фактического пути (`fileName()`) выводится
-   предупреждением.
+   предупреждением. Значение может быть и в кавычках (`"@Variant(...`):
+   QSettings квотирует строки с запятой, а запятая — обычный байт pickle, так
+   что такой вариант встречается на практике (BAR-28).
    - Чтение и запись — через `barbaros.atomic_file`: regular file без symlink,
      потолок 1 МиБ, атомарная запись. Оригинал сохраняется рядом как
      `barbaros.conf.bak-<UTC>-<random>` (0600) — если значение подменили, его
      можно разобрать; случайный суффикс не даёт перезаписать более ранний бэкап.
    - Функция fail-safe: при ошибке (каталог только для чтения, симлинк,
      слишком большой файл) старт продолжается, а не падает.
+   - **Fail-closed на старом PySide6 (BAR-28).** Санация — не единственная
+     защита: `prepare_settings_file()` (вызывается из `App.__init__`) сверяет
+     версию PySide6. На >= 6.12 неочищенный файл безопасен (Qt отказывается
+     десериализовать), и санация работает как миграция. На < 6.12 файл
+     настроек **не читается вообще**: Qt сначала снимает escape-последовательности
+     и кавычки INI, и только потом решает, что значение — `@Variant(...)`,
+     поэтому построчный скан сырых байт не может доказать безопасность файла
+     (`\x40Variant(...`, `PyObject\x57rapper` и т.п. скан не видят, а unpickle
+     происходит). Поэтому на старом runtime файл настроек **не читается**:
+     существующий файл уносится рядом как `barbaros.conf.unsafe-<UTC>-<random>`
+     (0600; для симлинка переименовывается сам линк), а приложение использует
+     `MemoryBackedSettings` — настройки сессии живут в памяти и не
+     сохраняются. Одноразовый *файл* не используется: same-uid процесс может
+     подменить любой файл, который приложение в состоянии прочитать, поэтому
+     отсутствие файла — единственная граница без гонок. Приложение при этом
+     всегда стартует (AGENTS.md #14); цена — сброс настроек на таком runtime.
 2. **JSON вместо pickle для выбора модели.** `ModelSelection.to_dict()` /
    `from_dict()` (`filterable_combobox.py`) + существующий
    `SettingsProxy.setValueAsJson`. `main_window/model` и `ocr_feature/model`
@@ -78,12 +96,17 @@ Only builtin types (dict, list, str, int, ...) are supported.
   трогается, второй бэкап не создаётся.
 - Flatpak: путь берётся через `QStandardPaths`, поэтому
   `~/.var/app/io.github.frimn.barbaros/config/...` подхватывается так же.
-- Симлинк на конфиг (dotfiles): чтение без follow отказывается от санации,
-  поэтому pickle в первый раз остаётся на месте. `read_setting` не даёт
+- Симлинк на конфиг (dotfiles): на PySide6 >= 6.12 чтение без follow
+  отказывается от санации, pickle остаётся на месте; `read_setting` не даёт
   упасть и восстанавливает соседние значения повторным чтением; QSettings при
   следующей записи сам перезапишет целевой файл без pickle (самолечение), но
-  бэкапа в этом случае не будет. Полноценная поддержка симлинков — отдельная
-  задача, если понадобится.
+  бэкапа в этом случае не будет.
+- На PySide6 < 6.12 **любой** существующий конфиг уносится, а не только
+  неочищенный: доказать отсутствие pickle в нём нельзя (см. §3). Симлинк
+  переименовывается сам, цель не трогается; обычный файл (в т.ч. > 1 МиБ)
+  уносится как есть — пользователь может разобрать его вручную. Приложение
+  стартует с дефолтами и держит настройки сессии в памяти
+  (`MemoryBackedSettings`).
 
 ## 5. Тесты
 
@@ -92,13 +115,21 @@ Only builtin types (dict, list, str, int, ...) are supported.
   слишком большой файл, симлинк не трогается, строка с упоминанием класса не
   трогается, контракт «до санации QSettings падает, после — читает»,
   восстановление значения повторным чтением и default для отклонённого ключа,
-  `RecursionError` на глубоко вложенном JSON.
+  `RecursionError` на глубоко вложенном JSON, квотированный `"@Variant(..."`
+  (BAR-28), fail-closed подготовка: карантин oversize/симлинка/любого файла,
+  `MemoryBackedSettings` вместо чтения на старом PySide6, отсутствие карантина
+  на PySide6 >= 6.12; поведение in-memory-настроек (значения, группы,
+  `QByteArray`, `sync`).
 - `tests/unit/test_model_selection.py` — JSON-кодек `ModelSelection`.
 - `tests/system/test_legacy_settings.py` — реальный `App` в subprocess на
   старом конфиге: старт без трейсбека, конфиг очищен, бэкап на месте, соседние
   ключи живы, повторный старт; fail-safe старт с симлинком на конфиг; сброс
   выбора модели (`None`); `MainWindow` пишет/читает выбор как JSON и не падает
   на битом/глубоко вложенном JSON.
+- `tests/system/test_flatpak_pyside.py` (opt-in, `-m slow`) — реальный
+  runtime `io.qt.PySide.BaseApp//6.11` (PySide6 6.11.3): негативный контроль
+  (прямое чтение `QSettings` выполняет payload) и путь приложения
+  (`prepare_settings_file` уносит конфиг, сессия in-memory, код не выполняется).
 - Фикстура легаси-конфига — `tests/conftest.py`
   (`legacy_pickled_config`); payload — безобидный pickle `ModelSelection`,
   десериализация в тестах не выполняется.
@@ -117,5 +148,24 @@ Only builtin types (dict, list, str, int, ...) are supported.
   на QSettings-файл в приложении нет.
 - Эвристика удаления общая: вырезаются любые значения `PySide::PyObjectWrapper`,
   а не только два известных ключа выбора модели.
+- **Flatpak и PySide6 (BAR-28 исправлен):** BaseApp 6.12 на Flathub нет,
+  поэтому манифест (`flatpak/barbaros.yaml`) собирает на BaseApp 6.11 и
+  ставит поверх `pyside6-essentials==6.12.0` + `shiboken6==6.12.0` из PyPI;
+  отдельный build-guard (`flatpak/bar28_guard.py`) валит сборку, если
+  импортируемый PySide6 < 6.12 или `QSettings` не отказывается от pickle.
+  Вторая линия — fail-closed санация для PySide6 < 6.12 (см. §3). Таким
+  образом, обход по размеру/симлинку/read-only больше не даёт RCE: файл не
+  попадает в `QSettings`.
+- **Остаточные ограничения fail-closed:** на PySide6 < 6.12 никакой
+  `QSettings`-файл не открывается (сессия in-memory), поэтому ни скан, ни
+  гонка подмены файла не дают выполнения кода; цена — сброс настроек на таком
+  runtime. Патчи `PySide6 < 6.12` — вне релизной сборки (Flatpak и native
+  теперь на >= 6.12), поэтому ветка нужна как страховка. Полностью класс
+  закрывается переходом на JSON-стор вместо `QSettings` — отдельное большое
+  изменение.
+- Эвристика удаления по-прежнему общая (любое значение с
+  `PySide::PyObjectWrapper` после `@Variant(`), включая квотированную форму;
+  пользовательская строка, содержащая оба маркера в начале значения, будет
+  удалена с бэкапом.
 - Правило для ревью: в `QSettings.setValue()` — только примитивы и типы Qt
   (`str`/`int`/`bool`/`QByteArray`); Python-объекты — через JSON.
