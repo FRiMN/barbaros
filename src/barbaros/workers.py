@@ -88,10 +88,16 @@ class OCRWorker(AbstractAsyncWorker):
         self.client = provider.client()
 
     async def run_task(self):
-        if not self.client.SUPPORTS_COMPLETION_IMAGE:
-            self.error.emit(f"Provider '{self.model.provider}' ({self.client.PROVIDER_NAME}) not supports images")
-
         try:
+            # BAR-25: fail closed. A client that cannot prove image support gets
+            # no image at all; the image bytes are only encoded after this guard.
+            if not getattr(self.client, "SUPPORTS_COMPLETION_IMAGE", False):
+                provider_name = getattr(self.client, "PROVIDER_NAME", "unknown")
+                self.error.emit(
+                    f"Provider '{self.model.provider}' ({provider_name}) does not support images"
+                )
+                return
+
             base64_img = base64.b64encode(self.image_bytes).decode('utf-8')
             msg = [
                 {"type": "text", "text": "Extract the text in the image."},
