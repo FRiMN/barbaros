@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -23,6 +24,17 @@ if TYPE_CHECKING:
     from barbaros.workers import ListModelWorker
 
 logger = logging.getLogger(__name__)
+
+#: How long ``stop_fetching_models`` may block the GUI waiting for a cancelled
+#: fetch (BAR-23).  Cancellation is cooperative, so a responsive worker stops in
+#: milliseconds; the budget only bounds the pathological case of a worker that
+#: cannot be interrupted.
+STOP_WAIT_MS = 1000
+
+#: Total budget for ``shutdown()`` across all fetch workers (BAR-23): the app
+#: must be able to quit even when an endpoint never answers.  Set below the
+#: 2 s NFR so the bounded shutdown stays under it even with Qt overhead.
+SHUTDOWN_BUDGET_MS = 1500
 
 
 @dataclass_json
@@ -73,23 +85,35 @@ def _short_repr(value: object, limit: int = 64) -> str:
 
 
 class _FetchResultsDispatcher(QObject):
-    """Deliver worker results to the thread that owns the ``ModelManager``.
+    """One fetch worker's result delivery to the thread owning the ``ModelManager``.
 
-    ``QThread.terminate()`` does not release Python locks held by the killed
-    thread, so a worker must never call back into the manager: if it were
-    terminated inside ``set_models``/``_persist``, the ``RLock`` (or the store's
-    write lock) would stay locked forever.  This object is created in the
-    manager's thread, and the queued connection moves result handling and the
-    cache write there; worker threads only emit the signal.
+    The manager's mutable state (the ``RLock``, the model cache store) belongs
+    to the thread that created it; a worker thread must only emit the result
+    signal, never call back into the manager.  The queued connection moves both
+    result handling and the cache write to the manager's thread, and a worker
+    that lingers past ``stop_fetching_models`` (cooperative cancellation can be
+    ignored, BAR-23) cannot touch state the GUI is changing.
+
+    The dispatcher is created per fetch and remembers its worker: a result that
+    arrives after that worker was stopped or replaced (a queued delivery posted
+    before ``cancel()``) is dropped instead of overwriting the provider's models
+    with a stale list.  The worker is remembered by Python identity, which stays
+    valid even when Qt has already deleted the worker's C++ object; the manager
+    keeps each dispatcher referenced until its thread is destroyed.
     """
 
-    def __init__(self, manager: ModelManager) -> None:
+    def __init__(self, manager: ModelManager, worker: ListModelWorker) -> None:
         super().__init__()
         self._manager = manager
+        self._worker = worker
 
     @Slot(ProviderMeta, str)
     def on_finished(self, provider: ProviderMeta, marshaled_models: str) -> None:
-        self._manager._on_fetching_finished(provider, marshaled_models)
+        self._manager._apply_worker_result(self._worker, provider, marshaled_models)
+
+    @Slot(ProviderMeta, str)
+    def on_error(self, provider: ProviderMeta, error_msg: str) -> None:
+        self._manager._apply_worker_error(self._worker, provider, error_msg)
 
 
 class ModelManager(dict):
@@ -119,7 +143,12 @@ class ModelManager(dict):
         self._cache = cache
         self._lock = threading.RLock()
         self._fetching_models_workers = {}
-        self._fetch_results = _FetchResultsDispatcher(self)
+        # Result dispatchers of the current fetch per provider, kept referenced
+        # until the worker's thread is destroyed (BAR-23).
+        self._fetch_result_dispatchers: dict[str, tuple[QThread, _FetchResultsDispatcher]] = {}
+        # Workers whose stop budget expired; referenced until their thread is
+        # destroyed so a running QThread is never garbage-collected (BAR-23).
+        self._retiring_workers: list[tuple[ListModelWorker, QThread]] = []
 
     @staticmethod
     def default_providers() -> list[ProviderMeta]:
@@ -183,29 +212,79 @@ class ModelManager(dict):
             }
 
     def shutdown(self):
-        """Shutdown all threads and cleanup."""
-        print("ModelManager shutdown: cleaning up threads...")
-        # List on iterator, because changing dict
-        for name in list(self._fetching_models_workers.keys()):
-            self.stop_fetching_models(name)
+        """Cancel all fetch workers, blocking the GUI for a bounded time (BAR-23).
 
-    def stop_fetching_models(self, provider_name: str):
-        if provider_name not in self._fetching_models_workers:
+        The total wait is capped by ``SHUTDOWN_BUDGET_MS``: quitting must work
+        even when an endpoint never answers.  Idempotent.
+        """
+        names = list(self._fetching_models_workers)
+        if names:
+            logger.info("ModelManager shutdown: stopping %d fetch worker(s)", len(names))
+            self._stop_workers(names, SHUTDOWN_BUDGET_MS)
+
+        # Retired workers are not awaited again (their budget was already spent);
+        # report them so a stuck provider is visible in the log (BAR-23).
+        if self._retiring_workers:
+            logger.warning(
+                "ModelManager shutdown: %d fetch worker(s) were already left running past their stop budget",
+                len(self._retiring_workers),
+            )
+
+    def _stop_workers(self, names: Sequence[str], budget_ms: int) -> None:
+        """Stop several fetch workers under one shared deadline (BAR-23)."""
+        deadline = time.monotonic() + budget_ms / 1000
+        for name in names:
+            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+            self.stop_fetching_models(name, wait_ms=remaining_ms)
+
+    def stop_fetching_models(self, provider_name: str, *, wait_ms: int | None = None):
+        """Cancel a provider's model fetch, waiting at most ``wait_ms`` (BAR-23).
+
+        Cancellation is cooperative (``ListModelWorker.cancel``), never
+        ``QThread.terminate()``: Qt discourages termination and a terminated
+        thread does not release the Python locks it holds.  The GUI therefore
+        blocks for at most the budget; a worker that ignores cancellation is
+        logged and left to finish on its own, because hanging the GUI (or the
+        application exit) on an unresponsive endpoint is the defect this fix
+        removes.
+        """
+        entry = self._fetching_models_workers.pop(provider_name, None)
+        if entry is None:
             return
 
-        print(f"Stop fetching models for '{provider_name}'")
+        worker, thread = entry
+        budget_ms = STOP_WAIT_MS if wait_ms is None else wait_ms
 
-        worker, thread = self._fetching_models_workers.pop(provider_name)
-        worker: ListModelWorker
-        thread: QThread
+        logger.debug("ModelManager: stopping the fetch worker for %s", _short_repr(provider_name))
+        worker.cancel()
 
-        try:
-            if thread.isRunning():
-                print("thread is running - terminate")
-                thread.terminate()
-                thread.wait()
-        except RuntimeError:
-            pass
+        if not thread.isRunning():
+            return
+
+        if budget_ms <= 0:
+            logger.warning(
+                "ModelManager: no shutdown budget left to wait for the %s fetch worker",
+                _short_repr(provider_name),
+            )
+            self._retire_fetch_worker(worker, thread)
+            return
+
+        if not thread.wait(budget_ms):
+            logger.warning(
+                "ModelManager: %s fetch worker did not stop within %d ms; not blocking the GUI",
+                _short_repr(provider_name),
+                budget_ms,
+            )
+            self._retire_fetch_worker(worker, thread)
+
+    def _retire_fetch_worker(self, worker: ListModelWorker, thread: QThread) -> None:
+        """Keep an unresponsive worker referenced until its thread dies.
+
+        Destroying a ``QThread`` that is still running aborts the process, so a
+        worker that ignored the stop budget must not be garbage-collected while
+        its thread finishes in the background (BAR-23).
+        """
+        self._retiring_workers.append((worker, thread))
 
     def start_fetching_models(self, provider: ProviderClient | str | None = None):
         if isinstance(provider, str):
@@ -215,6 +294,13 @@ class ModelManager(dict):
 
         if provider is None:
             providers = self.values()
+
+        # A reload of several providers is also a batch stop of their previous
+        # fetches: one shared deadline keeps the GUI block bounded by
+        # ``SHUTDOWN_BUDGET_MS`` instead of N times ``STOP_WAIT_MS`` (BAR-23).
+        previous = [p.meta.name for p in providers if p.meta.name in self._fetching_models_workers]
+        if len(previous) > 1:
+            self._stop_workers(previous, SHUTDOWN_BUDGET_MS)
 
         for p in providers:
             self._start_fetching_models(p)
@@ -235,22 +321,31 @@ class ModelManager(dict):
         thread.started.connect(self._on_started_thread)
         thread.started.connect(worker.run)
 
-        worker.finished.connect(
-            self._fetch_results.on_finished,
-            Qt.ConnectionType.QueuedConnection,
-        )
-        worker.error.connect(self._on_fetching_error)
-        thread.destroyed.connect(partial(self._remove_worker, provider.meta.name))
+        dispatcher = _FetchResultsDispatcher(self, worker)
+        worker.finished.connect(dispatcher.on_finished, Qt.ConnectionType.QueuedConnection)
+        worker.error.connect(dispatcher.on_error, Qt.ConnectionType.QueuedConnection)
+        thread.destroyed.connect(partial(self._remove_worker, provider.meta.name, thread))
 
         self._fetching_models_workers[provider.meta.name] = (worker, thread)
+        self._fetch_result_dispatchers[provider.meta.name] = (thread, dispatcher)
 
         thread.start()
         thread.setPriority(QThread.Priority.LowPriority)
 
-    def _remove_worker(self, provider_name: str):
-        print(f"remove worker {provider_name}")
-        if provider_name in self._fetching_models_workers:
+    def _remove_worker(self, provider_name: str, thread: QThread):
+        """Forget a destroyed worker, but only if it is still the tracked one.
+
+        A worker whose thread outlived the stop budget (BAR-23) may be destroyed
+        after the same provider already started a newer fetch; it must not evict
+        that newer worker from the tracking map.
+        """
+        entry = self._fetching_models_workers.get(provider_name)
+        if entry is not None and entry[1] is thread:
             self._fetching_models_workers.pop(provider_name)
+        dispatcher_entry = self._fetch_result_dispatchers.get(provider_name)
+        if dispatcher_entry is not None and dispatcher_entry[0] is thread:
+            self._fetch_result_dispatchers.pop(provider_name)
+        self._retiring_workers = [pair for pair in self._retiring_workers if pair[1] is not thread]
         self.worker_finished.emit()
 
     def _on_started_thread(self, *args, **kwargs):
@@ -258,6 +353,50 @@ class ModelManager(dict):
 
     def _on_fetching_error(self, provider: ProviderMeta, error_msg: str):
         self.error.emit(f"Error on fetching models for `{provider.name}` ({provider.provider_type}): {error_msg}")
+
+    def _apply_worker_result(
+        self,
+        worker: ListModelWorker | None,
+        provider: ProviderMeta,
+        marshaled_models: str,
+    ) -> None:
+        """Apply a fetched list only if it belongs to the provider's tracked worker.
+
+        A result can be queued before the fetch is stopped (Reload, remove a
+        provider, quit); applying it then would overwrite the newer list with
+        stale models or resurrect a provider the user removed (BAR-23).
+        """
+        entry = self._fetching_models_workers.get(provider.name)
+        if entry is None or entry[0] is not worker:
+            logger.debug(
+                "ModelManager: dropping the result of a stopped fetch for %s",
+                _short_repr(provider.name),
+            )
+            return
+
+        self._on_fetching_finished(provider, marshaled_models)
+
+    def _apply_worker_error(
+        self,
+        worker: ListModelWorker | None,
+        provider: ProviderMeta,
+        error_msg: str,
+    ) -> None:
+        """Report a fetch failure only for the provider's tracked worker (BAR-23).
+
+        Symmetric to ``_apply_worker_result``: an abandoned or superseded worker
+        that fails later must not raise a dialog for a fetch the user already
+        stopped (cancellation itself never emits ``error``).
+        """
+        entry = self._fetching_models_workers.get(provider.name)
+        if entry is None or entry[0] is not worker:
+            logger.debug(
+                "ModelManager: dropping the error of a stopped fetch for %s",
+                _short_repr(provider.name),
+            )
+            return
+
+        self._on_fetching_error(provider, error_msg)
 
     def _on_fetching_finished(self, provider: ProviderMeta, marshaled_models: str):
         try:

@@ -412,8 +412,9 @@ def test_default_providers_returns_fresh_list_of_fresh_instances():
 def test_fetch_results_are_applied_in_the_manager_thread(monkeypatch, wait_until):
     """Worker results are queued to the manager's thread, never applied in the worker.
 
-    This is what keeps ``set_models``/``_persist`` safe from ``QThread.terminate()``:
-    a terminated worker holding a Python lock would leak it forever.
+    This is what keeps ``set_models``/``_persist`` safe from a worker that
+    outlives ``stop_fetching_models`` (cooperative cancellation can be ignored,
+    BAR-23): a worker holding the manager lock would otherwise race the GUI.
     """
     import barbaros.workers as workers
 
@@ -422,6 +423,7 @@ def test_fetch_results_are_applied_in_the_manager_thread(monkeypatch, wait_until
     class FakeWorker(QObject):
         finished = Signal(ProviderMeta, str)
         error = Signal(ProviderMeta, str)
+        stopped = Signal()
 
         def __init__(self, provider):
             super().__init__()
@@ -430,8 +432,11 @@ def test_fetch_results_are_applied_in_the_manager_thread(monkeypatch, wait_until
         def run(self):
             self.finished.emit(self.provider, json.dumps([cache_entry("fetched")]))
 
+        def cancel(self):
+            pass
+
         def connect_terminate(self, thread):
-            for signal in (self.finished, self.error):
+            for signal in (self.finished, self.error, self.stopped):
                 signal.connect(self.deleteLater)
                 signal.connect(thread.quit)
 
