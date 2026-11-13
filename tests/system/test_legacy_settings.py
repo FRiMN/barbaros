@@ -23,9 +23,14 @@ import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+from PySide6 import __version__ as pyside_version
+
 import barbaros
+from barbaros.common import TARGET_LANGUAGES
 from barbaros.features.ocr import OCRFeature
 from barbaros.main_window import MainWindow
+from barbaros.settings_sanitize import MAX_SETTINGS_BYTES
 from barbaros.widgets.filterable_combobox import ModelSelection
 
 APP_STARTUP_TIMEOUT_SECONDS = 120
@@ -100,6 +105,7 @@ APP_STARTUP_SCRIPT = textwrap.dedent(
     result = {
         "target_languages": window.target_language_list,
         "selected_model": None if selection is None else selection.to_dict(),
+        "settings_filepath": app.settings.fileName(),
     }
     print("STARTUP_RESULT " + json.dumps(result))
     app.settings.sync()
@@ -108,12 +114,33 @@ APP_STARTUP_SCRIPT = textwrap.dedent(
 )
 
 
+# Simulates the PySide6 < 6.12 Flatpak runtime (BAR-28) on a PySide6 that is
+# actually safe: the version gate only changes *our* decision, not Qt's parser.
+UNSAFE_PYSIDE_PRELUDE = (
+    "\nimport barbaros.settings_sanitize as _settings_sanitize\n"
+    "\n_settings_sanitize.pyside_rejects_pickled_values = lambda: False\n"
+)
+
+
 def run_app_startup(
-    config_home: Path, tmp_path: Path, *, expect_warning: str | None = None
+    config_home: Path,
+    tmp_path: Path,
+    *,
+    expect_warning: str | None = None,
+    unsafe_pyside: bool = False,
 ) -> dict:
-    """Run the real ``App`` in a subprocess and return the state it printed."""
+    """Run the real ``App`` in a subprocess and return the state it printed.
+
+    ``unsafe_pyside`` makes the version gate behave like PySide6 < 6.12.
+    """
+    prelude = UNSAFE_PYSIDE_PRELUDE if unsafe_pyside else ""
+    script_text = APP_STARTUP_SCRIPT
+    if prelude:
+        marker = "import barbaros.main as barbaros_main\n"
+        script_text = script_text.replace(marker, marker + prelude, 1)
+        assert prelude in script_text
     script = tmp_path / "app_startup.py"
-    script.write_text(APP_STARTUP_SCRIPT, encoding="utf-8")
+    script.write_text(script_text, encoding="utf-8")
 
     env = os.environ.copy()
     # Everything is redirected into the test's tmp dir: no real XDG dirs.
@@ -293,3 +320,246 @@ def test_clearing_model_selection_removes_json_setting(fake_app, fake_settings):
         fake_settings.sync()
 
         assert not fake_settings.contains("ocr_feature/model")
+
+
+# --- BAR-28: fail-closed startup on a PySide6 that unpickles -----------------
+#
+# ``unsafe_pyside=True`` patches only the version gate: the running Qt stays
+# safe, so these tests exercise *our* decision, not Qt's parser.  The real 6.11
+# runtime is covered by the opt-in Flatpak test (tests/system/test_flatpak_pyside.py).
+
+QT_REJECTS_PICKLED_OBJECTS = tuple(
+    int(part) for part in pyside_version.split(".")[:2]
+) >= (6, 12)
+
+
+def quarantine_files(path: Path) -> list[Path]:
+    return sorted(path.parent.glob(f"{path.name}.unsafe-*"))
+
+
+def oversized_config(legacy_pickled_config: bytes) -> bytes:
+    return legacy_pickled_config + b" " * MAX_SETTINGS_BYTES
+
+
+HOSTILE_CONFIG_SCRIPT = textwrap.dedent(
+    '''
+    """Write a QSettings file whose pickled value would run code if unpickled."""
+
+    import sys
+
+    from PySide6.QtCore import QSettings
+
+
+    class Payload:
+        def __init__(self, marker):
+            self.marker = marker
+
+        def __reduce__(self):
+            return (open, (self.marker, "w"))
+
+
+    path, marker = sys.argv[1], sys.argv[2]
+    settings = QSettings(path, QSettings.Format.IniFormat)
+    settings.setValue("main_window/model", Payload(marker))
+    settings.setValue("main_window/target_language", "ru")
+    settings.sync()
+    '''
+)
+
+
+def write_hostile_config(path: Path, marker: Path) -> None:
+    """Create a config whose legacy value executes on an old-PySide unpickle."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    script = path.parent / "write_hostile_config.py"
+    script.write_text(HOSTILE_CONFIG_SCRIPT, encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(script), str(path), str(marker)],
+        capture_output=True,
+        text=True,
+        timeout=APP_STARTUP_TIMEOUT_SECONDS,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_unsafe_pyside_quarantines_oversized_config(tmp_path, legacy_pickled_config):
+    config_home = tmp_path / "xdg-config"
+    path = settings_path(config_home)
+    path.parent.mkdir(parents=True)
+    payload = oversized_config(legacy_pickled_config)
+    path.write_bytes(payload)
+
+    state = run_app_startup(
+        config_home, tmp_path, unsafe_pyside=True, expect_warning="was moved to"
+    )
+
+    # The file never reaches QSettings: the app starts with defaults and keeps
+    # its settings in memory for this session.
+    assert state["target_languages"] == TARGET_LANGUAGES
+    assert state["selected_model"] is None
+    assert state["settings_filepath"] == ""
+    assert not os.path.lexists(path)
+    quarantined = quarantine_files(path)
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == payload
+
+
+def test_unsafe_pyside_quarantines_symlinked_config(tmp_path, legacy_pickled_config):
+    config_home = tmp_path / "xdg-config"
+    link = settings_path(config_home)
+    link.parent.mkdir(parents=True)
+    target = tmp_path / "dotfiles" / "barbaros.conf"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(legacy_pickled_config)
+    link.symlink_to(target)
+
+    state = run_app_startup(
+        config_home, tmp_path, unsafe_pyside=True, expect_warning="was moved to"
+    )
+
+    assert not os.path.lexists(link)
+    assert target.read_bytes() == legacy_pickled_config
+    assert state["target_languages"] == TARGET_LANGUAGES
+    assert state["settings_filepath"] == ""
+    quarantined = quarantine_files(link)
+    assert len(quarantined) == 1
+    assert quarantined[0].is_symlink()
+
+
+def test_unsafe_pyside_uses_memory_for_read_only_config_dir(
+    tmp_path, legacy_pickled_config
+):
+    config_home = tmp_path / "xdg-config"
+    path = settings_path(config_home)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(legacy_pickled_config)
+    path.parent.chmod(0o500)
+    try:
+        state = run_app_startup(
+            config_home,
+            tmp_path,
+            unsafe_pyside=True,
+            expect_warning="kept in memory for this session",
+        )
+    finally:
+        path.parent.chmod(0o700)
+
+    # The file could not be moved aside, but it is never read either.
+    assert path.read_bytes() == legacy_pickled_config
+    assert state["target_languages"] == TARGET_LANGUAGES
+    assert state["selected_model"] is None
+    assert state["settings_filepath"] == ""
+
+
+def test_unsafe_pyside_sanitizes_a_small_hostile_pickle(tmp_path):
+    """A payload that would execute on PySide6 6.11 is never read.
+
+    On the safe PySide6 used by the test suite the marker assertion is
+    trivially true; it becomes a real regression guard when the suite runs on an
+    old runtime (Flatpak build/test environments).
+    """
+    config_home = tmp_path / "xdg-config"
+    path = settings_path(config_home)
+    marker = tmp_path / "pwned"
+    write_hostile_config(path, marker)
+    assert PICKLE_MARKER in path.read_bytes()
+
+    run_app_startup(
+        config_home, tmp_path, unsafe_pyside=True, expect_warning="was moved to"
+    )
+
+    assert not marker.exists()
+    assert not os.path.lexists(path)
+    assert PICKLE_MARKER in quarantine_files(path)[0].read_bytes()
+
+
+def test_unsafe_pyside_quarantines_a_hostile_oversized_pickle(tmp_path):
+    """The same payload above the size cap is moved aside and never read."""
+    config_home = tmp_path / "xdg-config"
+    path = settings_path(config_home)
+    marker = tmp_path / "pwned"
+    write_hostile_config(path, marker)
+    path.write_bytes(path.read_bytes() + b" " * MAX_SETTINGS_BYTES)
+
+    run_app_startup(
+        config_home, tmp_path, unsafe_pyside=True, expect_warning="was moved to"
+    )
+
+    assert not marker.exists()
+    assert not os.path.lexists(path)
+    quarantined = quarantine_files(path)
+    assert len(quarantined) == 1
+    assert PICKLE_MARKER in quarantined[0].read_bytes()
+
+
+@pytest.mark.skipif(
+    not QT_REJECTS_PICKLED_OBJECTS,
+    reason="PySide6 < 6.12 unpickles QSettings values instead of rejecting them",
+)
+def test_oversized_config_is_left_alone_on_safe_pyside(
+    tmp_path, legacy_pickled_config
+):
+    """On PySide6 >= 6.12 an unclean file is harmless: keep the preferences."""
+    config_home = tmp_path / "xdg-config"
+    path = settings_path(config_home)
+    path.parent.mkdir(parents=True)
+    payload = oversized_config(legacy_pickled_config)
+    path.write_bytes(payload)
+
+    state = run_app_startup(
+        config_home,
+        tmp_path,
+        expect_warning="could not sanitize the settings file",
+    )
+
+    # Qt may rewrite the file when the app syncs, but nothing is moved and no
+    # quarantine appears: on >= 6.12 an unclean file is not dangerous.
+    data = path.read_bytes()
+    assert b"target_language=ru" in data
+    assert b"\n[main_window]" not in data  # still one INI document, not appended
+    assert state["settings_filepath"] == str(path)
+    assert not quarantine_files(path)
+
+
+def test_unsafe_pyside_keeps_settings_in_memory(tmp_path):
+    """On an old runtime nothing is persisted: the app still starts."""
+    config_home = tmp_path / "xdg-config"
+
+    state = run_app_startup(
+        config_home,
+        tmp_path,
+        unsafe_pyside=True,
+        expect_warning="settings are kept in memory for this session",
+    )
+
+    assert state["settings_filepath"] == ""
+    assert state["selected_model"] is None
+
+
+def test_unsafe_pyside_does_not_trust_an_escaped_variant(
+    tmp_path, legacy_pickled_config
+):
+    """Qt unescapes the INI before it parses the variant: never read the file.
+
+    ``\\x40Variant(`` / ``PyObject\\x57rapper`` are invisible to the raw-byte
+    scan but are still unpickled by PySide6 < 6.12, so the fail-closed path must
+    not depend on the scan at all (BAR-28).
+    """
+    escaped = legacy_pickled_config.replace(
+        b"=@Variant(", b"=\\x40Variant("
+    ).replace(b"PySide::PyObjectWrapper", b"PySide::PyObject\\x57rapper")
+    config_home = tmp_path / "xdg-config"
+    path = settings_path(config_home)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(escaped)
+
+    state = run_app_startup(
+        config_home, tmp_path, unsafe_pyside=True, expect_warning="was moved to"
+    )
+
+    assert state["target_languages"] == TARGET_LANGUAGES
+    assert state["settings_filepath"] == ""
+    assert not os.path.lexists(path)
+    quarantined = quarantine_files(path)
+    assert len(quarantined) == 1
+    assert b"\\x40Variant(" in quarantined[0].read_bytes()

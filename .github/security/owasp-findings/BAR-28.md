@@ -104,3 +104,56 @@ build; the same class/CWE but a separate exploitation path, hence a separate fin
 - `docs/security/owasp-audit.md` §3 BAR-01 and §4 BAR-28.
 - `docs/settings-migration.md` §6 (Flatpak residual).
 - Commit `4c9eac3` (report update), commit `3e30fa3` (BAR-01 fix).
+
+---
+
+## Resolution (2026-11-13)
+
+Status: **fixed**. Fix branch `fix/bar-28-flatpak-pyside-pickle`.
+
+1. **Flatpak runs PySide6 >= 6.12.** `io.qt.PySide.BaseApp` has no 6.12 branch on Flathub
+   (latest is `branch/6.11`), so the manifest keeps BaseApp 6.11 and installs
+   `pyside6-essentials==6.12.0` + `shiboken6==6.12.0` from PyPI into the bundle, overriding the
+   base app's 6.11.3. `flatpak/bar28_guard.py` is a build-time guard: the build fails if the
+   importable PySide6 is < 6.12 or if `QSettings` does not refuse+block a pickle payload.
+2. **On PySide6 < 6.12 the settings file is not read at all.**
+   `settings_sanitize.prepare_settings_file()` is called from `App.__init__` before `QSettings` is
+   created. On a runtime that still unpickles it does not trust the raw-byte scan: an existing
+   settings file is quarantined as `*.unsafe-<UTC>-<random>` (0600; for a symlink the link itself
+   is renamed, the target is untouched) and the application uses `MemoryBackedSettings` - the
+   session's settings live in memory and nothing is read from or written to disk. A throwaway
+   *file* was deliberately not used: a same-uid process can replace any file the application can
+   read, so only the absence of a file removes the race. On PySide6 >= 6.12 nothing is moved
+   (the value is rejected by Qt and `read_setting()` degrades to defaults); the scan there is
+   only legacy-data migration.
+3. **Size/symlink bypass removed** for the RCE path: neither an oversized file nor a symlinked
+   config is ever handed to `QSettings` on an unsafe runtime.
+4. **Scan-based protection was not sufficient - the boundary is "do not read the file".** Two
+   real forms evade a raw-byte scan: QSettings quotes a value when the escaped payload contains
+   a comma (`0x2c` is an ordinary pickle byte, `model="@Variant(...`), and Qt unescapes
+   `\xHH`/quotes **before** it decides that the value is an `@Variant` (`\x40Variant(...`,
+   `PySide::PyObject\x57rapper`). Both were reproduced on the real BaseApp 6.11.3 with the old
+   design (payload executed). `_is_pickled_variant()` now skips an optional leading quote for
+   the >= 6.12 migration, but the security decision on < 6.12 no longer depends on the scan.
+
+Evidence:
+- `tests/system/test_flatpak_pyside.py` (opt-in, `-m slow`) on the real installed BaseApp 6.11.3
+  (PySide6 6.11.3, Python 3.13): two negative controls (a plain and an escaped config read
+  directly with `QSettings.value()`) execute the payload, while `prepare_settings_file()` returns
+  `memory_backed=True`, quarantines any existing config and never reads it - the payload does not
+  execute for plain, oversized, escaped or symlinked configs.
+- Built Flatpak bundle imports PySide6 6.12.0 (verified inside the bundle); `QSettings` raises
+  `RuntimeError: Failed to deserialize Python object from QDataStream...` instead of executing.
+- Unit/system regression tests: `tests/unit/test_settings_sanitize.py`,
+  `tests/system/test_legacy_settings.py` (the real `App` in a subprocess with the version gate
+  patched to the 6.11 behaviour).
+
+Evidence of the escaped-form bypass on the real runtime is in the final test suite:
+`tests/system/test_flatpak_pyside.py` has two negative controls (plain and escaped config both
+execute when read directly) and asserts that after `prepare_settings_file()` none of the
+small/oversized/escaped configs is read or executed.
+
+Residual risk: on PySide6 < 6.12 the on-disk settings are not used (preferences reset for that
+session), which is the accepted fail-closed cost; no attacker-controlled path is opened by
+`QSettings`. Fully closing the class is the JSON-store alternative from the recommendation; it is
+tracked as separate work in `docs/settings-migration.md` Sec. 6.
