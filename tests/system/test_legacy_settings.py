@@ -37,6 +37,12 @@ APP_STARTUP_TIMEOUT_SECONDS = 120
 STARTUP_RESULT_PREFIX = "STARTUP_RESULT "
 PICKLE_MARKER = b"PySide::PyObjectWrapper"
 
+# PySide6 >= 6.12 rejects pickled QSettings values; older versions unpickle
+# them, so the BAR-28 fail-closed path (quarantine + memory settings) applies.
+QT_REJECTS_PICKLED_OBJECTS = tuple(
+    int(part) for part in pyside_version.split(".")[:2]
+) >= (6, 12)
+
 
 # --- helpers ---------------------------------------------------------------
 
@@ -181,6 +187,11 @@ def run_app_startup(
 # --- App startup with a legacy config ---------------------------------------
 
 
+@pytest.mark.skipif(
+    not QT_REJECTS_PICKLED_OBJECTS,
+    reason="PySide6 < 6.12 takes the BAR-28 fail-closed path "
+    "(quarantine + memory settings) instead of the migration path",
+)
 def test_app_starts_with_legacy_pickled_settings(
     tmp_path, legacy_pickled_config
 ):
@@ -209,6 +220,11 @@ def test_app_starts_with_legacy_pickled_settings(
     assert backups[0].read_bytes() == legacy_pickled_config
 
 
+@pytest.mark.skipif(
+    not QT_REJECTS_PICKLED_OBJECTS,
+    reason="PySide6 < 6.12 takes the BAR-28 fail-closed path "
+    "(quarantine + memory settings) instead of the migration path",
+)
 def test_app_starts_again_after_the_migration(tmp_path, legacy_pickled_config):
     """A second start is a normal start: no pickle, no second backup."""
     config_home = tmp_path / "xdg-config"
@@ -224,6 +240,11 @@ def test_app_starts_again_after_the_migration(tmp_path, legacy_pickled_config):
     assert len(backup_files(path)) == 1
 
 
+@pytest.mark.skipif(
+    not QT_REJECTS_PICKLED_OBJECTS,
+    reason="PySide6 < 6.12 takes the BAR-28 fail-closed path "
+    "(quarantine + memory settings) instead of the migration path",
+)
 def test_app_starts_with_symlinked_config(tmp_path, legacy_pickled_config):
     """A dotfiles-style symlink cannot be sanitized; the read guard keeps startup.
 
@@ -325,12 +346,9 @@ def test_clearing_model_selection_removes_json_setting(fake_app, fake_settings):
 # --- BAR-28: fail-closed startup on a PySide6 that unpickles -----------------
 #
 # ``unsafe_pyside=True`` patches only the version gate: the running Qt stays
-# safe, so these tests exercise *our* decision, not Qt's parser.  The real 6.11
-# runtime is covered by the opt-in Flatpak test (tests/system/test_flatpak_pyside.py).
-
-QT_REJECTS_PICKLED_OBJECTS = tuple(
-    int(part) for part in pyside_version.split(".")[:2]
-) >= (6, 12)
+# safe, so these tests exercise *our* decision, not Qt's parser.  The real old
+# runtime is covered by test_legacy_pickled_config_is_quarantined_on_old_pyside
+# and by the opt-in Flatpak test (tests/system/test_flatpak_pyside.py).
 
 
 def quarantine_files(path: Path) -> list[Path]:
@@ -519,6 +537,36 @@ def test_oversized_config_is_left_alone_on_safe_pyside(
     assert b"\n[main_window]" not in data  # still one INI document, not appended
     assert state["settings_filepath"] == str(path)
     assert not quarantine_files(path)
+
+
+@pytest.mark.skipif(
+    QT_REJECTS_PICKLED_OBJECTS,
+    reason="PySide6 >= 6.12 sanitizes and migrates pickled settings instead of "
+    "taking the BAR-28 fail-closed path",
+)
+def test_legacy_pickled_config_is_quarantined_on_old_pyside(
+    tmp_path, legacy_pickled_config
+):
+    """On the real PySide6 < 6.12 runtime the fail-closed path must hold.
+
+    The file is never read (unpickling it would execute the payload), so the
+    whole file is moved aside and the app starts on defaults kept in memory.
+    Unlike the ``unsafe_pyside=True`` tests, this runs the real old runtime.
+    """
+    config_home = tmp_path / "xdg-config"
+    path = settings_path(config_home)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(legacy_pickled_config)
+
+    state = run_app_startup(config_home, tmp_path, expect_warning="was moved to")
+
+    assert state["target_languages"] == TARGET_LANGUAGES
+    assert state["selected_model"] is None
+    assert state["settings_filepath"] == ""
+    assert not os.path.lexists(path)
+    quarantined = quarantine_files(path)
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == legacy_pickled_config
 
 
 def test_unsafe_pyside_keeps_settings_in_memory(tmp_path):
