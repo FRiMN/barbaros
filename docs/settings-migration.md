@@ -1,6 +1,6 @@
 # Легаси-pickle в QSettings: миграция и защита старта (BAR-01)
 
-**Статус:** реализовано для native/pip-установки (PySide6 ≥ 6.12) и для Flatpak (BAR-28: PySide6 6.12 из pip в bundle + fail-closed санация для PySide6 < 6.12).
+**Статус:** реализовано для native/pip-установки (PySide6 ≥ 6.12) и для Flatpak (BAR-28: PySide6 6.12 из pip в bundle + fail-closed санация для PySide6 < 6.12). На CPython < 3.12 native-установка временно пинится на PySide6 6.11.x (BAR-29, `docs/pyside6-6.12-refcount.md`, issue #20) и поэтому идёт по fail-closed пути: настройки в памяти, существующий конфиг уносится.
 **Связано:** OWASP-аудит `docs/security/owasp-audit.md` §3 BAR-01, §4 BAR-28 и §8.2; `docs/model-cache-storage.md`.
 **Затрагиваемые файлы:** новые `src/barbaros/settings_sanitize.py`, `tests/unit/test_settings_sanitize.py`, `tests/unit/test_model_selection.py`, `tests/system/test_legacy_settings.py`, `tests/system/test_flatpak_pyside.py`; `flatpak/barbaros.yaml`; `flatpak/bar28_guard.py`; `src/barbaros/common.py`; `src/barbaros/main.py`; `src/barbaros/main_window.py`; `src/barbaros/features/ocr.py`; `src/barbaros/features/settings.py`; `src/barbaros/widgets/filterable_combobox.py`; `tests/conftest.py`.
 
@@ -107,6 +107,14 @@ Only builtin types (dict, list, str, int, ...) are supported.
   уносится как есть — пользователь может разобрать его вручную. Приложение
   стартует с дефолтами и держит настройки сессии в памяти
   (`MemoryBackedSettings`).
+- **Временный пин PySide6 (BAR-29, #20):** на CPython < 3.12 `pyproject.toml`
+  ставит PySide6 6.11.x, потому что 6.12.0 там роняет процесс утечкой
+  refcount (см. `docs/pyside6-6.12-refcount.md`), поэтому native/pip-установка
+  на 3.11 идёт по fail-closed пути — карантин конфига и
+  `MemoryBackedSettings`. Это сознательный временный trade-off до PySide6
+  6.12.1: защита от pickle обеспечивается fail-closed путём, а не самим
+  пином. На CPython 3.12+ native и Flatpak остаются на 6.12 и сохраняют
+  настройки.
 
 ## 5. Тесты
 
@@ -159,8 +167,9 @@ Only builtin types (dict, list, str, int, ...) are supported.
 - **Остаточные ограничения fail-closed:** на PySide6 < 6.12 никакой
   `QSettings`-файл не открывается (сессия in-memory), поэтому ни скан, ни
   гонка подмены файла не дают выполнения кода; цена — сброс настроек на таком
-  runtime. Патчи `PySide6 < 6.12` — вне релизной сборки (Flatpak и native
-  теперь на >= 6.12), поэтому ветка нужна как страховка. Полностью класс
+  runtime. Патчи `PySide6 < 6.12` — вне релизной сборки (Flatpak и native на
+  CPython 3.12+ — на 6.12; native на 3.11 временно на 6.11 из-за BAR-29),
+  поэтому ветка нужна как страховка. Полностью класс
   закрывается переходом на JSON-стор вместо `QSettings` — отдельное большое
   изменение.
 - Эвристика удаления по-прежнему общая (любое значение с
