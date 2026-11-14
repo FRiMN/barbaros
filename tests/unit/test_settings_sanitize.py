@@ -20,7 +20,7 @@ import pytest
 from PySide6 import __version__ as pyside_version
 from PySide6.QtCore import QByteArray, QSettings
 
-from barbaros import settings_sanitize
+from barbaros import common, settings_sanitize
 from barbaros.common import SettingsProxy, read_setting
 from barbaros.settings_sanitize import (
     MAX_SETTINGS_BYTES,
@@ -262,10 +262,22 @@ def test_value_from_json_returns_default_for_invalid_json():
     assert proxy.valueFromJson("model", ("fallback",)) == ("fallback",)
 
 
-def test_value_from_json_returns_default_for_deeply_nested_json():
-    """RecursionError is a RuntimeError subclass and must not abort startup."""
-    nested = "[" * 5000 + "]" * 5000
-    proxy = SettingsProxy(_TextSettings({"main_window/model": nested}), "main_window")
+def test_value_from_json_returns_default_for_recursion_error(monkeypatch):
+    """RecursionError is a RuntimeError subclass and must not abort startup.
+
+    The exception is simulated rather than produced by a deeply nested value:
+    CPython 3.12 parses 5000-level nesting without raising (the C decoder does
+    not enter Python recursion), while 3.10/3.11 raise RecursionError.  The
+    guard in ``SettingsProxy.valueFromJson`` must hold on every interpreter.
+    """
+
+    def raise_recursion_error(*args, **kwargs):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(common.json, "loads", raise_recursion_error)
+    proxy = SettingsProxy(
+        _TextSettings({"main_window/model": "[" * 5000 + "]" * 5000}), "main_window"
+    )
 
     assert proxy.valueFromJson("model", ("fallback",)) == ("fallback",)
 
