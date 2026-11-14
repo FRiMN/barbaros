@@ -84,7 +84,7 @@
   1. `settings_sanitize.sanitize_pickled_settings()` читает сырой INI до создания `QSettings` и удаляет строки, значение которых начинается с `@Variant(` и содержит `PySide::PyObjectWrapper`; оригинал сохраняется рядом как бэкап `0600` (`settings_sanitize.py:82-200`).
   2. Выбор модели хранится как JSON (`ModelSelection.to_dict/from_dict`, `main_window.py:118-125,214-223`, `features/ocr.py:94-112`); в `QSettings.setValue` больше не передаются Python-объекты.
   3. `common.read_setting()` переживает `RuntimeError` от PySide6 6.12 (отказ от pickle) и восстанавливает соседние ключи секции (`common.py:11-43`).
-  4. `pyproject.toml:27` пиннит `pyside6-essentials~=6.12.0`; `uv.lock` пересобран.
+  4. `pyproject.toml` пиннит `pyside6-essentials~=6.12.0` на CPython ≥ 3.12 и `~=6.11.0` на CPython < 3.12 (временно, BAR-29 / issue #20); `uv.lock` пересобран.
 - **Место (HEAD):** запись — `main_window.py:118-125`, `features/ocr.py:106-112`; чтение — `main_window.py:214-223`, `features/ocr.py:94-104`; тип — `filterable_combobox.py:165-185`; санация — `main.py:33-46`, `settings_sanitize.py:51-200`.
 - **Evidence (2026-11-13):**
   - В `.venv` (PySide6 **6.12.0**) на подменённом INI с `PySide::PyObjectWrapper` чтение `QSettings.value()` бросает `RuntimeError: Failed to deserialize Python object from QDataStream…`, pickle-payload **не выполняется** (маркер не создан).

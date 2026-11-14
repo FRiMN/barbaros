@@ -24,7 +24,12 @@ dependencies = [
     # Pinned to the minor line (~=x.y.z): patch updates are allowed, a new
     # minor must be reviewed and bumped explicitly (see docs/settings-migration.md
     # for the PySide6 6.12 / any-llm 1.50 upgrade that broke startup).
-    "pyside6-essentials~=6.12.0",
+    # BAR-29 (#20): 6.12.0 wheels leak a reference to None/True on every void Qt
+    # call and Signal.emit; on CPython < 3.12 those singletons are mutable, so the
+    # leak aborts the process. Stay on 6.11 until the upstream build fix (6.12.1)
+    # is released; see docs/pyside6-6.12-refcount.md for the removal procedure.
+    "pyside6-essentials~=6.11.0; python_version < '3.12'",
+    "pyside6-essentials~=6.12.0; python_version >= '3.12'",
     "psutil~=7.2.2",
     "any-llm-sdk[all]~=1.50.0",
     "keyring~=25.7.0",
@@ -37,7 +42,12 @@ dev = [
     "ruff~=0.17.4",
     "pytest~=9.2.0",
     "invoke~=3.0.3",
-    "pyside6~=6.12.0",
+    # Used directly by tests/system/test_pyside_refcount_pin.py (marker/specifier
+    # checks); pytest only brings it in transitively, so declare it here.
+    "packaging~=25.0",
+    # Same BAR-29 split as the runtime dependency above.
+    "pyside6~=6.11.0; python_version < '3.12'",
+    "pyside6~=6.12.0; python_version >= '3.12'",
 ]
 
 [project.gui-scripts]

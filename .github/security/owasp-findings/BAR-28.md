@@ -44,7 +44,7 @@ installs with PySide6 >= 6.12 are not affected.
 
 - `flatpak/barbaros.yaml:3` (`runtime-version: "6.11"`), `:6` (`base-version: 6.11`), `:57-60`
   (PySide6 is not installed from pip — provided by BaseApp).
-- `pyproject.toml:27` (`pyside6-essentials~=6.12.0`) does not affect the Flatpak build.
+- `pyproject.toml` (`pyside6-essentials~=6.12.0` on CPython >= 3.12, `~=6.11.0` below that per BAR-29) does not affect the Flatpak build.
 - `settings_sanitize.py:48` (`MAX_SETTINGS_BYTES = 1024 * 1024`), `:82-137` (fail-open sanitizer).
 - `main.py:33-46` (sanitize before `QSettings`; failures only warn and continue).
 
