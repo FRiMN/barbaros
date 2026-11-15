@@ -11,6 +11,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from any_llm import AnyLLM, LLMProvider
+from any_llm.exceptions import MissingApiKeyError
 from any_llm.types.model import Model
 from dataclasses_json import dataclass_json
 from psygnal import Signal
@@ -71,11 +72,24 @@ class ProviderClient:
         it accesses an already closed event loop. Therefore, we recreate the client here
         instead of reusing ProviderClient.client.
         """
-        return AnyLLM.create(
-            self.meta.provider_type,
-            self.meta.api_key_manager.value(),
-            self.meta.api_base,
-        )
+        try:
+            api_key = self.meta.api_key_manager.value()
+        except SecretStorageError as storage_error:
+            # BAR-11: the store cannot say whether a key exists (locked,
+            # unavailable, corrupt).  A provider that does not need a key must
+            # keep working -- the banner promises exactly that -- so build the
+            # client without a key; a provider that does need one reports the
+            # storage failure instead of a misleading "no API key".
+            return self._client_without_key(storage_error)
+
+        return AnyLLM.create(self.meta.provider_type, api_key, self.meta.api_base)
+
+    def _client_without_key(self, storage_error: SecretStorageError):
+        """Build a keyless client, or re-raise the typed storage failure."""
+        try:
+            return AnyLLM.create(self.meta.provider_type, None, self.meta.api_base)
+        except MissingApiKeyError:
+            raise storage_error from None
 
 
 class CachePolicy(Enum):
