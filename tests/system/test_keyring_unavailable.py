@@ -309,6 +309,59 @@ def test_add_provider_transaction_aborts_when_the_key_cannot_be_saved(
             dialog.deleteLater()
 
 
+def test_edit_provider_transaction_aborts_when_the_key_cannot_be_saved(
+    no_keyring, fake_app, data_home, monkeypatch
+):
+    """An edit that saves a new key is all-or-nothing too: provider stays unchanged."""
+    messages = RecordingMessageBox()
+    monkeypatch.setattr(provider_dialog_module, "QMessageBox", messages)
+    secret = "sk-BAR11-ABORTED-EDIT"
+
+    with open_window(fake_app) as window:
+        window.model_manager.add(
+            ProviderMeta("acme", LLMProvider.OPENAI, "https://old.example.com/v1")
+        )
+        window.save_providers()
+        settings_before = window.settings.value("llm_providers")
+        assert settings_before
+
+        dialog = ProviderDialog(window.model_manager, parent=window)
+        try:
+            edit = AddProviderDialog(
+                dialog, provider=window.model_manager["acme"].meta
+            )
+            try:
+                # The user edits the endpoint and supplies a new key.
+                edit.api_url_edit.setText("https://new.example.com/v1")
+                edit.api_key_edit.setText(secret)
+                edit._validate()
+                assert edit.result() == QDialog.DialogCode.Accepted
+                updated = edit.get_provider()
+                key = edit.get_api_key()
+            finally:
+                edit.deleteLater()
+
+            assert updated is not None
+            assert updated.api_base == "https://new.example.com/v1"
+            assert dialog._apply_provider(updated, key, is_new=False) is False
+
+            # No update happened: name, type and endpoint are the old ones.
+            provider = window.model_manager["acme"]
+            assert provider.meta.name == "acme"
+            assert provider.meta.provider_type is LLMProvider.OPENAI
+            assert provider.meta.api_base == "https://old.example.com/v1"
+
+            # No settings write, exactly one critical, no secret in the message.
+            assert window.settings.value("llm_providers") == settings_before
+            assert len(messages.calls) == 1
+            kind, title, text = messages.calls[0]
+            assert (kind, title) == ("critical", "API Key Storage")
+            assert text
+            assert secret not in str(messages.calls)
+        finally:
+            dialog.deleteLater()
+
+
 def test_add_provider_transaction_persists_key_and_masks_it(
     fake_keyring, fake_app, data_home, monkeypatch
 ):

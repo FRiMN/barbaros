@@ -116,28 +116,42 @@ class NullSubclass(null.Keyring):
     """A subclass defined outside the refused package is still refused."""
 
 
-class FakeChainerWithRefusedBackend(MemoryKeyring):
-    """A duck-typed chainer wrapping a working and a refused backend.
+class ChaineredKeyringBase(MemoryKeyring):
+    """A duck-typed backend class that lives in keyring's chainer module.
 
-    The module name is what the store matches, so the real
-    ``keyring.backends.chainer`` must never be imported here: importing it
-    registers ``ChainerBackend`` in keyring's global registry.  The wrapped list
-    is a plain class attribute, so inspection never runs real discovery.
+    The real ``keyring.backends.chainer`` must never be imported here: importing
+    it registers ``ChainerBackend`` in keyring's global registry.  The subclasses
+    below are defined in the test module, so recognising them requires walking
+    the whole MRO (the 574ef42 fix) rather than matching the concrete module.
     """
+
+
+ChaineredKeyringBase.__module__ = "keyring.backends.chainer"
+
+
+class SubclassedRefusingChainer(ChaineredKeyringBase):
+    """A chainer subclass wrapping a working and a refused backend."""
 
     backends = [MemoryKeyring(), null.Keyring()]
 
 
-FakeChainerWithRefusedBackend.__module__ = "keyring.backends.chainer"
-
-
-class FakeEmptyChainer(MemoryKeyring):
-    """An explicitly configured chainer with nothing to chain."""
+class SubclassedEmptyChainer(ChaineredKeyringBase):
+    """A chainer subclass with nothing to chain (silently drops writes)."""
 
     backends: list = []
 
 
-FakeEmptyChainer.__module__ = "keyring.backends.chainer"
+class PlaintextMemberKeyring(MemoryKeyring):
+    """A chainer member from the ``keyrings.alt`` plaintext package."""
+
+
+PlaintextMemberKeyring.__module__ = "keyrings.alt.file"
+
+
+class SubclassedPlaintextChainer(ChaineredKeyringBase):
+    """A chainer subclass whose wrapped backend stores plaintext."""
+
+    backends = [MemoryKeyring(), PlaintextMemberKeyring()]
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -221,11 +235,20 @@ def test_fail_backend_probe_and_operations_are_typed(install_backend, caplog):
         ),
         pytest.param(NullSubclass, "null-backend", id="refused-subclass"),
         pytest.param(
-            FakeChainerWithRefusedBackend,
+            SubclassedRefusingChainer,
             "chained-null-backend",
-            id="chainer-wraps-refused",
+            id="chainer-subclass-wraps-refused",
         ),
-        pytest.param(FakeEmptyChainer, "chained-empty", id="chainer-empty"),
+        pytest.param(
+            SubclassedEmptyChainer,
+            "chained-empty",
+            id="chainer-subclass-empty",
+        ),
+        pytest.param(
+            SubclassedPlaintextChainer,
+            "chained-plaintext-alternative",
+            id="chainer-subclass-wraps-plaintext",
+        ),
     ],
 )
 def test_refused_backend_cannot_be_used_for_any_operation(
