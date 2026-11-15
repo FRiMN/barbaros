@@ -2,6 +2,7 @@
 
 **Статус:** реализовано (этапы 1–3 и переопределение пути в §4.1, см. §12); PR ещё не смержен.
 **Обновление 2026-11-13:** добавлен write-guard для BAR-19 — `save()` заменяет только отсутствующий файл или файл-документ кэша любой версии (§4.1, §4.6, §5.1, §12).
+**Обновление 2026-11-15:** BAR-11 исправлен (issue #9): приложение больше не читает API-ключи при старте — вместо `KeySecurityManager` типизированная граница `SecretStorage`/`KeyringSecretStore` в `security.py`. Autouse `fake_keyring` в тестах остаётся нужен, но по другой причине (изоляция от реального Secret Service, а не падение `MainWindow`). Устаревшее утверждение §7.1 про чтение keyring в конструкторе `ProvidersCard` исправлено; см. также §4.6 и §6.
 **Аудит:** BAR-01, BAR-09, BAR-10, BAR-14, BAR-17, BAR-19, §8 — идентификаторы находок отдельного OWASP-аудита (в этот PR не входит).
 **Затрагиваемые файлы:** новые `src/barbaros/model_cache.py` и `src/barbaros/atomic_file.py`; `src/barbaros/model_manager.py`; `src/barbaros/main_window.py`; `tests/conftest.py`; новые тесты (`tests/unit/test_model_cache.py`, `tests/unit/test_atomic_file.py`, `tests/components/test_model_manager_cache.py`, `tests/system/test_model_cache_flow.py`, `tests/system/test_model_cache_nfr.py`, `tests/system/test_model_cache_security.py`); `pyproject.toml` (marker `slow`, `addopts`); `README.md`; `docs/README_RU.md`; этот документ.
 
@@ -51,7 +52,7 @@ QSettings (~/.config/io.github.frimn/barbaros.conf)
 | DeepSeek `GET https://api.deepseek.com/models` (проверено 2026-11-12) не содержит `created`. `openai` SDK собирает ответ лениво (`_strict_response_validation` по умолчанию `False`, `construct_type`), поэтому `any_llm` возвращает `Model` с `created=None`; `BaseOpenAIProvider._convert_list_models_response` пропускает уже созданный `Model` через `isinstance`-проверку, не валидируя его. `Model.model_validate(model_dump())` падает с `created: Input should be a valid integer` | Список провайдера нельзя валидировать/сохранять как есть. Поля нормализуются в `provider_models.py` до маршалинга (`created`, не используемый приложением, → `0`; `owned_by` → `""`; `object` → `"model"`; модели без `id` отбрасываются), а `ModelManager` дополнительно пропускает невалидные элементы без исключения из Qt-слота. Покрыто `tests/unit/test_provider_models.py` и `tests/system/test_model_fetch_normalization.py` |
 | `QSettings` кэширует базовый каталог конфига при первом создании в процессе; `QStandardPaths` — динамичен | `ModelCacheStore` резолвит путь один раз в конструкторе, поэтому окружение (XDG, `applicationName`) должно быть готово до его создания: в тестах XDG-переменные — на import-time conftest, для QSettings — только явный путь |
 | Сигнал Qt, подключённый к методу не-`QObject` получателя (`ModelManager` наследует `dict`), выполняется **в потоке отправителя** (проверено) | `set_models()`/сохранение кэша выполняются в потоке воркера; два воркера могут завершиться одновременно → нужна блокировка и целостный снапшот (§4.5) |
-| `MainWindow` конструируется offscreen; полный `App()` — нет (нужен stub `TrayIcon`, fake keyring) | Системные тесты через `MainWindow`/stub `App`, см. §7 |
+| `MainWindow` конструируется offscreen; полный `App()` — нет (нужен stub `TrayIcon`, fake keyring) | Системные тесты через `MainWindow`/stub `App`, см. §7. После BAR-11 ключи при старте не читаются: fake keyring нужен как изоляция от реального Secret Service, а не чтобы `MainWindow` не упал |
 
 ## 4. Принятые решения
 
@@ -207,7 +208,7 @@ class ModelCacheStore:
 - Ошибка записи кэша не блокирует перевод и не показывает модальное окно: `WARNING` в `logging` (не `print` — BAR-17), путь и класс/errno исключения; без содержимого файла и без имён ключей.
 - Внешние строки (имя провайдера, id модели) логируются только через `%r` и с усечением до 64 символов — защита от log injection (BAR-17).
 - Битый/слишком большой/чужой файл **не удаляется и не перезаписывается**: write-guard (BAR-19, §4.1) отказывает в записи, если существующий target не является документом кэша любой версии. Пользователь/разработчик может посмотреть файл и убрать его, чтобы приложение создало кэш заново; это осознанный отказ и от «тихого» удаления, и от перезаписи чужого файла (AGENTS #27, #28).
-- Хранилище не читает keyring и не пишет секреты; в кэше не должно быть `api_base`/ключей (BAR-02, BAR-03, BAR-11).
+- Хранилище не читает keyring и не пишет секреты; в кэше не должно быть `api_base`/ключей (BAR-02, BAR-03). После BAR-11 (issue #9) приложение вообще не обращается к keyring при старте: ключи читает/пишет только типизированный `SecretStorage` в явном действии (диалог) или в воркере, и у кэша доступа к нему нет.
 
 ### 4.7. Легаси-ключ (без миграции)
 
@@ -336,7 +337,7 @@ fetch (воркер):
 | **BAR-14** нет лимитов (`:167-173`) | **Да, для кэша:** потолки на размер файла/провайдеров/моделей/строк; враждебный `/v1/models` не создаёт неограниченный файл | Лимиты текста/изображения/ответа LLM — отдельно |
 | **BAR-17** `print` (`:191-197`) | **Да, в новом модуле:** `logging`, без содержимого файла/ключей, `%r` + усечение | Полный переход на `logging` — отдельно |
 | **BAR-13** rich text (`:159-165`) | Нет изменений; кэш хранит `model.id`/имя провайдера, которые затем рендерятся в `QLabel.setText` (`filterable_combobox.py:70,358`) | Уже существует; рекомендуется закрыть вместе с BAR-13, т.к. кэш закрепляет данные из внешнего endpoint |
-| **BAR-02/BAR-11** keyring | Хранилище не импортирует `keyring`/`security`, не сериализует `ProviderMeta`/`ProviderClient` | Ключи остаются в keyring; plaintext-fallback не появляется |
+| **BAR-02/BAR-11** keyring | Хранилище не импортирует `keyring`/`security`, не сериализует `ProviderMeta`/`ProviderClient` | **BAR-11 исправлен (#9):** типизированная граница `SecretStorage`/`KeyringSecretStore`, backend vetting на каждой операции (fail/null/`keyrings.alt`/chainer), без чтения keyring на старте. Keyring остаётся единственным режимом хранения; opt-in unencrypted file — follow-up issue [#23](https://github.com/FRiMN/barbaros/issues/23). Жизненный цикл ключей (удаление при удалении провайдера) по-прежнему BAR-02 (#8) |
 | **BAR-03** `http` endpoint | Хранилище не содержит `api_base` и не может его подменить; restore не создаёт провайдеров | Валидация URL — отдельно |
 | **§8 тесты** (`:277-288`) | Появляются: #4 (битый конфиг → старт), #10 (нет ключей в сериализованных данных) для кэша; #1 (нет pickle) — нет, это BAR-01 | См. §7 |
 
@@ -348,7 +349,7 @@ fetch (воркер):
 
 - На import-time (до любых Qt/QSettings) выставить `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME` во временный каталог (как сейчас `QT_QPA_PLATFORM=offscreen`); иначе тесты читают реальный `~/.config`.
 - Session-fixture `qapp` (`QApplication.instance() or QApplication([])`, один раз задать `organizationDomain`/`applicationName`, никогда не уничтожать).
-- Autouse `fake_keyring` (подкласс `keyring.backend.KeyringBackend` с dict; сохранить/восстановить исходный backend) — `ProvidersCard` читает keyring в конструкторе, без fake бэкенда `MainWindow` падает на `NoKeyringError` (BAR-11). Отдельная fixture `no_keyring` для проверки fail-backend.
+- Autouse `fake_keyring` (подкласс `keyring.backend.KeyringBackend` с dict; сохранить/восстановить исходный backend) — тесты не должны ходить в реальный Secret Service: `availability()` при построении `ProvidersCard` выбирает backend (без чтения секрета), а ключи читаются/пишутся в явных действиях (диалоги) и в воркерах. После BAR-11 (issue #9) `ProvidersCard` **не читает** keyring в конструкторе, поэтому `NoKeyringError` больше не роняет старт (`tests/system/test_keyring_unavailable.py`: старт на `fail.Keyring` без чтения ключей и с неблокирующим баннером). Отдельная fixture `no_keyring` для проверки fail-backend.
 - `FakeApp` с явным `QSettings(str(tmp_path/...), IniFormat)` — QSettings кэширует базовый каталог, поэтому per-test XDG для него не работает.
 - Хелперы: `make_models(n)`, `write_cache(path, data)`, `wait_until(pred)` с `processEvents` (pytest-qt **не установлен**, добавлять не обязательно).
 - Не вызывать `QSystemTrayIcon.isSystemTrayAvailable()` до `QApplication` (segfault); для `App()` — monkeypatch `barbaros.main.TrayIcon` на stub.
@@ -403,7 +404,7 @@ fetch (воркер):
 **Security — `tests/system/test_model_cache_security.py`:**
 
 1. Байты файла: нет `b"PyObjectWrapper"`/`b"@Variant"`, это валидный JSON; лишние поля из «подменённого» файла не попадают в файл после сохранения.
-2. Ключ из fake keyring не встречается в тексте кэша и в логах.
+2. Ключ из fake keyring не встречается в тексте кэша, в `QSettings` и в логах; при `fail.Keyring` старт вообще не читает ключи (`tests/system/test_keyring_unavailable.py`).
 3. Файл `0600`, каталог `0700` (POSIX).
 4. Подменённый кэш с провайдером `evil`, `api_base`, `api_key` → провайдер не добавлен, keyring/сеть не вызывались, конфиг провайдеров не изменён.
 5. Имя провайдера с `\n`/HTML в логах — одна экранированная запись, без инъекции.
