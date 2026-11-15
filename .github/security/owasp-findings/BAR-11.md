@@ -157,7 +157,7 @@ is kept as the agreed design, not as a description of the current diff.
 
 ## Implementation (2026-11-15)
 
-Architecture/design write-up: [`docs/secret-storage.md`](../../docs/secret-storage.md); interactive diagram: [`docs/diagrams/secret-storage.html`](../../docs/diagrams/secret-storage.html).
+Architecture/design write-up: [`docs/secret-storage.md`](../../../docs/secret-storage.md); interactive diagram: [`docs/diagrams/secret-storage.html`](../../../docs/diagrams/secret-storage.html).
 
 Commits: `02807ec` (typed boundary, no startup reads), `5cd5506` (backend vetting gates every
 operation), `f0f0418` (fail-safe backend inspection), `58768ac` (chainer matched without importing
