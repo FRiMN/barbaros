@@ -78,7 +78,6 @@ from typing import Protocol, runtime_checkable
 import keyring
 import keyring.backend
 import keyring.core
-from keyring.backends import chainer as chainer_backend
 from keyring.backends import fail as fail_backend
 from keyring.errors import KeyringLocked, PasswordDeleteError
 
@@ -100,6 +99,12 @@ MAX_SECRET_LEN = 16 * 1024
 _LOG_STRING_LIMIT = 64
 
 _NULL_BACKEND_MODULE = "keyring.backends.null"
+#: The chainer multiplexes backends.  It is matched by module name on purpose:
+#: importing ``keyring.backends.chainer`` would register ``ChainerBackend`` in
+#: keyring's global backend registry and could change keyring's own selection
+#: (it wins with priority 10 when more than one positive-priority backend
+#: exists).  The import must stay side-effect free (BAR-11).
+_CHAINER_BACKEND_MODULE = "keyring.backends.chainer"
 _REFUSED_BACKEND_MODULES = ("keyrings.alt",)
 
 
@@ -231,6 +236,16 @@ def _class_refusal(backend: object) -> str | None:
     return None
 
 
+def _is_chainer_backend(backend: object) -> bool:
+    """Whether ``backend`` is keyring's chainer, without importing it.
+
+    Importing ``keyring.backends.chainer`` registers the class in keyring's
+    global backend registry, which can change keyring's own backend selection;
+    the module must not do that (BAR-11).
+    """
+    return type(backend).__module__ == _CHAINER_BACKEND_MODULE
+
+
 def _backend_refusal(backend: object) -> str | None:
     """Why a selected backend must not be used, or ``None`` when it is fine."""
     refusal = _class_refusal(backend)
@@ -239,9 +254,16 @@ def _backend_refusal(backend: object) -> str | None:
 
     # A chainer multiplexes other backends (including a keyrings.alt one): if any
     # wrapped backend would be refused, using the chainer is not safe either.
-    if isinstance(backend, chainer_backend.ChainerBackend):
-        for wrapped in backend.backends:
-            reason = _class_refusal(wrapped)
+    # An empty chainer would silently report success and store nothing, so it is
+    # refused like the null backend (reachable only by explicit configuration:
+    # auto-detection never selects it with fewer than two viable backends).
+    if _is_chainer_backend(backend):
+        wrapped = list(backend.backends)
+        if not wrapped:
+            return "chained-empty"
+
+        for inner in wrapped:
+            reason = _class_refusal(inner)
             if reason is not None:
                 return f"chained-{reason}"
 
