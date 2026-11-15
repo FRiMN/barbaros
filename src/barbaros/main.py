@@ -12,6 +12,7 @@ from .common import read_setting
 from .i18n import load_translator, resolve_language
 from .ipc import IPCService
 from .main_window import MainWindow
+from .security import KeyringSecretStore, SecretStorage
 from .settings_sanitize import (
     MemoryBackedSettings,
     prepare_settings_file,
@@ -20,7 +21,7 @@ from .settings_sanitize import (
 
 
 class App(QApplication):
-    def __init__(self, args):
+    def __init__(self, args, *, secrets: SecretStorage | None = None):
         super().__init__(args)
         self.setQuitOnLastWindowClosed(False)
 
@@ -85,10 +86,14 @@ class App(QApplication):
         if self.translator is not None:
             self.installTranslator(self.translator)
 
+        # BAR-11: one secret store for the whole process, provided by the
+        # composition root so widgets and workers never pick a store themselves.
+        self.secrets = secrets if secrets is not None else SecretStorage(KeyringSecretStore())
+
         self.ipc = IPCService(app=self, as_server=True, as_client=False)
 
         # Windows and tray
-        self.main_window = MainWindow(app=self)
+        self.main_window = MainWindow(app=self, secrets=self.secrets)
         self.tray = TrayIcon(self)
         self.about_window = AboutWindow()
 
@@ -188,9 +193,9 @@ class TrayIcon:
         self.app.show_about_window()
 
 
-def start_app(open_main_window=False):
+def start_app(open_main_window=False, *, secrets: SecretStorage | None = None):
     """ Normal start app """
-    app = App(sys.argv)
+    app = App(sys.argv, secrets=secrets)
     if open_main_window:
         app.raise_window()
     sys.exit(app.exec())
@@ -208,7 +213,12 @@ def main():
     if "--popup" in sys.argv:
         open_window()
     else:
-        start_app(open_main_window="--opened" in sys.argv)
+        # BAR-11: the storage mode is selected here, before any UI or worker
+        # thread exists.  The system keyring is the current (and only) mode.
+        start_app(
+            open_main_window="--opened" in sys.argv,
+            secrets=SecretStorage(KeyringSecretStore()),
+        )
 
 
 if __name__ == "__main__":

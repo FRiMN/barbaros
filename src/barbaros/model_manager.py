@@ -17,7 +17,12 @@ from psygnal import Signal
 from PySide6.QtCore import QObject, Qt, QThread, Slot
 
 from barbaros.provider_models import model_entries
-from barbaros.security import KeySecurityManager
+from barbaros.security import (
+    ApiKeyManager,
+    KeyringSecretStore,
+    SecretStorage,
+    SecretStorageError,
+)
 
 if TYPE_CHECKING:
     from barbaros.model_cache import ModelCacheStore
@@ -45,7 +50,10 @@ class ProviderMeta:
     api_base: str | None = None
 
     def __post_init__(self):
-        self.api_key_manager = KeySecurityManager(self.name)
+        # Bound to the app-selected store by ``ModelManager.add``; a standalone
+        # instance keeps the default keyring store so unit tests and worker-only
+        # code paths still resolve a key (BAR-11).
+        self.api_key_manager = ApiKeyManager(self.name)
 
 
 @dataclass
@@ -63,7 +71,11 @@ class ProviderClient:
         it accesses an already closed event loop. Therefore, we recreate the client here
         instead of reusing ProviderClient.client.
         """
-        return AnyLLM.create(self.meta.provider_type, self.meta.api_key_manager.get(), self.meta.api_base)
+        return AnyLLM.create(
+            self.meta.provider_type,
+            self.meta.api_key_manager.value(),
+            self.meta.api_base,
+        )
 
 
 class CachePolicy(Enum):
@@ -138,9 +150,18 @@ class ModelManager(dict):
 
     _fetching_models_workers: dict[str, tuple[ListModelWorker, QThread]]    # Key: provider name
 
-    def __init__(self, cache: ModelCacheStore | None = None):
+    def __init__(
+        self,
+        cache: ModelCacheStore | None = None,
+        *,
+        secrets: SecretStorage | None = None,
+    ):
         super().__init__()
         self._cache = cache
+        # One store for every provider, selected by the composition root.  The
+        # default is the system keyring; no call site resolves a store on its
+        # own (BAR-11).
+        self._secrets = secrets if secrets is not None else SecretStorage(KeyringSecretStore())
         self._lock = threading.RLock()
         self._fetching_models_workers = {}
         # Result dispatchers of the current fetch per provider, kept referenced
@@ -154,6 +175,14 @@ class ModelManager(dict):
     def default_providers() -> list[ProviderMeta]:
         """Factory for the provider list used when the config has none."""
         return [ProviderMeta("ollama", LLMProvider.OLLAMA)]
+
+    @property
+    def secret_storage(self) -> SecretStorage:
+        return self._secrets
+
+    def api_key_manager(self, provider_name: str) -> ApiKeyManager:
+        """A provider->store binding for call sites that only know the name."""
+        return ApiKeyManager(provider_name, self._secrets)
 
     @property
     def fetching_models_active_workers(self) -> list[str]:
@@ -172,6 +201,10 @@ class ModelManager(dict):
                 logger.warning("ModelManager: loading model cache failed", exc_info=True)
                 cached = []
             models = self._parse_models(cached, provider.name)
+
+        # The provider object may come from the config or a dialog and carry a
+        # default store; bind it before the client (which reads the key) exists.
+        provider.api_key_manager.bind(self._secrets)
 
         with self._lock:
             client = ProviderClient(meta=provider, models=models)
@@ -303,19 +336,28 @@ class ModelManager(dict):
             self._stop_workers(previous, SHUTDOWN_BUDGET_MS)
 
         for p in providers:
-            self._start_fetching_models(p)
+            try:
+                self._start_fetching_models(p)
+            except SecretStorageError as exc:
+                # A provider client cannot be built without its key: report it
+                # through the normal error path instead of raising into the GUI
+                # slot that triggered the fetch (BAR-11).
+                self._on_fetching_error(p.meta, str(exc))
 
     def _start_fetching_models(self, provider: ProviderClient):
         from barbaros.workers import ListModelWorker
 
         self.stop_fetching_models(provider.meta.name)
 
+        # Build the worker (it reads the provider key) before allocating the
+        # thread, so a storage failure leaves no half-created thread behind (BAR-11).
+        worker = ListModelWorker(provider)
+
         thread = QThread()
         thread.setServiceLevel(QThread.QualityOfService.Eco)
 
         thread.finished.connect(thread.deleteLater)
 
-        worker = ListModelWorker(provider)
         worker.moveToThread(thread)
         worker.connect_terminate(thread)
         thread.started.connect(self._on_started_thread)

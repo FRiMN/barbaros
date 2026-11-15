@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from barbaros.features.base import AbstractFeature
+from barbaros.security import SecretStorageError
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.progress_label import GradientRainbowLabel
 from barbaros.workers import TranslationWorker
@@ -80,15 +81,23 @@ class TextFeature(AbstractFeature):
         from barbaros.main_window import MainWindow
 
         self.parent: MainWindow
-        self._translation_thread = QThread(parent=self)
-        self._translation_thread.finished.connect(self._translation_thread.deleteLater)
-
         selected_item = self.parent.model.selected_item
         provider = self.parent.model_manager[selected_item.provider]
         lang = self.parent.target_language_select.currentText(),
-        self.worker = TranslationWorker(
-            text_to_translate, lang, selected_item, provider
-        )
+
+        # BAR-11: the worker reads the provider key when it is built.  A storage
+        # failure aborts the translation before anything is sent and restores the
+        # tab through the normal error path.
+        try:
+            self.worker = TranslationWorker(
+                text_to_translate, lang, selected_item, provider
+            )
+        except SecretStorageError as exc:
+            self.on_translation_error(str(exc))
+            return
+
+        self._translation_thread = QThread(parent=self)
+        self._translation_thread.finished.connect(self._translation_thread.deleteLater)
         self.worker.moveToThread(self._translation_thread)
 
         self.worker.finished.connect(self.on_translation_finished)

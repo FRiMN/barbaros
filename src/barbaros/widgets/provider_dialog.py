@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import (
 
 from barbaros.common import is_valid_url, truncate_key
 from barbaros.model_manager import ModelManager, ProviderMeta
+from barbaros.security import SecretStatus, WriteStatus
+from barbaros.widgets.secret_storage_ui import status_hint, status_label
 
 
 class AddProviderDialog(QDialog):
@@ -44,9 +47,29 @@ class AddProviderDialog(QDialog):
         index = self.type_combo.findData(self.provider.provider_type)
         if index >= 0:
             self.type_combo.setCurrentIndex(index)
-        self.api_key_edit.setText(self.provider.api_key_manager.get() or "")
+        self._populate_api_key()
         self.api_url_edit.setText(self.provider.api_base or "")
         self.name_edit.setEnabled(False)
+
+    def _populate_api_key(self):
+        """Prefill the key - an explicit user action, never a startup read (BAR-11)."""
+        result = self.provider.api_key_manager.get()
+        if result.status is SecretStatus.FOUND:
+            self.api_key_edit.setText(result.value or "")
+            return
+
+        # Empty means "keep the stored key" on save; a failed read is shown so
+        # the user does not mistake "could not read" for "no key is stored".
+        self.api_key_edit.clear()
+        if result.status is not SecretStatus.MISSING:
+            self.key_warning.setText(
+                self.tr(
+                    "The saved API key could not be read (%1). Enter the key "
+                    "again to replace it."
+                ).replace("%1", status_label(result.status))
+            )
+            self.key_warning.setToolTip(status_hint(result.status))
+            self.key_warning.show()
 
     def _build_form(self):
         form = QFormLayout()
@@ -61,6 +84,12 @@ class AddProviderDialog(QDialog):
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow(self.tr("API Key:"), self.api_key_edit)
+
+        self.key_warning = QLabel()
+        self.key_warning.setWordWrap(True)
+        self.key_warning.setStyleSheet("color: #a04000;")
+        self.key_warning.hide()
+        form.addRow(self.key_warning)
 
         self.api_url_edit = QLineEdit()
         form.addRow(self.tr("API URL:"), self.api_url_edit)
@@ -100,19 +129,26 @@ class AddProviderDialog(QDialog):
         self.accept()
 
     def get_provider(self) -> ProviderMeta | None:
+        """The edited provider data; performs no I/O and writes no secret."""
         if self.result() != QDialog.DialogCode.Accepted:
             return None
 
-        provider = ProviderMeta(
+        return ProviderMeta(
             name=self.name_edit.text().strip(),
             provider_type=self.type_combo.currentData(),
             api_base=self.api_url_edit.text().strip() or None
         )
-        api_key = self.api_key_edit.text().strip() or None
-        if api_key:
-            provider.api_key_manager.set(api_key)
 
-        return provider
+    def get_api_key(self) -> str | None:
+        """The key the user typed, or ``None`` to keep the stored one.
+
+        Persisting it is the caller's transaction step, so a storage failure can
+        abort the provider add/update (BAR-11).
+        """
+        if self.result() != QDialog.DialogCode.Accepted:
+            return None
+
+        return self.api_key_edit.text().strip() or None
 
 
 class ProviderDialog(QDialog):
@@ -123,16 +159,26 @@ class ProviderDialog(QDialog):
         self.setModal(True)
         self.resize(700, 400)
 
+        self.storage_warning = self._build_storage_warning()
         self.table = self._build_table()
         self._populate_table()
 
         btn_layout = self._build_buttons()
 
         layout = QVBoxLayout()
+        layout.addWidget(self.storage_warning)
         layout.addWidget(self.table)
         layout.addLayout(btn_layout)
 
         self.setLayout(layout)
+
+    def _build_storage_warning(self) -> QLabel:
+        """Non-blocking warning for keys that could not be read (BAR-11)."""
+        warning = QLabel()
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #a04000;")
+        warning.hide()
+        return warning
 
     def _build_table(self):
         table = QTableWidget(0, 4)
@@ -168,6 +214,7 @@ class ProviderDialog(QDialog):
 
     def _populate_table(self):
         self.table.setRowCount(0)
+        failed: set[SecretStatus] = set()
         for client in self.model_manager.values():
             row = self.table.rowCount()
             self.table.insertRow(row)
@@ -177,8 +224,32 @@ class ProviderDialog(QDialog):
             self.table.setItem(row, 0, QTableWidgetItem(meta.name))
             self.table.setItem(row, 1, QTableWidgetItem(meta.provider_type.value))
             self.table.setItem(row, 2, QTableWidgetItem(meta.api_base or ""))
-            key = meta.api_key_manager.get()
-            self.table.setItem(row, 3, QTableWidgetItem(truncate_key(key) if key else ""))
+            self.table.setItem(row, 3, self._api_key_item(meta, failed))
+
+        self._update_storage_warning(failed)
+
+    def _api_key_item(self, meta: ProviderMeta, failed: set[SecretStatus]) -> QTableWidgetItem:
+        """Masked key, empty (no key stored) or the typed read status."""
+        result = meta.api_key_manager.get()
+        if result.status is SecretStatus.FOUND:
+            return QTableWidgetItem(truncate_key(result.value or ""))
+
+        item = QTableWidgetItem(status_label(result.status))
+        if result.status is not SecretStatus.MISSING:
+            failed.add(result.status)
+            item.setToolTip(status_hint(result.status))
+        return item
+
+    def _update_storage_warning(self, failed: set[SecretStatus]) -> None:
+        if not failed:
+            self.storage_warning.hide()
+            return
+
+        states = ", ".join(sorted({status_label(status) for status in failed}))
+        self.storage_warning.setText(
+            self.tr("Some saved API keys could not be read (%1).").replace("%1", states)
+        )
+        self.storage_warning.show()
 
     def _add_provider(self):
         dialog = AddProviderDialog(self)
@@ -197,23 +268,57 @@ class ProviderDialog(QDialog):
         self._run_provider_dialog(dialog, is_new=False)
 
     def _run_provider_dialog(self, dialog: AddProviderDialog, is_new: bool):
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            provider = dialog.get_provider()
-            if provider:
-                if is_new and provider.name in self.model_manager:
-                    QMessageBox.warning(
-                        self, self.tr("Duplicate"),
-                        self.tr("Provider '%1' already exists").replace("%1", provider.name)
-                    )
-                    return
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
 
-                provider.provider_type = LLMProvider.from_string(provider.provider_type)
-                if is_new:
-                    self.model_manager.add(provider)
-                else:
-                    self.model_manager.update(provider)
-                self._populate_table()
-                self._save()
+        self._apply_provider(dialog.get_provider(), dialog.get_api_key(), is_new=is_new)
+
+    def _apply_provider(self, provider: ProviderMeta, api_key: str | None, *, is_new: bool) -> bool:
+        """Add or update a provider, key included, as one transaction (BAR-11).
+
+        Split from ``_run_provider_dialog`` so the transaction can be exercised
+        without a modal loop.  Returns ``False`` when a storage failure aborted
+        the change.
+        """
+        if provider is None:
+            return False
+
+        if is_new and provider.name in self.model_manager:
+            QMessageBox.warning(
+                self, self.tr("Duplicate"),
+                self.tr("Provider '%1' already exists").replace("%1", provider.name)
+            )
+            return False
+
+        if api_key is not None and not self._persist_api_key(provider.name, api_key):
+            # The transaction is aborted: no add/update without the key the
+            # user asked to save.
+            return False
+
+        provider.provider_type = LLMProvider.from_string(provider.provider_type)
+        if is_new:
+            self.model_manager.add(provider)
+        else:
+            self.model_manager.update(provider)
+        self._populate_table()
+        self._save()
+        return True
+
+    def _persist_api_key(self, provider_name: str, api_key: str) -> bool:
+        """Save the key before changing the provider; ``False`` aborts the edit."""
+        status = self.model_manager.api_key_manager(provider_name).set(api_key)
+        if status is WriteStatus.PERSISTED:
+            return True
+
+        QMessageBox.critical(
+            self,
+            self.tr("API Key Storage"),
+            self.tr(
+                "The API key could not be saved, so the provider was not added "
+                "or changed."
+            ),
+        )
+        return False
 
     def _delete_provider(self):
         row = self.table.currentRow()
