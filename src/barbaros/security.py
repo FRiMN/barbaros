@@ -36,15 +36,23 @@ decode error can quote the stored bytes.
 
 Backend vetting
 ---------------
-``availability()`` refuses a keyring backend that would silently store secrets
-in plaintext or drop them: ``keyring.backends.fail`` (no backend at all),
-``keyring.backends.null`` (reads return nothing, writes are discarded) and any
-``keyrings.alt`` backend.  Installing ``keyrings.alt`` makes ``keyring``
-auto-select its plaintext backend without asking the user, so the refusal is
-what keeps "no plaintext without consent" true.  The check never reads a secret
-and never triggers an unlock prompt; a retry (``refresh=True``) re-runs
-keyring's cached backend detection, so a login race can be recovered without
-restarting the app.
+Every operation refuses a keyring backend that would silently store secrets in
+plaintext or drop them: ``keyring.backends.fail`` (no backend at all),
+``keyring.backends.null`` (reads return nothing, writes are discarded), any
+``keyrings.alt`` backend (including a chainer that wraps one) and a subclass of
+one of those.  Installing ``keyrings.alt`` makes ``keyring`` auto-select its
+plaintext backend without asking the user, so the refusal is what keeps "no
+plaintext without consent" true -- it must gate the write path too, not only
+the banner.  The check inspects backend classes (MRO and a chainer's wrapped
+backends); it never reads a secret and never triggers an unlock prompt.  A retry
+(``refresh=True``) re-runs keyring's cached backend detection, so a login race
+can be recovered without restarting the app.
+
+``availability()`` is a *class-level capability* probe, not a liveness check:
+if the selected backend dies after the probe (e.g. the D-Bus session goes away),
+``availability()`` keeps reporting ``READY`` while reads return ``UNAVAILABLE``
+(and the banner appears after the next refresh/restart).  Operations always
+re-check the backends they are about to use.
 
 Logging hygiene
 ---------------
@@ -70,6 +78,7 @@ from typing import Protocol, runtime_checkable
 import keyring
 import keyring.backend
 import keyring.core
+from keyring.backends import chainer as chainer_backend
 from keyring.backends import fail as fail_backend
 from keyring.errors import KeyringLocked, PasswordDeleteError
 
@@ -168,11 +177,24 @@ def _reset_backend_detection() -> None:
     ``keyring.backend.get_all_keyring`` is cached for the life of the process
     (``jaraco.functools.once``); without resetting it a login race where the
     Secret Service was not up yet keeps ``fail.Keyring`` selected until restart.
-    Both the reset and the detection are best effort: a failure only means the
-    existing selection is kept.
+
+    The two steps are guarded separately on purpose: ``reset()`` raises
+    ``KeyError`` when the detection cache was never populated (for example after
+    an explicit ``keyring.set_keyring(...)`` before any detection), and that is
+    not a failure of the re-detection that follows.
     """
     try:
         keyring.backend.get_all_keyring.reset()
+    except KeyError:
+        # Nothing cached yet: there is nothing to drop, re-detection still runs.
+        pass
+    except Exception as exc:  # Fail-safe boundary: a probe never raises.
+        logger.warning(
+            "Secret storage: keyring detection reset failed (%s)",
+            exc.__class__.__name__,
+        )
+
+    try:
         keyring.core.init_backend()
     except Exception as exc:  # Fail-safe boundary: a probe never raises.
         logger.warning(
@@ -180,18 +202,48 @@ def _reset_backend_detection() -> None:
         )
 
 
-def _backend_refusal(backend: object) -> str | None:
-    """Why a selected backend must not be used, or ``None`` when it is fine."""
-    if isinstance(backend, fail_backend.Keyring):
-        return "no-backend"
-
-    module = type(backend).__module__ or ""
+def _module_refusal(module: str) -> str | None:
+    """Why a backend class from ``module`` must not be used, or ``None``."""
     if module == _NULL_BACKEND_MODULE or module.startswith(_NULL_BACKEND_MODULE + "."):
         return "null-backend"
 
     for refused in _REFUSED_BACKEND_MODULES:
         if module == refused or module.startswith(refused + "."):
             return "plaintext-alternative"
+
+    return None
+
+
+def _class_refusal(backend: object) -> str | None:
+    """Why a backend *class* must not be used, or ``None``.
+
+    The whole MRO is inspected, so a subclass defined outside a refused package
+    is still caught through its refused base class.
+    """
+    if isinstance(backend, fail_backend.Keyring):
+        return "no-backend"
+
+    for klass in type(backend).__mro__:
+        reason = _module_refusal(klass.__module__ or "")
+        if reason is not None:
+            return reason
+
+    return None
+
+
+def _backend_refusal(backend: object) -> str | None:
+    """Why a selected backend must not be used, or ``None`` when it is fine."""
+    refusal = _class_refusal(backend)
+    if refusal is not None:
+        return refusal
+
+    # A chainer multiplexes other backends (including a keyrings.alt one): if any
+    # wrapped backend would be refused, using the chainer is not safe either.
+    if isinstance(backend, chainer_backend.ChainerBackend):
+        for wrapped in backend.backends:
+            reason = _class_refusal(wrapped)
+            if reason is not None:
+                return f"chained-{reason}"
 
     return None
 
@@ -222,13 +274,29 @@ class KeyringSecretStore:
         if refresh:
             _reset_backend_detection()
 
+        _, refusal = self._usable_backend()
+        if refusal is not None:
+            return Availability.UNAVAILABLE
+
+        return Availability.READY
+
+    def _usable_backend(self) -> tuple[object | None, str | None]:
+        """Select the backend for one operation.
+
+        Returns ``(backend, None)`` when the backend may be used, or
+        ``(None, reason)`` (already logged) when it must not.  Availability and
+        every operation share this check, so a refused backend can neither be
+        reported ready nor silently store or drop a secret.  The returned
+        instance is the one the operation uses, so a concurrent backend swap
+        cannot route a vetted call to another backend.
+        """
         try:
             backend = keyring.get_keyring()
-        except Exception as exc:  # Fail-safe boundary: a probe never raises.
+        except Exception as exc:  # Fail-safe boundary: never raises.
             logger.warning(
                 "Secret storage: backend selection failed (%s)", exc.__class__.__name__
             )
-            return Availability.UNAVAILABLE
+            return None, "selection-failed"
 
         refusal = _backend_refusal(backend)
         if refusal is not None:
@@ -237,16 +305,25 @@ class KeyringSecretStore:
                 refusal,
                 type(backend).__name__,
             )
-            return Availability.UNAVAILABLE
+            return None, refusal
 
-        return Availability.READY
+        return backend, None
 
     def read(self, provider_name: str) -> SecretRead:
+        backend, refusal = self._usable_backend()
+        if backend is None:
+            return SecretRead(SecretStatus.UNAVAILABLE, reason=refusal)
+
         try:
-            value = keyring.get_password(SERVICE_NAME, provider_name)
+            value = backend.get_password(SERVICE_NAME, provider_name)
         except Exception as exc:  # I/O boundary: every failure is a status.
             return _read_failure(provider_name, exc)
 
+        return self._validate_value(provider_name, value)
+
+    @staticmethod
+    def _validate_value(provider_name: str, value: object) -> SecretRead:
+        """Turn a backend return value into FOUND/MISSING/CORRUPT."""
         if value is None:
             return SecretRead(SecretStatus.MISSING)
 
@@ -258,6 +335,12 @@ class KeyringSecretStore:
             )
             return SecretRead(SecretStatus.CORRUPT, reason="non-text")
 
+        if not value:
+            # An empty entry cannot be a usable API key; the write path never
+            # stores one, so this is a corrupt/foreign entry.
+            logger.warning("Secret storage: key for %s is empty", _safe(provider_name))
+            return SecretRead(SecretStatus.CORRUPT, reason="empty")
+
         if len(value) > MAX_SECRET_LEN:
             logger.warning(
                 "Secret storage: key for %s is too large (%d > %d chars)",
@@ -267,11 +350,25 @@ class KeyringSecretStore:
             )
             return SecretRead(SecretStatus.CORRUPT, reason="too-large")
 
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            # A lone surrogate would fail later in the HTTP layer: fail closed.
+            logger.warning(
+                "Secret storage: key for %s cannot be encoded as UTF-8",
+                _safe(provider_name),
+            )
+            return SecretRead(SecretStatus.CORRUPT, reason="unencodable")
+
         return SecretRead(SecretStatus.FOUND, value=value)
 
     def write(self, provider_name: str, value: str) -> WriteStatus:
+        backend, refusal = self._usable_backend()
+        if backend is None:
+            return WriteStatus.ERROR
+
         try:
-            keyring.set_password(SERVICE_NAME, provider_name, value)
+            backend.set_password(SERVICE_NAME, provider_name, value)
         except Exception as exc:  # I/O boundary: every failure is a status.
             logger.warning(
                 "Secret storage: cannot save the key for %s (%s)",
@@ -283,8 +380,12 @@ class KeyringSecretStore:
         return WriteStatus.PERSISTED
 
     def delete(self, provider_name: str) -> WriteStatus:
+        backend, refusal = self._usable_backend()
+        if backend is None:
+            return WriteStatus.ERROR
+
         try:
-            keyring.delete_password(SERVICE_NAME, provider_name)
+            backend.delete_password(SERVICE_NAME, provider_name)
         except PasswordDeleteError:
             # Nothing to delete: deletion is idempotent, not a failure.
             return WriteStatus.PERSISTED
@@ -308,7 +409,16 @@ def _valid_provider_name(provider_name: object) -> bool:
 
 
 def _valid_secret(value: object) -> bool:
-    return isinstance(value, str) and bool(value) and len(value) <= MAX_SECRET_LEN
+    if not isinstance(value, str) or not value or len(value) > MAX_SECRET_LEN:
+        return False
+
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        # A lone surrogate cannot be sent to a provider; refuse it at the door.
+        return False
+
+    return True
 
 
 class SecretStorage:
