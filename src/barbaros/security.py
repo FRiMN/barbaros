@@ -21,8 +21,10 @@ status and never raises:
 * :class:`Availability` -- a startup probe (``READY``/``UNAVAILABLE``).
 
 Only callers that need the actual value raise :class:`SecretStorageError`, whose
-message is user-facing, localized by the widget layer, and never contains the
-secret (see :meth:`ApiKeyManager.value`).
+stable user-facing message never contains the secret (see
+:meth:`ApiKeyManager.value`).  Fixing this module's messages to English matches
+the app's other runtime error texts; the UI status *labels* are translated in
+``barbaros.widgets.secret_storage_ui``.
 
 What the boundary catches
 -------------------------
