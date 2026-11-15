@@ -11,7 +11,6 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from any_llm import AnyLLM, LLMProvider
-from any_llm.exceptions import MissingApiKeyError
 from any_llm.types.model import Model
 from dataclasses_json import dataclass_json
 from psygnal import Signal
@@ -85,10 +84,17 @@ class ProviderClient:
         return AnyLLM.create(self.meta.provider_type, api_key, self.meta.api_base)
 
     def _client_without_key(self, storage_error: SecretStorageError):
-        """Build a keyless client, or re-raise the typed storage failure."""
+        """Build a keyless client, or re-raise the typed storage failure.
+
+        Any creation failure without the key is reported as the storage failure:
+        while the store is down the user cannot tell "no key saved" from "keyring
+        unavailable", and a provider-specific error (``MissingApiKeyError``,
+        ``ValueError`` for a missing api_base, missing cloud credentials, ...)
+        would otherwise escape the callers that catch ``SecretStorageError``.
+        """
         try:
             return AnyLLM.create(self.meta.provider_type, None, self.meta.api_base)
-        except MissingApiKeyError:
+        except Exception:
             raise storage_error from None
 
 
