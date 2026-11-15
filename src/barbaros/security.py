@@ -298,7 +298,18 @@ class KeyringSecretStore:
             )
             return None, "selection-failed"
 
-        refusal = _backend_refusal(backend)
+        try:
+            refusal = _backend_refusal(backend)
+        except Exception as exc:  # Fail-safe boundary: never raises.
+            # Inspection can evaluate other backends (a chainer's members, their
+            # priorities).  A broken third-party backend must degrade to "not
+            # usable", not raise into the GUI like the defect this fixes.
+            logger.warning(
+                "Secret storage: backend inspection failed (%s)",
+                exc.__class__.__name__,
+            )
+            return None, "inspection-failed"
+
         if refusal is not None:
             logger.warning(
                 "Secret storage: keyring backend refused (reason=%s, backend=%s)",
