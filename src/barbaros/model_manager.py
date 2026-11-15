@@ -41,6 +41,26 @@ STOP_WAIT_MS = 1000
 #: 2 s NFR so the bounded shutdown stays under it even with Qt overhead.
 SHUTDOWN_BUDGET_MS = 1500
 
+#: Provider types that work without an API key (local servers).
+#:
+#: BAR-11 limits the keyless fallback of ``ProviderClient.client()`` to them on
+#: purpose.  Building a *cloud* provider without a key is neither cheap nor
+#: side-effect free -- it walks the AWS credential chain (bedrock), Google ADC
+#: discovery (vertexai) or reports missing configuration -- and the degraded
+#: keyring path must fail fast instead of freezing the GUI for seconds
+#: (measured: 2.0-12.5 s per attempt).  ``any_llm`` exposes no reliable
+#: "requires a key" flag (its env-var names are empty for some keyless
+#: providers and set for others), so the knowledge is kept here as data.
+KEYLESS_PROVIDER_TYPES = frozenset(
+    {
+        LLMProvider.OLLAMA,
+        LLMProvider.LLAMACPP,
+        LLMProvider.LLAMAFILE,
+        LLMProvider.LMSTUDIO,
+        LLMProvider.VLLM,
+    }
+)
+
 
 @dataclass_json
 @dataclass
@@ -75,10 +95,13 @@ class ProviderClient:
             api_key = self.meta.api_key_manager.value()
         except SecretStorageError as storage_error:
             # BAR-11: the store cannot say whether a key exists (locked,
-            # unavailable, corrupt).  A provider that does not need a key must
-            # keep working -- the banner promises exactly that -- so build the
-            # client without a key; a provider that does need one reports the
-            # storage failure instead of a misleading "no API key".
+            # unavailable, corrupt).  A local provider that does not need a key
+            # must keep working -- the banner promises exactly that -- so build
+            # the client without a key.  A cloud provider is not probed: its
+            # keyless constructor is slow and side-effectful, and the degraded
+            # path must fail fast with the typed storage error instead.
+            if self.meta.provider_type not in KEYLESS_PROVIDER_TYPES:
+                raise
             return self._client_without_key(storage_error)
 
         return AnyLLM.create(self.meta.provider_type, api_key, self.meta.api_base)
