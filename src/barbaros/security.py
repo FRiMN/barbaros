@@ -241,9 +241,13 @@ def _is_chainer_backend(backend: object) -> bool:
 
     Importing ``keyring.backends.chainer`` registers the class in keyring's
     global backend registry, which can change keyring's own backend selection;
-    the module must not do that (BAR-11).
+    the module must not do that (BAR-11).  The whole MRO is checked, so a
+    subclass defined outside ``keyring.backends.chainer`` (which inherits the
+    chainer's write-through behaviour) is still recognised.
     """
-    return type(backend).__module__ == _CHAINER_BACKEND_MODULE
+    return any(
+        klass.__module__ == _CHAINER_BACKEND_MODULE for klass in type(backend).__mro__
+    )
 
 
 def _backend_refusal(backend: object) -> str | None:
