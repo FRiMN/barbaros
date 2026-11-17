@@ -29,6 +29,20 @@ class ProvidersCard(QFrame):
         self.setup_ui()
         self.refresh()
 
+        # The card renders a snapshot of the manager, but the manager changes
+        # behind it: a fetch stores its model list (loaded_list_models) and
+        # "Manage Providers" edits the provider list (added/removed).  Without
+        # these subscriptions the card keeps the state from its last rebuild,
+        # e.g. the "models are not loaded" icon outlives the fetched list
+        # (issue #3).
+        model_manager.added.connect(self._on_manager_changed)
+        model_manager.removed.connect(self._on_manager_changed)
+        model_manager.loaded_list_models.connect(self._on_manager_changed)
+
+    def _on_manager_changed(self, *args) -> None:
+        """Rebuild the cards after a provider or model-list change."""
+        self.refresh()
+
     def setup_ui(self):
         self.layout = QVBoxLayout(self)
 
