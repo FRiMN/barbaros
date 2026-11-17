@@ -32,6 +32,7 @@ from any_llm.types.model import Model
 import barbaros.model_manager
 from barbaros.main_window import MainWindow
 from barbaros.model_cache import SETTINGS_KEY, ModelCacheDocument, ModelCacheStore
+from barbaros.widgets.provider_dialog import ProviderDialog
 
 POSIX_ONLY = pytest.mark.skipif(
     os.name != "posix", reason="file permission bits are POSIX-only"
@@ -180,8 +181,11 @@ def test_api_key_never_appears_in_cache_bytes_or_logs(
 ):
     """A keyring secret never reaches the cache file or the cache loggers.
 
-    The whole run is covered: cache load, startup restore and the
-    ``set_models``/save path all happen inside the captured log scope.
+    Since BAR-11 the startup path deliberately reads no key: ``ProvidersCard``
+    no longer probes the keyring while the window is built.  The read is driven
+    explicitly instead - opening ``ProviderDialog`` ("Manage providers") reads
+    the stored key for its table - and the whole run stays inside one captured
+    log scope together with the cache load/restore/save path.
     """
     secret = "sk-test-DO-NOT-LEAK-0123456789"
     fake_keyring.set_password(KEYRING_SERVICE, "ollama", secret)
@@ -216,10 +220,22 @@ def test_api_key_never_appears_in_cache_bytes_or_logs(
     ):
         # Both loggers are captured at DEBUG for this run (load, restore, save).
         assert logging.getLogger("barbaros.model_manager").isEnabledFor(logging.DEBUG)
+
+        # BAR-11: startup restored the cache without reading any key.
+        assert key_lookups == []
+
+        # Explicit "Manage providers" action: this is the only place that reads
+        # the stored key now.
+        dialog = ProviderDialog(window.model_manager, parent=window)
+        try:
+            assert key_lookups == [secret]
+        finally:
+            dialog.deleteLater()
+
         window.model_manager.set_models("ollama", [allowlisted_model()])
 
-    # The secret really was read by the app during startup (ProvidersCard), yet
-    # the capture is live and contains no trace of it.
+    # The secret really was read by the explicit dialog action, yet the capture
+    # is live and contains no trace of it.
     assert secret in key_lookups
     assert any(record.name == "barbaros.model_cache" for record in caplog.records)
 

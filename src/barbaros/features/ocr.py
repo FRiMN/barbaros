@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from barbaros.features.base import AbstractFeature
+from barbaros.security import SecretStorageError
 from barbaros.widgets.custom_text_edit import CustomTextEdit
 from barbaros.widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 from barbaros.widgets.image_manager import ImageManagerWidget
@@ -149,18 +150,23 @@ class OCRFeature(AbstractFeature):
         self._threaded_translate(text)
 
     def _threaded_ocr(self):
-        ocr_thread = QThread(parent=self)
-        ocr_thread.finished.connect(ocr_thread.deleteLater)
-
         selected_item = self.parent.model.selected_item
         provider = self.parent.model_manager[selected_item.provider]
         image_bytes = self.image_manager.get_cropped_image_bytes()
 
-        self.ocr_worker = OCRWorker(
-            image_bytes,
-            self.ocr_model_select.selected_item,
-            provider
-        )
+        # BAR-11: a storage failure aborts before the image is sent.
+        try:
+            self.ocr_worker = OCRWorker(
+                image_bytes,
+                self.ocr_model_select.selected_item,
+                provider
+            )
+        except SecretStorageError as exc:
+            self.on_ocr_error(str(exc))
+            return
+
+        ocr_thread = QThread(parent=self)
+        ocr_thread.finished.connect(ocr_thread.deleteLater)
         self.ocr_worker.moveToThread(ocr_thread)
 
         self.ocr_worker.finished.connect(self.on_worker_finished)
@@ -174,17 +180,23 @@ class OCRFeature(AbstractFeature):
         ocr_thread.start()
 
     def _threaded_translate(self, text_to_translate: str):
-        translation_thread = QThread(parent=self)
-        translation_thread.finished.connect(translation_thread.deleteLater)
-
         selected_item = self.parent.model.selected_item
         provider = self.parent.model_manager[selected_item.provider]
-        self.translation_worker = TranslationWorker(
-            text_to_translate,
-            self.parent.target_language_select.currentText(),
-            selected_item,
-            provider
-        )
+
+        # BAR-11: a storage failure aborts before anything is sent.
+        try:
+            self.translation_worker = TranslationWorker(
+                text_to_translate,
+                self.parent.target_language_select.currentText(),
+                selected_item,
+                provider
+            )
+        except SecretStorageError as exc:
+            self.on_translation_error(str(exc))
+            return
+
+        translation_thread = QThread(parent=self)
+        translation_thread.finished.connect(translation_thread.deleteLater)
         self.translation_worker.moveToThread(translation_thread)
 
         self.translation_worker.finished.connect(self.on_worker_finished)

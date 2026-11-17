@@ -22,6 +22,7 @@ from .features.text import TextFeature
 from .model_cache import SETTINGS_KEY as SETTINGS_KEY_MODEL_CACHE
 from .model_cache import ModelCacheStore, cache_path_from_config
 from .model_manager import CachePolicy, ModelManager, ProviderMeta
+from .security import SecretStorage
 from .widgets.filterable_combobox import ModelSelection, ProviderModelComboBox
 
 
@@ -33,7 +34,7 @@ class MainWindow(QMainWindow):
     settings_target_language_list_key = "target_language_list"
     settings_target_language_key = "target_language"
 
-    def __init__(self, *args, app, **kwargs):
+    def __init__(self, *args, app, secrets: SecretStorage | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.app = app
         self.settings = SettingsProxy(self.app.settings, self.settings_key_prefix)
@@ -48,7 +49,9 @@ class MainWindow(QMainWindow):
         # the store tightens the mode only of the app-owned default location.
         model_cache = ModelCacheStore(path=configured_cache_path)
         print(f"Model cache filepath: {str(model_cache.path)!r}")
-        self.model_manager = ModelManager(cache=model_cache)
+        # BAR-11: the App root passes the process-wide store; direct
+        # construction (tests, tools) keeps the default keyring store.
+        self.model_manager = ModelManager(cache=model_cache, secrets=secrets)
         self.model_manager.error.connect(self._show_provider_error)
         past_providers = self.settings.valueFromJson(
             self.settings_llm_providers_key, default=None

@@ -13,8 +13,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from barbaros.common import truncate_key
 from barbaros.model_manager import ModelManager, ProviderClient
+from barbaros.security import Availability
 from barbaros.widgets.provider_dialog import ProviderDialog
 
 if TYPE_CHECKING:
@@ -31,6 +31,10 @@ class ProvidersCard(QFrame):
 
     def setup_ui(self):
         self.layout = QVBoxLayout(self)
+
+        # BAR-11: a non-blocking banner instead of a crash or a modal at start.
+        self.storage_warning = self._build_storage_warning()
+        self.layout.addWidget(self.storage_warning)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -52,6 +56,56 @@ class ProvidersCard(QFrame):
 
         self.layout.addWidget(scroll)
         self.layout.addLayout(btn_layout)
+
+    def _build_storage_warning(self) -> QFrame:
+        """Warning row for an unusable keyring; hidden while storage is ready."""
+        frame = QFrame()
+        frame.setFrameStyle(QFrame.Shape.StyledPanel)
+
+        layout = QHBoxLayout(frame)
+        layout.setContentsMargins(8, 4, 8, 4)
+
+        icon = QLabel()
+        style = icon.style()
+        warn_icon = style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+        icon_size = style.pixelMetric(QStyle.PixelMetric.PM_ButtonIconSize)
+        icon.setPixmap(warn_icon.pixmap(icon_size))
+        layout.addWidget(icon)
+
+        self.storage_warning_label = QLabel()
+        self.storage_warning_label.setWordWrap(True)
+        layout.addWidget(self.storage_warning_label, 1)
+
+        retry_btn = QPushButton(self.tr("Retry"))
+        retry_btn.clicked.connect(self._retry_secret_storage)
+        layout.addWidget(retry_btn)
+
+        frame.hide()
+        return frame
+
+    def _refresh_storage_status(self) -> None:
+        """Show the banner when the keyring is unavailable (BAR-11).
+
+        The probe reads no secret and triggers no unlock prompt; the cards below
+        stay usable (keyless providers can still fetch models).
+        """
+        availability = self.model_manager.secret_storage.availability()
+        if availability is Availability.READY:
+            self.storage_warning.hide()
+            return
+
+        self.storage_warning_label.setText(
+            self.tr(
+                "The system keyring is unavailable, so API keys cannot be read "
+                "or saved. Providers that need a key will not work until this is fixed."
+            )
+        )
+        self.storage_warning.show()
+
+    def _retry_secret_storage(self) -> None:
+        """Re-run backend detection, e.g. after the keyring service came up."""
+        self.model_manager.secret_storage.availability(refresh=True)
+        self._refresh_storage_status()
 
     def _truncate_url(self, url: str) -> str:
         url_len = len(url)
@@ -75,6 +129,8 @@ class ProvidersCard(QFrame):
         self.model_manager.start_fetching_models(provider_name)
 
     def refresh(self):
+        self._refresh_storage_status()
+
         while self.cards_container.count() > 1:
             item = self.cards_container.takeAt(0)
             if item.widget():
@@ -128,10 +184,6 @@ class ProvidersCard(QFrame):
         base = provider_client.meta.api_base
         if base:
             info_layout.addWidget(self._create_bordered_label(self._truncate_url(base)))
-
-        key = provider_client.meta.api_key_manager.get()
-        if key:
-            info_layout.addWidget(self._create_bordered_label(truncate_key(key)))
 
         info_layout.addStretch()
 
